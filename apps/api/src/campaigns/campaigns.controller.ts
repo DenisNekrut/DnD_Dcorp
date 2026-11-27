@@ -57,6 +57,11 @@ export class CampaignsController {
     return this.campaigns.requestToJoin(request.user.id, campaignId, dto.password);
   }
 
+  @Get(':campaignId/invite')
+  invite(@Req() request: AuthRequest, @Param('campaignId') campaignId: string) {
+    return this.campaigns.getInvite(request.user.id, campaignId);
+  }
+
   @Get(':campaignId/members')
   members(@Req() request: AuthRequest, @Param('campaignId') campaignId: string) {
     return this.campaigns.members(request.user.id, campaignId);
