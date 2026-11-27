@@ -288,3 +288,40 @@ button, .quick-card, .nav-item { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 760px) {
   .hero-panel:after { inset: 7px; }
 }
+
+
+/* Character creation: ability assignment and class skill proficiencies. */
+.builder-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(215,181,109,.22);
+  border-radius: 9px;
+  background: rgba(8,14,24,.34);
+}
+.builder-section > div:first-child strong,
+.builder-section > div:first-child span,
+.skill-preview b,
+.skill-preview span { display: block; }
+.builder-section > div:first-child strong { color: #ead39d; font-size: 12px; }
+.builder-section > div:first-child span { margin-top: 4px; color: #9eacba; font-size: 10px; line-height: 1.5; }
+.ability-assignment { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.ability-assignment label { display: grid; gap: 5px; color: #cbd4dd; font-size: 10px; }
+.ability-assignment select { width: 100%; min-height: 35px; padding: 7px 9px; border: 1px solid rgba(215,181,109,.2); border-radius: 7px; color: #f0e5c8; background: #101827; }
+.skill-choice-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.skill-choice { display: flex !important; align-items: center; gap: 7px !important; min-width: 0; padding: 7px 8px; border: 1px solid rgba(166,181,197,.14); border-radius: 7px; color: #cbd4dd !important; background: rgba(255,255,255,.025); font-size: 10px !important; }
+.skill-choice input { width: 14px !important; min-height: 14px !important; accent-color: #d7b56d; }
+.skill-choice:has(input:checked) { border-color: rgba(215,181,109,.48); background: rgba(215,181,109,.09); }
+.skill-choice input:disabled { opacity: .35; }
+.validation-note { color: #d9bd7d; font-size: 10px; }
+.ability-preview { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 5px; margin: 13px 0; }
+.ability-preview span { display: grid; justify-items: center; padding: 7px 2px; border: 1px solid rgba(215,181,109,.2); border-radius: 6px; color: #f0e5c8; background: rgba(215,181,109,.055); font-size: 12px; }
+.ability-preview b { margin-bottom: 4px; color: #9eacba; font-size: 8px; text-transform: uppercase; }
+.ability-preview small { color: #d9bd7d; font-size: 9px; }
+.skill-preview { margin-bottom: 12px; }
+.skill-preview b { margin-bottom: 4px; color: #d9bd7d; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; }
+.skill-preview span { color: #aebac5; font-size: 10px; line-height: 1.5; }
+@media(max-width:520px) {
+  .ability-assignment,.skill-choice-grid { grid-template-columns: 1fr 1fr; }
+  .ability-preview { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
