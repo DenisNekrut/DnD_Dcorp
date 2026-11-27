@@ -54,3 +54,23 @@
 
 .map-object-room { border:2px solid rgba(226,198,144,.92); border-radius:3px; background:rgba(207,174,116,.08); color:#f3dfb8; }
 .map-object-room .map-room-label { padding:2px 5px; font-size:9px; font-weight:700; letter-spacing:.04em; text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none; }
+
+.map-object-layer.measuring-mode { pointer-events:auto; cursor:crosshair; }
+.map-ruler-line {
+  position:absolute; z-index:9; height:2px; min-width:1px;
+  transform-origin:left center; background:#f6d98b;
+  box-shadow:0 0 5px rgba(0,0,0,.8); pointer-events:none;
+}
+.map-ruler-line:before,.map-ruler-line:after {
+  content:""; position:absolute; top:50%; width:8px; height:8px;
+  border:2px solid #f6d98b; border-radius:50%; background:#4a3420;
+  transform:translateY(-50%);
+}
+.map-ruler-line:before { left:-4px; }
+.map-ruler-line:after { right:-4px; }
+.map-ruler-line span {
+  position:absolute; left:50%; bottom:8px; transform:translateX(-50%);
+  padding:4px 7px; border:1px solid rgba(246,217,139,.65); border-radius:5px;
+  color:#fff0c8; background:rgba(38,26,16,.94); font-size:10px;
+  font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums;
+}
