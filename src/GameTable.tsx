@@ -618,6 +618,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
+  const resetWeaponLoading = () => {
+    if (!selected || !selectedWeapon || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id
+      ? { ...token, loadingUsedWeapons: (token.loadingUsedWeapons ?? []).filter(id => id !== selectedWeapon.id) }
+      : token));
+    addLog(selected.name + ": перезарядка «" + selectedWeapon.name + "» сброшена для дополнительного действия или реакции.", "gold");
+  };
+
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
     if (selectedRollBlocked) {
@@ -957,7 +966,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   if (!selected) return;
                   setTokens(items => items.map(token => token.id === selected.id ? { ...token, weaponAmmo: { ...(token.weaponAmmo ?? {}), [selectedWeapon.id]: value } } : token));
                 }} disabled={!canEdit || layerLocks.figures}/></label>}
-                {selectedWeapon?.properties.includes("loading") && <small className="weapon-loading-note">{(selected?.loadingUsedWeapons ?? []).includes(selectedWeapon.id) ? "Перезарядка уже использована в этом ходу." : "Свойство «Перезарядка»: один выстрел за ход."}</small>}
+                {selectedWeapon?.properties.includes("loading") && <div className="weapon-loading-note"><small>{(selected?.loadingUsedWeapons ?? []).includes(selectedWeapon.id) ? "Перезарядка использована в этом ходу." : "Свойство «Перезарядка»: один выстрел за действие."}</small>{(selected?.loadingUsedWeapons ?? []).includes(selectedWeapon.id) && <button type="button" onClick={resetWeaponLoading} disabled={!canEdit || layerLocks.figures}>Сбросить для дополнительного действия</button>}</div>}
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
                   <option value="melee" disabled={selectedWeapon?.kind === "ranged"}>Ближний бой</option><option value="ranged" disabled={selectedWeapon?.kind === "melee" && !selectedWeapon?.properties.includes("thrown")}>Дальний бой</option>
                 </select></label>
