@@ -93,7 +93,8 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -200,6 +201,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [spellLevel, setSpellLevel] = useState(1);
   const [spellResource, setSpellResource] = useState<"actionUsed" | "bonusActionUsed" | "reactionUsed">("actionUsed");
   const [spellConcentration, setSpellConcentration] = useState(false);
+  const [classResourceName, setClassResourceName] = useState("");
+  const [classResourceMax, setClassResourceMax] = useState(1);
+  const [classResourceRecovery, setClassResourceRecovery] = useState<ClassResource["recovery"]>("short");
   const dirtyRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const inFlightStateRef = useRef<TableState | null>(null);
@@ -533,10 +537,50 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const importedHitDiceTotal = Math.max(0, Math.min(20, Number(rawHitDice?.total ?? data.level ?? 1)));
     const importedHitDiceUsed = Math.max(0, Math.min(importedHitDiceTotal, Number(rawHitDice?.used ?? (rawHitDice?.remaining !== undefined ? importedHitDiceTotal - Number(rawHitDice.remaining) : 0))));
     const hitDice = { dieSides: [4,6,8,10,12,20].includes(importedDieSides) ? importedDieSides : 8, total: importedHitDiceTotal, used: importedHitDiceUsed };
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const rawClassResources = Array.isArray(data.classResources) ? data.classResources as Record<string, unknown>[] : [];
+    const classResources: ClassResource[] = rawClassResources.map((resource, index) => ({ id: String(resource.id ?? `resource-${index}`), name: String(resource.name ?? "Ресурс класса"), max: Math.max(0, Math.min(99, Number(resource.max ?? resource.total ?? 1))), used: Math.max(0, Math.min(99, Number(resource.used ?? 0))), recovery: resource.recovery === "long" || resource.recovery === "manual" ? resource.recovery : "short" }));
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
+  };
+
+  const addClassResource = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected || !canEdit || layerLocks.figures || !classResourceName.trim()) return;
+    const resource: ClassResource = { id: newId(), name: classResourceName.trim(), max: Math.max(1, Math.min(99, classResourceMax)), used: 0, recovery: classResourceRecovery };
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, classResources: [...(token.classResources ?? []), resource] } : token));
+    addLog(selected.name + ": добавлен ресурс класса «" + resource.name + "».", "muted");
+    setClassResourceName("");
+    setClassResourceMax(1);
+  };
+
+  const updateClassResource = (resourceId: string, patch: Partial<Pick<ClassResource, "max" | "used">>) => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id ? token : {
+      ...token,
+      classResources: (token.classResources ?? []).map(resource => resource.id !== resourceId ? resource : {
+        ...resource, ...patch,
+        max: Math.max(0, Math.min(99, patch.max ?? resource.max)),
+        used: Math.max(0, Math.min(patch.max ?? resource.max, patch.used ?? resource.used)),
+      }),
+    }));
+  };
+
+  const recoverClassResources = (rest: "short" | "long") => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const recoverable = (selected.classResources ?? []).filter(resource => resource.recovery === rest && resource.used > 0);
+    if (!recoverable.length) {
+      addLog(selected.name + ": нет потраченных ресурсов для восстановления после " + (rest === "short" ? "короткого" : "длительного") + " отдыха.", "muted");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? {
+      ...token, classResources: (token.classResources ?? []).map(resource => resource.recovery === rest ? { ...resource, used: 0 } : resource),
+    } : token));
+    addLog(selected.name + ": восстановлены ресурсы класса: " + recoverable.map(resource => resource.name).join(", ") + ".", "gold");
   };
 
   const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
@@ -756,6 +800,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         temporaryHp: 0,
         hitDice: { ...tokenHitDice, used: Math.max(0, tokenHitDice.used - recoveredDice) },
         spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
+        classResources: (token.classResources ?? []).map(resource => resource.recovery === "manual" ? resource : { ...resource, used: 0 }),
         actionUsed: false,
         bonusActionUsed: false,
         reactionUsed: false,
@@ -1341,7 +1386,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Всего<input type="number" min="0" max="20" value={selected.hitDice?.total ?? 0} onChange={event => updateHitDice("total", Number(event.target.value)||0)} disabled={!canEdit || layerLocks.figures}/></label>
               </div>
               <span>Доступно: {Math.max(0,(selected.hitDice?.total ?? 0)-(selected.hitDice?.used ?? 0))} / {selected.hitDice?.total ?? 0}</span>
-              <button type="button" onClick={spendHitDieDuringShortRest} disabled={!canEdit || layerLocks.figures || diceBusy || (selected.hitDice?.used ?? 0) >= (selected.hitDice?.total ?? 0) || selected.hp >= selected.maxHp}>
+              <button type="button" className="secondary-button" onClick={() => recoverClassResources("short")} disabled={!canEdit || layerLocks.figures}>Восстановить классовые ресурсы после короткого отдыха</button>
+               <button type="button" onClick={spendHitDieDuringShortRest} disabled={!canEdit || layerLocks.figures || diceBusy || (selected.hitDice?.used ?? 0) >= (selected.hitDice?.total ?? 0) || selected.hp >= selected.maxHp}>
                 {diceBusy ? "Бросок…" : "Потратить кость хитов"}
               </button>
               <small>За один бросок тратится одна кость. Можно повторять во время короткого отдыха, пока остаются кости и не восстановлены все хиты.</small>
@@ -1431,6 +1477,30 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               }}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
               <small>Выбери несколько типов с Ctrl/⌘. Эти свойства учитываются при ручном и автоматическом нанесении урона.</small>
             </details>
+            <section className="spellcasting-panel class-resource-panel">
+              <strong>Ресурсы класса и подкласса</strong>
+              {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
+                <span><b>{resource.name}</b> · доступно {Math.max(0, resource.max - resource.used)} / {resource.max}</span>
+                <small>Восстановление: {resource.recovery === "short" ? "короткий отдых" : resource.recovery === "long" ? "длительный отдых" : "вручную"}</small>
+                <div className="combat-roll-buttons">
+                  <button type="button" onClick={() => updateClassResource(resource.id, { used: resource.used - 1 })} disabled={!canEdit || layerLocks.figures || resource.used <= 0}>−</button>
+                  <button type="button" onClick={() => updateClassResource(resource.id, { used: resource.used + 1 })} disabled={!canEdit || layerLocks.figures || resource.used >= resource.max}>Потратить</button>
+                  <button type="button" onClick={() => updateClassResource(resource.id, { used: 0 })} disabled={!canEdit || layerLocks.figures || resource.used === 0}>Восстановить</button>
+                </div>
+                <label>Максимум<input type="number" min="0" max="99" value={resource.max} onChange={event => updateClassResource(resource.id, { max: Number(event.target.value) || 0 })} disabled={!canEdit || layerLocks.figures}/></label>
+              </div>) : <small>Добавь ограниченные классовые умения: ярость, вдохновение, канал божественности и другие.</small>}
+              <form className="combat-roll-row" onSubmit={addClassResource}>
+                <label>Название<input value={classResourceName} onChange={event => setClassResourceName(event.target.value)} placeholder="Например, Ярость" maxLength={60} disabled={!canEdit || layerLocks.figures}/></label>
+                <label>Всего<input type="number" min="1" max="99" value={classResourceMax} onChange={event => setClassResourceMax(Math.max(1, Math.min(99, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
+                <label>Восстановление<select value={classResourceRecovery} onChange={event => setClassResourceRecovery(event.target.value as ClassResource["recovery"])} disabled={!canEdit || layerLocks.figures}><option value="short">Короткий отдых</option><option value="long">Длительный отдых</option><option value="manual">Вручную</option></select></label>
+                <button type="submit" disabled={!canEdit || layerLocks.figures || !classResourceName.trim()}>Добавить ресурс</button>
+              </form>
+              <div className="combat-roll-buttons">
+                <button type="button" className="secondary-button" onClick={() => recoverClassResources("short")} disabled={!canEdit || layerLocks.figures}>Восстановить после короткого отдыха</button>
+                <button type="button" className="secondary-button" onClick={() => recoverClassResources("long")} disabled={!canEdit || layerLocks.figures}>Восстановить после длительного отдыха</button>
+              </div>
+              <small>Настройка выполняется вручную; ресурсы с восстановлением «вручную» отдыхом не сбрасываются.</small>
+            </section>
             <section className="spellcasting-panel">
               <strong>Заклинания</strong>
               <label>Название заклинания<input list={`known-spells-${selected.id}`} value={spellName} onChange={event => setSpellName(event.target.value)} placeholder="Выбери или введи название" disabled={!canEdit || layerLocks.figures}/><datalist id={`known-spells-${selected.id}`}>{(selected.knownSpells ?? []).map((name,index)=><option key={index} value={name}/>)}</datalist></label>
