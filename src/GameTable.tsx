@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -511,7 +511,23 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const constitutionSaveProficient = rawSaveProficiencies.includes("con") || rawSaveProficiencies.includes("constitution");
     const level = Math.max(1, Math.min(20, Number(data.level ?? 1)));
     const proficiencyBonus = Number(data.proficiencyBonus ?? (2 + Math.floor((level - 1) / 4)));
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const spellcastingData = (data.spellcasting ?? {}) as Record<string, unknown>;
+    const rawSpellSlots = (data.spellSlots ?? spellcastingData.spellSlots ?? {}) as Record<string, unknown>;
+    const importedSpellSlots: Record<number, { max: number; used: number }> = {};
+    for (let spellLevel = 1; spellLevel <= 9; spellLevel += 1) {
+      const rawSlot = rawSpellSlots[spellLevel] ?? rawSpellSlots[String(spellLevel)];
+      if (typeof rawSlot === "number" && Number.isFinite(rawSlot)) {
+        importedSpellSlots[spellLevel] = { max: Math.max(0, Math.min(20, rawSlot)), used: 0 };
+      } else if (rawSlot && typeof rawSlot === "object") {
+        const slot = rawSlot as { max?: unknown; total?: unknown; used?: unknown; remaining?: unknown };
+        const max = Number(slot.max ?? slot.total ?? (slot.remaining !== undefined && slot.used !== undefined ? Number(slot.remaining) + Number(slot.used) : slot.remaining ?? 0));
+        const used = Number(slot.used ?? (slot.remaining !== undefined ? Math.max(0, max - Number(slot.remaining)) : 0));
+        if (Number.isFinite(max) && Number.isFinite(used)) importedSpellSlots[spellLevel] = { max: Math.max(0, Math.min(20, max)), used: Math.max(0, Math.min(max, used)) };
+      }
+    }
+    const rawSpells = data.spells ?? spellcastingData.spells;
+    const knownSpells = Array.isArray(rawSpells) ? rawSpells.map(spell => typeof spell === "string" ? spell : spell && typeof spell === "object" ? String((spell as { name?: unknown; title?: unknown }).name ?? (spell as { title?: unknown }).title ?? "") : "").filter(Boolean) : [];
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -1332,7 +1348,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </details>
             <section className="spellcasting-panel">
               <strong>Заклинания</strong>
-              <label>Название заклинания<input value={spellName} onChange={event => setSpellName(event.target.value)} placeholder="Например, Волшебная стрела" disabled={!canEdit || layerLocks.figures}/></label>
+              <label>Название заклинания<input list={`known-spells-${selected.id}`} value={spellName} onChange={event => setSpellName(event.target.value)} placeholder="Выбери или введи название" disabled={!canEdit || layerLocks.figures}/><datalist id={`known-spells-${selected.id}`}>{(selected.knownSpells ?? []).map((name,index)=><option key={index} value={name}/>)}</datalist></label>
               <div className="combat-roll-row">
                 <label>Уровень<select value={spellLevel} onChange={event => setSpellLevel(Number(event.target.value))} disabled={!canEdit}>
                   <option value={0}>Заговор</option>
