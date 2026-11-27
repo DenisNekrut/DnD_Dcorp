@@ -147,6 +147,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [mapUploading, setMapUploading] = useState(false);
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const battleMapRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
   const historyGroupRef = useRef(false);
   const historyGroupStartRef = useRef<EditorSnapshot | null>(null);
@@ -208,6 +209,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
   const latestTableState: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
   latestStateRef.current = latestTableState;
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chatMessages.length]);
 
   useEffect(() => {
     if (!selected || !selectedWeapon) {
@@ -969,13 +974,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       createdAt: new Date().toISOString(),
       author: { username: "Гость" },
     };
-    setChatMessages(items => {
-      const next = [...items, localMessage].slice(-100);
-      if (campaignId) {
-        try { window.localStorage.setItem(localChatKey(campaignId), JSON.stringify(next)); } catch { /* Local chat remains available until the page closes. */ }
-      }
-      return next;
-    });
+    const nextMessages = [...chatMessages, localMessage].slice(-100);
+    setChatMessages(nextMessages);
+    if (campaignId) {
+      try { window.localStorage.setItem(localChatKey(campaignId), JSON.stringify(nextMessages)); } catch { /* Local chat remains available until the page closes. */ }
+    }
     setMessage("");
   };
 
@@ -1180,6 +1183,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div><strong>{item.author.username}</strong><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></div>
             <p>{item.content}</p>
           </article>) : <p className="room-empty-note">Пока нет сообщений. Напиши первое сообщение для участников партии.</p>}
+          <div ref={chatEndRef}/>
         </div>
         <form className="table-chat-form" onSubmit={sendMessage}>
           <input value={message} onChange={event => setMessage(event.target.value)} placeholder="Сообщение для участников…" maxLength={500} aria-label="Сообщение в чат" disabled={chatBusy}/>
