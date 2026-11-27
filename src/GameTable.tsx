@@ -90,7 +90,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const updateObjects = (next: MapObject[]) => { recordEditorHistory(); setObjects(next); };
   const updateLayerVisibility = (next: LayerVisibility) => { recordEditorHistory(); setLayerVisibility(next); };
   const updateLayerLocks = (next: LayerLocks) => { recordEditorHistory(); setLayerLocks(next); };
-  const updateMapView = (patch: Partial<MapView>) => { recordEditorHistory(); setMapView(value => ({ ...value, ...patch })); };
+  const updateMapView = (patch: Partial<MapView>) => { if (layerLocks.background) return; recordEditorHistory(); setMapView(value => ({ ...value, ...patch })); };
   const undoEditor = () => {
     const target = editorHistory.past[editorHistory.past.length - 1];
     if (!target || !canEdit) return;
@@ -117,8 +117,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setGrid(state.room.grid);
       setTokens(Array.isArray(state.tokens) ? state.tokens : []);
       setObjects(Array.isArray(state.objects) ? state.objects : []);
-      setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
-      setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
+      setLayerVisibility({ ...defaultLayerVisibility, ...(state.layerVisibility ?? {}) });
+      setLayerLocks({ ...defaultLayerLocks, ...(state.layerLocks ?? {}) });
       setMapAsset(state.mapAsset ?? null);
       setMapView(state.mapView ?? { ...defaultMapView });
       setLog(Array.isArray(state.log) ? state.log : []);
@@ -153,8 +153,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setGrid(state.room.grid);
             setTokens(Array.isArray(state.tokens) ? state.tokens : []);
             setObjects(Array.isArray(state.objects) ? state.objects : []);
-            setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
-            setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
+            setLayerVisibility({ ...defaultLayerVisibility, ...(state.layerVisibility ?? {}) });
+            setLayerLocks({ ...defaultLayerLocks, ...(state.layerLocks ?? {}) });
             setMapAsset(state.mapAsset ?? null);
             setMapView(state.mapView ?? { ...defaultMapView });
             setLog(Array.isArray(state.log) ? state.log : []);
@@ -224,6 +224,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   }, [campaignId, remoteEnabled]);
 
   const addCampaignCharacter = (character: CampaignCharacter) => {
+    if (!canEdit || layerLocks.figures) return;
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
@@ -244,7 +245,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setTableError("Размер изображения карты не должен превышать 15 МБ.");
       return;
     }
-    if (!remoteEnabled || !campaignId || !canEdit) {
+    if (!remoteEnabled || !campaignId || !canEdit || layerLocks.background) {
       setTableError("Загрузка карты доступна мастеру в общей кампании.");
       return;
     }
@@ -263,7 +264,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
   const removeMapAsset = async () => {
-    if (!mapAsset || !campaignId || !remoteEnabled || !canEdit) return;
+    if (!mapAsset || !campaignId || !remoteEnabled || !canEdit || layerLocks.background) return;
     if (!window.confirm("Удалить загруженную подложку карты?")) return;
     setMapUploading(true);
     try {
@@ -295,7 +296,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
   const addToken = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!newTokenName.trim() || !canEdit) return;
+    if (!newTokenName.trim() || !canEdit || layerLocks.figures) return;
     const color = newTokenKind === "enemy" ? "red" : newTokenKind === "ally" ? "blue" : "gold";
     const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative };
     recordEditorHistory();
@@ -323,7 +324,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`Начался раунд ${round + 1}.`, "gold");
   };
   const moveToken = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingId || !canEdit) return;
+    if (!draggingId || !canEdit || layerLocks.figures) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const scale = zoom / 100;
     const localX = (event.clientX - rect.left - rect.width / 2) / scale + rect.width / 2;
@@ -374,14 +375,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         <div className="tabletop-center">
           <div className="table-toolbar">
             <div className="table-tool-group">
-              <input ref={mapFileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={handleMapFileChange}/><button type="button" title="Загрузить изображение карты" aria-label="Загрузить изображение карты" disabled={!canEdit || !remoteEnabled || mapUploading} onClick={() => mapFileInputRef.current?.click()}><ImagePlus size={16}/></button>{mapAsset && <button type="button" title="Удалить подложку карты" aria-label="Удалить подложку карты" disabled={!canEdit || mapUploading} onClick={removeMapAsset}><Trash2 size={16}/></button>}<button title="Отменить последнее действие" aria-label="Отменить последнее действие" disabled={!canEdit || editorHistory.past.length === 0} onClick={undoEditor}><Undo2 size={16}/></button><button title="Повторить действие" aria-label="Повторить действие" disabled={!canEdit || editorHistory.future.length === 0} onClick={redoEditor}><Redo2 size={16}/></button><button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
+              <input ref={mapFileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={handleMapFileChange}/><button type="button" title="Загрузить изображение карты" aria-label="Загрузить изображение карты" disabled={!canEdit || !remoteEnabled || layerLocks.background || mapUploading} onClick={() => mapFileInputRef.current?.click()}><ImagePlus size={16}/></button>{mapAsset && <button type="button" title="Удалить подложку карты" aria-label="Удалить подложку карты" disabled={!canEdit || layerLocks.background || mapUploading} onClick={removeMapAsset}><Trash2 size={16}/></button>}<button title="Отменить последнее действие" aria-label="Отменить последнее действие" disabled={!canEdit || editorHistory.past.length === 0} onClick={undoEditor}><Undo2 size={16}/></button><button title="Повторить действие" aria-label="Повторить действие" disabled={!canEdit || editorHistory.future.length === 0} onClick={redoEditor}><Redo2 size={16}/></button><button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
               <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button><span>{zoom}%</span><button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--map-zoom": zoom / 100, "--map-image-scale": mapView.scale, "--map-offset-x": `${mapView.x}%`, "--map-offset-y": `${mapView.y}%` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
-            {mapAsset && <img className="uploaded-map-image" src={mapAsset.url} alt="Загруженная карта игровой комнаты"/>}
-            {mapAsset && canEdit && <div className="map-image-controls" onPointerDown={event => event.stopPropagation()}>
+          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset && layerVisibility.background ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--map-zoom": zoom / 100, "--map-image-scale": mapView.scale, "--map-offset-x": `${mapView.x}%`, "--map-offset-y": `${mapView.y}%` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
+            {mapAsset && layerVisibility.background && <img className="uploaded-map-image" src={mapAsset.url} alt="Загруженная карта игровой комнаты"/>}
+            {mapAsset && layerVisibility.background && canEdit && !layerLocks.background && <div className="map-image-controls" onPointerDown={event => event.stopPropagation()}>
               <strong>Подгонка подложки</strong>
               <label>Масштаб <output>{Math.round(mapView.scale * 100)}%</output>
                 <input type="range" min="50" max="200" step="5" value={Math.round(mapView.scale * 100)} onPointerDown={beginHistoryGroup} onPointerUp={finishHistoryGroup} onChange={event => updateMapView({ scale: Number(event.target.value) / 100 })}/>
@@ -395,11 +396,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <button type="button" onClick={() => updateMapView({ ...defaultMapView })}>Сбросить положение</button>
             </div>}
             <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
-              {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
+              {(layerVisibility.figures ? tokens : []).map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit && !layerLocks.figures ? "grab" : "default" }} onPointerDown={event => { if (!canEdit || layerLocks.figures) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
                 <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
               </button>)}
             </div>
-            {tokens.length === 0 && !mapAsset && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
+            {tokens.length === 0 && (!mapAsset || !layerVisibility.background) && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
             <RoomMapEditor objects={objects} onChange={updateObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={updateLayerVisibility} layerLocks={layerLocks} onLayerLocksChange={updateLayerLocks} onEditStart={beginHistoryGroup} onEditEnd={finishHistoryGroup} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
@@ -414,19 +415,19 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
-            <div className="token-actions"><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
+            <div className="token-actions"><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
           </section>}
           <section className="table-panel">
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
             {rosterError && <p className="room-empty-note">{rosterError}</p>}
-            {campaignCharacters.length ? <div className="campaign-roster">{campaignCharacters.map(character => <div className="campaign-roster-row" key={character.id}><span>{character.name}</span><button type="button" disabled={!canEdit || tokens.some(token => token.name === character.name)} onClick={() => addCampaignCharacter(character)}>{tokens.some(token => token.name === character.name) ? "На карте" : "Добавить"}</button></div>)}</div> : <p className="room-empty-note">{remoteEnabled ? "В кампанию пока не добавлены персонажи. Добавь персонажей в разделе кампании." : "Список персонажей кампании доступен после подключения API."}</p>}
+            {campaignCharacters.length ? <div className="campaign-roster">{campaignCharacters.map(character => <div className="campaign-roster-row" key={character.id}><span>{character.name}</span><button type="button" disabled={!canEdit || layerLocks.figures || tokens.some(token => token.name === character.name)} onClick={() => addCampaignCharacter(character)}>{tokens.some(token => token.name === character.name) ? "На карте" : "Добавить"}</button></div>)}</div> : <p className="room-empty-note">{remoteEnabled ? "В кампанию пока не добавлены персонажи. Добавь персонажей в разделе кампании." : "Список персонажей кампании доступен после подключения API."}</p>}
           </section>
           <section className="table-panel">
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить NPC или противника</strong></div></div>
             <form className="add-token-form" onSubmit={addToken}>
-              <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit}/></label>
-              <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit}/></label></div>
-              <button className="button button-secondary full-width" type="submit" disabled={!canEdit}><Plus size={15}/> Добавить на карту</button>
+              <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit || layerLocks.figures}/></label>
+              <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label></div>
+              <button className="button button-secondary full-width" type="submit" disabled={!canEdit || layerLocks.figures}><Plus size={15}/> Добавить на карту</button>
             </form>
           </section>
           <section className="table-panel dice-panel"><div className="table-panel-title"><div><Dice5 size={16}/><strong>Быстрый бросок</strong></div></div><button className="dice-roll-button" onClick={rollD20} disabled={diceBusy}><Dice5 size={19}/> {diceBusy ? "Бросаем…" : "Бросить d20"}</button><small>{remoteEnabled ? "Результат рассчитывается сервером и попадает в журнал." : "Локальный демонстрационный бросок."}</small></section>

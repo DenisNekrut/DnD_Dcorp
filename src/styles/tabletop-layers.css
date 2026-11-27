@@ -15,3 +15,7 @@
 @media(max-width:720px){.map-layer-control{flex:1}.map-layer-control button:first-child{flex:1;justify-content:center}}
 
 .map-object-layer { touch-action:none; }
+
+.map-layer-visibility { flex-wrap:wrap; }
+.map-layer-control button:first-child { white-space:nowrap; }
+@media(max-width:720px){.map-layer-control{min-width:calc(50% - 4px)}}
