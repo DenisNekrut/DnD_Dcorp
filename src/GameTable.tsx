@@ -94,7 +94,8 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   return "normal";
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type PactMagic = { level: number; max: number; used: number };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -201,6 +202,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [spellLevel, setSpellLevel] = useState(1);
   const [spellResource, setSpellResource] = useState<"actionUsed" | "bonusActionUsed" | "reactionUsed">("actionUsed");
   const [spellConcentration, setSpellConcentration] = useState(false);
+  const [usePactMagic, setUsePactMagic] = useState(false);
   const [classResourceName, setClassResourceName] = useState("");
   const [classResourceMax, setClassResourceMax] = useState(1);
   const [classResourceRecovery, setClassResourceRecovery] = useState<ClassResource["recovery"]>("short");
@@ -537,9 +539,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const importedHitDiceTotal = Math.max(0, Math.min(20, Number(rawHitDice?.total ?? data.level ?? 1)));
     const importedHitDiceUsed = Math.max(0, Math.min(importedHitDiceTotal, Number(rawHitDice?.used ?? (rawHitDice?.remaining !== undefined ? importedHitDiceTotal - Number(rawHitDice.remaining) : 0))));
     const hitDice = { dieSides: [4,6,8,10,12,20].includes(importedDieSides) ? importedDieSides : 8, total: importedHitDiceTotal, used: importedHitDiceUsed };
+    const className = String(data.className ?? data.class ?? "").toLowerCase();
+    const isWarlock = className.includes("колдун") || className.includes("warlock");
+    const pactMagicLevel = level >= 9 ? 5 : level >= 7 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
+    const pactMagicMax = level >= 17 ? 4 : level >= 11 ? 3 : level >= 2 ? 2 : 1;
+    const rawPactMagic = (data.pactMagic ?? spellcastingData.pactMagic) as { level?: unknown; max?: unknown; used?: unknown } | undefined;
+    const pactMagic: PactMagic | undefined = isWarlock ? { level: Math.max(1, Math.min(5, Number(rawPactMagic?.level ?? pactMagicLevel))), max: Math.max(1, Math.min(4, Number(rawPactMagic?.max ?? pactMagicMax))), used: Math.max(0, Math.min(4, Number(rawPactMagic?.used ?? 0))) } : undefined;
     const rawClassResources = Array.isArray(data.classResources) ? data.classResources as Record<string, unknown>[] : [];
     const classResources: ClassResource[] = rawClassResources.map((resource, index) => ({ id: String(resource.id ?? `resource-${index}`), name: String(resource.name ?? "Ресурс класса"), max: Math.max(0, Math.min(99, Number(resource.max ?? resource.total ?? 1))), used: Math.max(0, Math.min(99, Number(resource.used ?? 0))), recovery: resource.recovery === "long" || resource.recovery === "manual" ? resource.recovery : "short" }));
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -761,7 +769,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       return;
     }
     const slot = selected.spellSlots?.[spellLevel] ?? { max: 0, used: 0 };
-    if (spellLevel > 0 && (slot.max <= slot.used)) {
+    const pact = selected.pactMagic;
+    const castingWithPact = usePactMagic && !!pact && spellLevel > 0 && spellLevel <= pact.level && pact.used < pact.max;
+    if (spellLevel > 0 && !castingWithPact && (slot.max <= slot.used)) {
       addLog(selected.name + ": нет доступных ячеек " + spellLevel + "-го уровня.", "danger");
       return;
     }
@@ -769,10 +779,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     setTokens(items => items.map(token => token.id === selected.id ? {
       ...token,
       [spellResource]: true,
-      ...(spellLevel > 0 ? { spellSlots: { ...(token.spellSlots ?? {}), [spellLevel]: { ...slot, used: slot.used + 1 } } } : {}),
+      ...(spellLevel > 0 && castingWithPact ? { pactMagic: { ...pact!, used: pact!.used + 1 } } : spellLevel > 0 ? { spellSlots: { ...(token.spellSlots ?? {}), [spellLevel]: { ...slot, used: slot.used + 1 } } } : {}),
       ...(spellConcentration ? { concentrating: true } : {}),
     } : token));
-    addLog(selected.name + " накладывает «" + spellName.trim() + "» (" + (spellLevel === 0 ? "заговор" : spellLevel + "-й уровень") + "). Потрачено: " + resourceLabel + (spellLevel > 0 ? " и ячейка " + spellLevel + "-го уровня" : "") + (spellConcentration ? "; начата концентрация" : "") + ".", "gold");
+    addLog(selected.name + " накладывает «" + spellName.trim() + "» (" + (spellLevel === 0 ? "заговор" : spellLevel + "-й уровень") + "). Потрачено: " + resourceLabel + (spellLevel > 0 ? castingWithPact ? " и ячейка магии договора (" + pact!.level + "-й уровень)" : " и ячейка " + spellLevel + "-го уровня" : "") + (spellConcentration ? "; начата концентрация" : "") + ".", "gold");
     setSpellName("");
   };
 
@@ -780,7 +790,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!selected || !canEdit || layerLocks.figures) return;
     const slots = selected.spellSlots ?? {};
     const hitDice = selected.hitDice ?? { dieSides: 8, total: 0, used: 0 };
-    const spentSlots = Object.values(slots).reduce((total, slot) => total + slot.used, 0);
+    const spentSlots = Object.values(slots).reduce((total, slot) => total + slot.used, 0) + (selected.pactMagic?.used ?? 0);
     const hitDiceRecovery = hitDice.used > 0 ? Math.max(1, Math.floor(hitDice.total / 2)) : 0;
     const hasChanges = spentSlots > 0 || hitDice.used > 0 || selected.hp < selected.maxHp ||
       (selected.temporaryHp ?? 0) > 0 || (selected.exhaustionLevel ?? 0) > 0 ||
@@ -800,6 +810,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         temporaryHp: 0,
         hitDice: { ...tokenHitDice, used: Math.max(0, tokenHitDice.used - recoveredDice) },
         spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
+        pactMagic: token.pactMagic ? { ...token.pactMagic, used: 0 } : undefined,
         classResources: (token.classResources ?? []).map(resource => resource.recovery === "manual" ? resource : { ...resource, used: 0 }),
         actionUsed: false,
         bonusActionUsed: false,
@@ -1386,7 +1397,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Всего<input type="number" min="0" max="20" value={selected.hitDice?.total ?? 0} onChange={event => updateHitDice("total", Number(event.target.value)||0)} disabled={!canEdit || layerLocks.figures}/></label>
               </div>
               <span>Доступно: {Math.max(0,(selected.hitDice?.total ?? 0)-(selected.hitDice?.used ?? 0))} / {selected.hitDice?.total ?? 0}</span>
-              <button type="button" className="secondary-button" onClick={() => recoverClassResources("short")} disabled={!canEdit || layerLocks.figures}>Восстановить классовые ресурсы после короткого отдыха</button>
+              <button type="button" className="secondary-button" onClick={() => {
+                  if (!selected || !canEdit || layerLocks.figures) return;
+                  recordEditorHistory();
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, pactMagic: token.pactMagic ? { ...token.pactMagic, used: 0 } : undefined } : token));
+                  recoverClassResources("short");
+                  addLog(selected.name + ": ячейки магии договора восстановлены после короткого отдыха.", "gold");
+                }} disabled={!canEdit || layerLocks.figures}>Завершить короткий отдых (магия договора и ресурсы)</button>
                <button type="button" onClick={spendHitDieDuringShortRest} disabled={!canEdit || layerLocks.figures || diceBusy || (selected.hitDice?.used ?? 0) >= (selected.hitDice?.total ?? 0) || selected.hp >= selected.maxHp}>
                 {diceBusy ? "Бросок…" : "Потратить кость хитов"}
               </button>
@@ -1504,6 +1521,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <section className="spellcasting-panel">
               <strong>Заклинания</strong>
               <label>Название заклинания<input list={`known-spells-${selected.id}`} value={spellName} onChange={event => setSpellName(event.target.value)} placeholder="Выбери или введи название" disabled={!canEdit || layerLocks.figures}/><datalist id={`known-spells-${selected.id}`}>{(selected.knownSpells ?? []).map((name,index)=><option key={index} value={name}/>)}</datalist></label>
+              {selected.pactMagic && <div className="pact-magic-tracker">
+                <strong>Магия договора</strong>
+                <span>Ячейки {selected.pactMagic.level}-го уровня · доступно {Math.max(0, selected.pactMagic.max - selected.pactMagic.used)} из {selected.pactMagic.max}</span>
+                <small>Все ячейки восстанавливаются после короткого или длительного отдыха.</small>
+                <label><input type="checkbox" checked={usePactMagic} onChange={event => setUsePactMagic(event.target.checked)} disabled={!canEdit || selected.pactMagic.used >= selected.pactMagic.max}/> Использовать ячейку магии договора</label>
+              </div>}
               <div className="combat-roll-row">
                 <label>Уровень<select value={spellLevel} onChange={event => setSpellLevel(Number(event.target.value))} disabled={!canEdit}>
                   <option value={0}>Заговор</option>
