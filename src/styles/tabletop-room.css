@@ -22,7 +22,7 @@
 .empty-map-hint span{max-width:360px;font-size:11px;line-height:1.6}
 .room-empty-note{margin:8px 0;color:#b49c7a;font-size:10px;line-height:1.6}
 .add-token-form{display:grid;gap:10px}
-.add-token-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:7px}
+.add-token-fields{display:grid;grid-template-columns:1.2fr .7fr .7fr .7fr;gap:7px}
 .table-events-panel{padding:15px;border:1px solid rgba(198,154,85,.3);border-radius:7px;background:linear-gradient(145deg,#3b291a,#24180f);box-shadow:0 10px 24px rgba(0,0,0,.2)}
 .table-events-panel .table-panel-title{margin-bottom:13px}
 .table-log-below{max-height:230px;overflow:auto;padding-right:5px}
