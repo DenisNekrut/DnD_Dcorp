@@ -6,6 +6,7 @@ import {
 import { CampaignRole, MembershipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { SaveTableStateDto } from './dto/save-table-state.dto';
+import { MapStorageService } from './map-storage.service';
 
 const EMPTY_TABLE_STATE = {
   tokens: [],
@@ -16,7 +17,10 @@ const EMPTY_TABLE_STATE = {
 
 @Injectable()
 export class TabletopService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mapStorage: MapStorageService,
+  ) {}
 
   async getState(userId: string, campaignId: string) {
     const canEdit = await this.assertCampaignAccess(userId, campaignId, false);
@@ -54,6 +58,17 @@ export class TabletopService {
       select: { campaignId: true, state: true, updatedAt: true },
     });
     return { ...saved, permissions: { canEdit: true } };
+  }
+
+  async uploadMap(userId: string, campaignId: string, file: Express.Multer.File) {
+    await this.assertCampaignAccess(userId, campaignId, true);
+    return this.mapStorage.upload(campaignId, file);
+  }
+
+  async deleteMap(userId: string, campaignId: string, key: string) {
+    await this.assertCampaignAccess(userId, campaignId, true);
+    await this.mapStorage.delete(campaignId, key);
+    return { deleted: true };
   }
 
   private async assertCampaignAccess(
