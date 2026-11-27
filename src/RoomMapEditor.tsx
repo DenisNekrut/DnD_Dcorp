@@ -242,7 +242,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const setMeasureTool = (mode: "distance" | "radius" | null) => {
+  const setMeasureTool = (mode: MeasurementMode) => {
     setMeasurementMode(mode);
     setDrawingMode(null);
     setMeasurement(null);
