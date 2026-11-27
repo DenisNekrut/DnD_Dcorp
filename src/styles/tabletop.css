@@ -173,3 +173,14 @@
 .exhaustion-control { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#cdb88f; font-size:9px; }
 .exhaustion-control select { max-width:70%; }
 .token-condition-count { position:absolute; top:-7px; right:-7px; min-width:16px; height:16px; display:grid; place-items:center; padding:0 3px; border:1px solid #f1d8a8; border-radius:9px; color:#fff4d9; background:#7b3d2c; font-size:9px; font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+
+.combat-roll-panel { display:grid; gap:7px; padding:9px 0; border-top:1px solid rgba(198,154,85,.18); border-bottom:1px solid rgba(198,154,85,.18); }
+.combat-roll-panel>strong { color:#e4c891; font-size:10px; }
+.combat-roll-row { display:flex; gap:5px; }
+.combat-roll-panel select,.combat-roll-panel input { min-width:0; flex:1; padding:5px 6px; border:1px solid rgba(198,154,85,.3); border-radius:5px; color:#ead9b9; background:#1b130d; font-size:9px; }
+.combat-roll-row input { max-width:64px; }
+.combat-roll-mode { width:100%; }
+.combat-roll-hint,.combat-roll-warning { color:#b8a88d; font-size:9px; line-height:1.4; }
+.combat-roll-warning { color:#e5a078; }
+.combat-roll-panel>button { padding:7px 9px; border:1px solid rgba(198,154,85,.45); border-radius:5px; color:#f0dfbf; background:rgba(143,94,47,.25); font-size:10px; font-weight:700; cursor:pointer; }
+.combat-roll-panel>button:disabled { opacity:.4; cursor:not-allowed; }
