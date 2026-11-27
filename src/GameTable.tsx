@@ -195,6 +195,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [selectedWeaponId, setSelectedWeaponId] = useState("dagger");
   const [useVersatileDamage, setUseVersatileDamage] = useState(false);
   const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
+  const [attackResource, setAttackResource] = useState<"actionUsed" | "bonusActionUsed" | "reactionUsed">("actionUsed");
   const dirtyRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const inFlightStateRef = useRef<TableState | null>(null);
@@ -790,6 +791,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(selected.name + ": недееспособное существо не может атаковать.", "danger");
       return;
     }
+    if (rollKind === "attack" && attackResource !== "actionUsed" && selected[attackResource]) {
+      const resourceLabel = attackResource === "bonusActionUsed" ? "бонусное действие" : "реакцию";
+      addLog(selected.name + ": " + resourceLabel + " уже использовано в этом раунде.", "danger");
+      return;
+    }
     const weaponUsesAmmo = rollKind === "attack" && (selectedWeapon?.properties.includes("ammunition") ?? false);
     const weaponUsesLoading = rollKind === "attack" && (selectedWeapon?.properties.includes("loading") ?? false);
     const weaponAmmoCount = selectedWeapon ? selected.weaponAmmo?.[selectedWeapon.id] ?? 0 : 0;
@@ -869,10 +875,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         return;
       }
 
-      if (!selected.actionUsed) {
+      const resourceLabels = { actionUsed: "действие", bonusActionUsed: "бонусное действие", reactionUsed: "реакция" };
+      if (!selected[attackResource]) {
         recordEditorHistory();
-        setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true } : token));
-        addLog(selected.name + ": действие потрачено на действие «Атака». Дополнительные атаки в рамках того же действия остаются возможны.", "muted");
+        setTokens(items => items.map(token => token.id === selected.id ? { ...token, [attackResource]: true } : token));
+        addLog(selected.name + ": потрачено " + resourceLabels[attackResource] + " на атаку." + (attackResource === "actionUsed" ? " Дополнительные атаки в рамках того же действия остаются возможны." : ""), "muted");
       }
 
       const target = attackTarget!;
@@ -1204,6 +1211,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <input type="number" value={rollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Дополнительный модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор к базовому бонусу"}/>
               </div>
               {rollKind === "attack" && <div className="combat-attack-options">
+                <label>Расход ресурса<select value={attackResource} onChange={event => setAttackResource(event.target.value as typeof attackResource)} disabled={!canEdit}>
+                  <option value="actionUsed">Действие</option>
+                  <option value="bonusActionUsed">Бонусное действие</option>
+                  <option value="reactionUsed">Реакция</option>
+                </select></label>
                 <label>Оружие<select value={selectedWeaponId} onChange={event => selectWeapon(event.target.value)} disabled={!canEdit}>
                   {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} · {damageTypeOptions.find(type => type.id === weapon.damageType)?.label ?? ""}{weapon.rangeFt ? " · " + weapon.rangeFt.normal + "/" + weapon.rangeFt.long + " фт." : ""}</option>)}
                 </select></label>
