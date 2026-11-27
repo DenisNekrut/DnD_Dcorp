@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned, House, Ruler } from "lucide-react";
+import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned, House, Ruler, Circle } from "lucide-react";
 
 export type MapLayer = "terrain" | "structures" | "decorations";
 export type TableLayer = "background" | MapLayer | "figures";
@@ -47,9 +47,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [zoneType, setZoneType] = useState<TerrainZoneType>("difficult");
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [measurementMode, setMeasurementMode] = useState(false);
+  const [measurementMode, setMeasurementMode] = useState<"distance" | "radius" | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
+  const [radiusFeet, setRadiusFeet] = useState(15);
+  const [radiusPreview, setRadiusPreview] = useState<{ x: number; y: number; width: number; height: number; feet: number } | null>(null);
   const measurementStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" || item.kind === "room" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : "decorations");
@@ -87,7 +89,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
 
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    if (isMeasuring && measurementStartRef.current) {
+    if (measurementMode === "distance" && isMeasuring && measurementStartRef.current) {
       const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
       const rawEndX = event.clientX - rect.left;
       const rawEndY = event.clientY - rect.top;
@@ -175,10 +177,24 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const rawY = event.clientY - rect.top;
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
+    if (measurementMode === "radius") {
+      const radiusPx = radiusFeet / 5 * cellSize;
+      setRadiusPreview({ x, y, width: radiusPx * 2 / rect.width * 100, height: radiusPx * 2 / rect.height * 100, feet: radiusFeet });
+      return;
+    }
     measurementStartRef.current = { x, y };
     setMeasurement({ x, y, width: 0, angle: 0, feet: 0, cells: 0 });
     setIsMeasuring(true);
     event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const setMeasureTool = (mode: "distance" | "radius" | null) => {
+    setMeasurementMode(mode);
+    setDrawingMode(null);
+    setMeasurement(null);
+    setRadiusPreview(null);
+    setIsMeasuring(false);
+    measurementStartRef.current = null;
   };
 
   const finishPointer = () => {
@@ -207,12 +223,18 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
           <option value="difficult">Трудная местность</option><option value="water">Вода</option><option value="fire">Огонь</option><option value="fog">Туман</option><option value="hazard">Опасная зона</option>
         </select>
       </label>}
-      {activeLayer === "terrain" && <button type="button" className={drawingMode === "zone" ? "tool-active" : ""} disabled={!canEdit || layerLocks.terrain || !visibleLayers.terrain} onClick={() => { setMeasurementMode(false); setMeasurement(null); setDrawingMode(value => value === "zone" ? null : "zone"); }}><MapPinned size={14}/> {drawingMode === "zone" ? "Стоп: область" : "Рисовать область"}</button>}
+      {activeLayer === "terrain" && <button type="button" className={drawingMode === "zone" ? "tool-active" : ""} disabled={!canEdit || layerLocks.terrain || !visibleLayers.terrain} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "zone" ? null : "zone"); }}><MapPinned size={14}/> {drawingMode === "zone" ? "Стоп: область" : "Рисовать область"}</button>}
       {activeLayer === "structures" && <>
-        <button type="button" className={drawingMode === "wall" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasurementMode(false); setMeasurement(null); setDrawingMode(value => value === "wall" ? null : "wall"); }}><Fence size={14}/> {drawingMode === "wall" ? "Стоп: стена" : "Рисовать стену"}</button>
-        <button type="button" className={drawingMode === "room" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasurementMode(false); setMeasurement(null); setDrawingMode(value => value === "room" ? null : "room"); }}><House size={14}/> {drawingMode === "room" ? "Стоп: комната" : "Создать комнату"}</button>
+        <button type="button" className={drawingMode === "wall" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "wall" ? null : "wall"); }}><Fence size={14}/> {drawingMode === "wall" ? "Стоп: стена" : "Рисовать стену"}</button>
+        <button type="button" className={drawingMode === "room" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "room" ? null : "room"); }}><House size={14}/> {drawingMode === "room" ? "Стоп: комната" : "Создать комнату"}</button>
       </>}
-      <button type="button" className={measurementMode ? "tool-active" : ""} title="Измерить расстояние по сетке: 1 клетка = 5 футов; диагональ считается за 5 футов" onClick={() => { const next = !measurementMode; setMeasurementMode(next); setDrawingMode(null); if (!next) { setMeasurement(null); setIsMeasuring(false); measurementStartRef.current = null; } }}><Ruler size={14}/> Линейка</button>
+      <button type="button" className={measurementMode === "distance" ? "tool-active" : ""} title="Измерить расстояние по сетке: 1 клетка = 5 футов; диагональ считается за 5 футов" onClick={() => setMeasureTool(measurementMode === "distance" ? null : "distance")}><Ruler size={14}/> Линейка</button>
+      <label className="radius-size-select">Радиус
+        <select value={radiusFeet} onChange={event => { setRadiusFeet(Number(event.target.value)); setRadiusPreview(null); }} aria-label="Радиус области в футах">
+          {[5, 10, 15, 20, 30, 40, 60].map(value => <option key={value} value={value}>{value} ft</option>)}
+        </select>
+      </label>
+      <button type="button" className={measurementMode === "radius" ? "tool-active" : ""} title="Показать круг заданного радиуса на карте" onClick={() => setMeasureTool(measurementMode === "radius" ? null : "radius")}><Circle size={14}/> Область</button>
       {selected && canEdit && visibleLayers[layerOf(selected)] && <>
         <button type="button" title="Повернуть на 15°" disabled={selectedLocked} onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}><RotateCw size={14}/></button>
         <button type="button" title="Удалить объект" disabled={selectedLocked} onClick={() => { if (selectedLocked) return; onChange(objects.filter(item => item.id !== selected.id)); setSelectedId(null); }}><Trash2 size={14}/></button>
@@ -240,6 +262,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
           {item.kind === "zone" ? <span className="map-zone-label">{item.zoneType === "water" ? "Вода" : item.zoneType === "fire" ? "Огонь" : item.zoneType === "fog" ? "Туман" : item.zoneType === "hazard" ? "Опасность" : "Трудная местность"}</span> : item.kind === "room" ? <span className="map-room-label">Комната</span> : <Icon size={16}/>} 
         </button>;
       })}
+      {radiusPreview && <div className="map-radius-preview" style={{ left: `${radiusPreview.x}%`, top: `${radiusPreview.y}%`, width: `${radiusPreview.width}%`, height: `${radiusPreview.height}%` }}><span>Радиус {radiusPreview.feet} фут.</span></div>}
       {measurement && <div className="map-ruler-line" style={{ left: `${measurement.x}%`, top: `${measurement.y}%`, width: `${measurement.width}%`, transform: `rotate(${measurement.angle}deg)` }}>
         <span>{measurement.feet} ft · {Number(measurement.cells.toFixed(1))} клетки</span>
       </div>}
