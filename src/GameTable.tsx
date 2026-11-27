@@ -90,7 +90,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const updateObjects = (next: MapObject[]) => { recordEditorHistory(); setObjects(next); };
   const updateLayerVisibility = (next: LayerVisibility) => { recordEditorHistory(); setLayerVisibility(next); };
   const updateLayerLocks = (next: LayerLocks) => { recordEditorHistory(); setLayerLocks(next); };
-  const updateMapView = (patch: Partial<MapView>) => { recordEditorHistory(); setMapView(value => ({ ...value, ...patch })); };
+  const updateMapView = (patch: Partial<MapView>) => { if (layerLocks.background) return; recordEditorHistory(); setMapView(value => ({ ...value, ...patch })); };
   const undoEditor = () => {
     const target = editorHistory.past[editorHistory.past.length - 1];
     if (!target || !canEdit) return;
@@ -245,7 +245,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setTableError("Размер изображения карты не должен превышать 15 МБ.");
       return;
     }
-    if (!remoteEnabled || !campaignId || !canEdit) {
+    if (!remoteEnabled || !campaignId || !canEdit || layerLocks.background) {
       setTableError("Загрузка карты доступна мастеру в общей кампании.");
       return;
     }
@@ -264,7 +264,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
   const removeMapAsset = async () => {
-    if (!mapAsset || !campaignId || !remoteEnabled || !canEdit) return;
+    if (!mapAsset || !campaignId || !remoteEnabled || !canEdit || layerLocks.background) return;
     if (!window.confirm("Удалить загруженную подложку карты?")) return;
     setMapUploading(true);
     try {
