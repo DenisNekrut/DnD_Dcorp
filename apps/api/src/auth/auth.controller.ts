@@ -20,14 +20,14 @@ export class AuthController {
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.register(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user, token: result.token };
+    return { user: result.user };
   }
 
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.login(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user, token: result.token };
+    return { user: result.user };
   }
 
   @Post('logout')
@@ -45,7 +45,7 @@ export class AuthController {
   private setSessionCookie(response: Response, token: string): void {
     response.cookie('dnd_session', token, {
       ...this.cookieOptions(),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
   }
 
