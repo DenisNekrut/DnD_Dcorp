@@ -887,8 +887,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
                   <option value="melee">Ближний бой (до 5 футов)</option><option value="ranged">Дальний бой</option>
                 </select></label>
-                <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit}>
-                  <option value="strength">Сила</option><option value="dexterity">Ловкость</option>
+                <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit || !selectedWeapon?.properties.includes("finesse")}>
+                  {selectedWeapon?.properties.includes("finesse")
+                    ? <><option value="strength">Сила</option><option value="dexterity">Ловкость</option></>
+                    : <option value={selectedWeapon?.kind === "ranged" ? "dexterity" : "strength"}>{selectedWeapon?.kind === "ranged" ? "Ловкость" : "Сила"}</option>}
                 </select></label>
                 <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useWeaponProficiency} onChange={event => setUseWeaponProficiency(event.target.checked)} disabled={!canEdit}/> Владение оружием (+{selected?.proficiencyBonus ?? 0})</label>
                 <span className="attack-bonus-preview">Бонус атаки: {effectiveRollModifier >= 0 ? "+" : ""}{effectiveRollModifier}</span>
