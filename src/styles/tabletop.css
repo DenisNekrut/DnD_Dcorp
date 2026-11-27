@@ -159,3 +159,17 @@
 
 .table-tool-group button:disabled { opacity:.38; cursor:not-allowed; }
 .table-tool-group button:disabled:hover { color:#c5cfda; border-color:rgba(215,181,109,.2); background:#101827; }
+
+.condition-panel { display:grid; gap:7px; padding-top:8px; border-top:1px solid rgba(198,154,85,.18); }
+.condition-panel>strong { color:#e4c891; font-size:10px; }
+.condition-chip-list { display:flex; flex-wrap:wrap; gap:5px; }
+.condition-chip { padding:4px 7px; border:1px solid rgba(193,144,82,.45); border-radius:12px; color:#f1dfbd; background:rgba(143,94,47,.2); font-size:9px; cursor:pointer; }
+.condition-chip:disabled { cursor:default; opacity:.9; }
+.condition-empty { color:#9d8b73; font-size:9px; }
+.condition-add-form { display:flex; gap:5px; }
+.condition-add-form select,.exhaustion-control select { min-width:0; flex:1; padding:5px 6px; border:1px solid rgba(198,154,85,.3); border-radius:5px; color:#ead9b9; background:#1b130d; font-size:9px; }
+.condition-add-form button { padding:5px 8px; border:1px solid rgba(198,154,85,.35); border-radius:5px; color:#f0dfbf; background:rgba(255,255,255,.06); font-size:9px; cursor:pointer; }
+.condition-add-form button:disabled { opacity:.4; cursor:not-allowed; }
+.exhaustion-control { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#cdb88f; font-size:9px; }
+.exhaustion-control select { max-width:70%; }
+.token-condition-count { position:absolute; top:-7px; right:-7px; min-width:16px; height:16px; display:grid; place-items:center; padding:0 3px; border:1px solid #f1d8a8; border-radius:9px; color:#fff4d9; background:#7b3d2c; font-size:9px; font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,.5); }
