@@ -95,7 +95,10 @@ export class CampaignsService {
       select: { id: true, passwordHash: true, applicationsOpen: true },
     });
     if (!campaign) throw new NotFoundException('Campaign not found');
-    if (!campaign.applicationsOpen) throw new ForbiddenException('Campaign applications are closed');
+    // Closed public applications must not invalidate an explicit, valid invitation.
+    if (!campaign.applicationsOpen && !inviteToken) {
+      throw new ForbiddenException('Campaign applications are closed');
+    }
     if (campaign.passwordHash && (!password || !(await argon2.verify(campaign.passwordHash, password)))) {
       throw new ForbiddenException('Invalid campaign password');
     }
@@ -143,6 +146,16 @@ export class CampaignsService {
       data: { status: MembershipStatus.REJECTED },
       select: { id: true, status: true, updatedAt: true },
     });
+  }
+
+  async getInvite(userId: string, campaignId: string) {
+    await this.assertManager(userId, campaignId);
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { inviteToken: true },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+    return { inviteToken: campaign.inviteToken };
   }
 
   async members(userId: string, campaignId: string) {

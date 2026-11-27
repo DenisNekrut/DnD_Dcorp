@@ -543,3 +543,19 @@ footer { border-top-color:rgba(198,154,85,.2);color:#8e7658; }
 .auth-card h1 { color:#f0d7aa; }
 .auth-card>p { color:#c5b194; }
 @media(max-width:760px){.hero-panel:after{inset:7px;}}
+
+
+.join-form{flex-wrap:wrap}
+.join-form .join-details{flex:1 1 190px;min-width:160px}
+.join-invite-controls{display:flex;flex:1 1 360px;gap:8px;min-width:0}
+.join-invite-controls input{flex:1;min-width:0;padding:10px 12px;border:1px solid rgba(166,181,197,.23);border-radius:8px;outline:0;color:#e7eaf0;background:#101d2b;font:inherit;font-size:11px}
+.join-invite-controls input:focus{border-color:var(--color-gold);box-shadow:0 0 0 2px rgba(214,169,78,.1)}
+.join-invite-controls .button{flex:0 0 auto;white-space:nowrap}
+.join-feedback{margin:8px 0 0;padding:9px 12px;border:1px solid rgba(214,169,78,.2);border-radius:7px;color:#d8bd7d;background:rgba(214,169,78,.05);font-size:10px;line-height:1.55}
+.join-feedback-error{border-color:rgba(190,100,77,.35);color:#e5a08c;background:rgba(130,53,38,.1)}
+.join-feedback-success{border-color:rgba(129,166,100,.3);color:#b7ce9e;background:rgba(100,140,75,.1)}
+@media(max-width:620px){
+ .join-invite-controls{flex-basis:100%;flex-direction:column}
+ .join-invite-controls input{min-height:42px;font-size:16px}
+ .join-invite-controls .button{width:100%;min-height:42px}
+}

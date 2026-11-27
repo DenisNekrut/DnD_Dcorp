@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Crown, RefreshCw, Shield, UserMinus, Users, X } from "lucide-react";
+import { Check, Copy, Crown, RefreshCw, Shield, UserMinus, Users, X } from "lucide-react";
 import { apiRequest } from "./api";
 import "./styles/campaign-members.css";
 
@@ -33,17 +33,22 @@ export default function CampaignMembersPanel({
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [memberRows, pendingRows] = await Promise.all([
+      const [memberRows, pendingRows, invite] = await Promise.all([
         apiRequest<CampaignMember[]>(`/campaigns/${campaignId}/members`),
         apiRequest<CampaignMember[]>(`/campaigns/${campaignId}/requests`),
+        apiRequest<{ inviteToken: string }>(`/campaigns/${campaignId}/invite`),
       ]);
       setMembers(Array.isArray(memberRows) ? memberRows : []);
       setPending(Array.isArray(pendingRows) ? pendingRows : []);
+      setInviteToken(invite.inviteToken ?? "");
+      setInviteCopied(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить состав кампании.");
     } finally {
@@ -52,6 +57,21 @@ export default function CampaignMembersPanel({
   }, [campaignId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const inviteUrl = inviteToken
+    ? `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(inviteToken)}`
+    : "";
+
+  const copyInvite = async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      setError("");
+    } catch {
+      setError("Не удалось скопировать ссылку автоматически. Выдели её и скопируй вручную.");
+    }
+  };
 
   const changeRole = async (member: CampaignMember, role: MemberRole) => {
     setBusyId(member.id);
@@ -115,6 +135,14 @@ export default function CampaignMembersPanel({
       <div className="campaign-members-summary">
         <div><Users size={18}/><span>Участники</span><strong>{members.length}</strong></div>
         <div><Shield size={18}/><span>Заявки</span><strong>{pending.length}</strong></div>
+      </div>
+
+      <div className="campaign-invite-box">
+        <div><strong>Ссылка для приглашения</strong><span>Отправь её игрокам. Они смогут подать заявку на вступление.</span></div>
+        <div className="campaign-invite-copy-row">
+          <input aria-label="Ссылка приглашения" readOnly value={inviteUrl} placeholder="Загружаем ссылку…"/>
+          <button type="button" onClick={() => void copyInvite()} disabled={!inviteUrl}><Copy size={15}/>{inviteCopied ? "Скопировано" : "Копировать"}</button>
+        </div>
       </div>
 
       {error && <p className="campaign-members-error" role="alert">{error}</p>}
