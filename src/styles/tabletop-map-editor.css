@@ -4,6 +4,7 @@
 .map-object-toolbar button:hover:not(:disabled){border-color:#e1bd7b;background:rgba(225,189,123,.18)}
 .map-object-toolbar button:disabled{opacity:.42;cursor:not-allowed}
 .map-object-layer{position:absolute;z-index:2;inset:0;pointer-events:none;transform-origin:center}
+.map-object-content{position:absolute;inset:0;pointer-events:none;transform-origin:center}
 .map-object{position:absolute;display:flex;align-items:center;justify-content:center;min-width:24px;min-height:20px;padding:2px;border:2px solid rgba(76,49,26,.8);border-radius:3px;color:#4b321d;background:rgba(126,87,49,.68);box-shadow:0 3px 8px rgba(59,38,19,.3);pointer-events:auto;cursor:grab;touch-action:none}
 .map-object:disabled{cursor:default}
 .map-object-wall{border-radius:2px;background:repeating-linear-gradient(90deg,#806044 0 8px,#a78255 8px 11px);color:#f3d9ac}
