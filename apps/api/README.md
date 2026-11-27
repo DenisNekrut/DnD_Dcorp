@@ -46,8 +46,20 @@ All character endpoints require authentication.
 - `GET /api/characters/campaigns/:campaignId` — list campaign character copies for approved members.
 - `PATCH /api/characters/campaign-copies/:characterId` — update a campaign copy when permitted.
 
-The character data stores the sheet fields while the API calculates ability modifiers, proficiency bonus, saving throw modifiers, skill modifiers, and passive Perception from the supplied D&D 5e values. Character levels are limited to 1–20 and player ability scores to 1–20.
+The character data stores the sheet fields while the API calculates ability modifiers, proficiency bonus, saving throw modifiers, skill modifiers, and passive Perception. Character levels are limited to 1–20 and ability scores to 1–20. Personal templates and campaign copies are separate records, with server-side access checks.
 
-Personal templates and campaign copies are separate database records. Editing a campaign copy never writes back to its personal source or to copies in other campaigns. Campaign access and edit permissions are checked server-side; observers have read-only access.
+## D&D 5e reference catalogs
 
-The API schema change is validated by CI. A deployment must apply the generated Prisma migration to its PostgreSQL database before using these endpoints.
+The reference catalog is versioned as `5e-2014`. These read-only endpoints supply structured options for character creation and sheet interfaces:
+
+- `GET /api/rules` — catalog index and ruleset version.
+- `GET /api/rules/abilities`
+- `GET /api/rules/alignments`
+- `GET /api/rules/classes` — class identifiers, hit dice, saving throw proficiencies, and skill-choice counts.
+- `GET /api/rules/species` — core species identifiers, base speed, size, and language identifiers.
+- `GET /api/rules/backgrounds`
+- `GET /api/rules/skills` — skill identifiers and governing abilities.
+- `GET /api/rules/equipment-categories`
+- `GET /api/rules/spell-levels`
+
+Catalog entries contain concise game data and identifiers rather than copied rulebook descriptions. The API is intended to expand these catalogs with separately maintained equipment, spell, feature, and subclass records.
