@@ -127,7 +127,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selected = tokens.find(token => token.id === selectedId);
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
-  const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind === "skill" ? "ability" : rollKind, saveAbility) : rollModeOverride) : "normal";
+  const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
   const selectedSkillData = skillLabels.find(skill => skill.id === selectedSkill) ?? skillLabels[0];
   const effectiveRollModifier = rollKind === "skill" ? selected?.skillModifiers?.[selectedSkill] ?? 0 : rollModifier;
   const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
