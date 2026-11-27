@@ -168,7 +168,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     <div className={`map-object-layer ${drawingMode ? "drawing-zone-mode" : ""}`} onPointerDown={beginDrawZone} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
-        return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${selectedId === item.id ? "map-object-selected" : ""}`}
+        return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${item.kind === "zone" ? `map-zone-${item.zoneType ?? "difficult"}` : ""} ${selectedId === item.id ? "map-object-selected" : ""}`}
           style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.width}%`, height: `${item.height}%`, zIndex: layerOf(item) === "terrain" ? 1 : layerOf(item) === "structures" ? 2 : 3, transform: `translate(-50%,-50%) rotate(${item.rotation}deg)` }}
           title={labels[item.kind]} aria-label={labels[item.kind]}
           onPointerDown={event => { setSelectedId(item.id); if (!canEdit || layerLocks[layerOf(item)]) return; event.preventDefault(); event.stopPropagation(); onEditStart(); setDraggingId(item.id); event.currentTarget.setPointerCapture(event.pointerId); }}
