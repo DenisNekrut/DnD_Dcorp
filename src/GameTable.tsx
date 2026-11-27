@@ -880,7 +880,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     } else {
       const next = initiative[nextIndex];
       setActiveTokenId(next.id);
-      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [] } : token));
+      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false } : token));
       addLog(`Ход переходит к ${next.name}.`, "gold");
     }
   };
