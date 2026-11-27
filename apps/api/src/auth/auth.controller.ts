@@ -20,14 +20,14 @@ export class AuthController {
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.register(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user, token: result.token };
+    return { user: result.user };
   }
 
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.login(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user, token: result.token };
+    return { user: result.user };
   }
 
   @Post('logout')
@@ -38,14 +38,16 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@Req() request: AuthRequest) {
+  async me(@Req() request: AuthRequest, @Res({ passthrough: true }) response: Response) {
+    const token = await this.auth.createSessionToken(request.user.id, request.user.email);
+    this.setSessionCookie(response, token);
     return { user: request.user };
   }
 
   private setSessionCookie(response: Response, token: string): void {
     response.cookie('dnd_session', token, {
       ...this.cookieOptions(),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
   }
 

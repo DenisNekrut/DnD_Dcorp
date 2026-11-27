@@ -26,7 +26,7 @@ export class AuthService {
       data: { email, username, passwordHash },
       select: { id: true, email: true, username: true, platformRole: true, createdAt: true },
     });
-    return { user, token: await this.createToken(user.id, user.email) };
+    return { user, token: await this.createSessionToken(user.id, user.email) };
   }
 
   async login(dto: LoginDto) {
@@ -40,11 +40,11 @@ export class AuthService {
     }
     return {
       user: { id: user.id, email: user.email, username: user.username, platformRole: user.platformRole, createdAt: user.createdAt },
-      token: await this.createToken(user.id, user.email),
+      token: await this.createSessionToken(user.id, user.email),
     };
   }
 
-  private createToken(userId: string, email: string): Promise<string> {
+  createSessionToken(userId: string, email: string): Promise<string> {
     return this.jwt.signAsync({
       sub: userId,
       email,
