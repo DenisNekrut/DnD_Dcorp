@@ -152,7 +152,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     <div className="map-object-toolbar" aria-label="Инструменты карты">
       <span><Layers size={13}/> Слои и объекты</span>
       <label className="map-layer-select">Активный слой
-        <select value={activeLayer} onChange={event => { const next = event.target.value as MapLayer; setActiveLayer(next); if (next !== "terrain" && next !== "structures") setDrawingMode(null); }} disabled={!canEdit}>
+        <select value={activeLayer} onChange={event => { const next = event.target.value as MapLayer; setActiveLayer(next); setDrawingMode(null); }} disabled={!canEdit}>
           <option value="terrain">Местность</option><option value="structures">Конструкции</option><option value="decorations">Декорации</option>
         </select>
       </label>
