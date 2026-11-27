@@ -402,6 +402,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     let cancelled = false;
     let timeout = 0;
     const save = async () => {
+      timeout = 0;
       if (cancelled) return;
       if (saveInFlightRef.current) {
         timeout = window.setTimeout(save, 200);
