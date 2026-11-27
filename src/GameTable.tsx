@@ -16,6 +16,13 @@ type AbilityId = "strength" | "dexterity" | "constitution" | "intelligence" | "w
 const abilityLabels: Record<AbilityId, string> = { strength: "Сила", dexterity: "Ловкость", constitution: "Телосложение", intelligence: "Интеллект", wisdom: "Мудрость", charisma: "Харизма" };
 type SkillId = "acrobatics" | "animalHandling" | "arcana" | "athletics" | "deception" | "history" | "insight" | "intimidation" | "investigation" | "medicine" | "nature" | "perception" | "performance" | "persuasion" | "religion" | "sleightOfHand" | "stealth" | "survival";
 type DamageType = "acid" | "bludgeoning" | "cold" | "fire" | "force" | "lightning" | "necrotic" | "piercing" | "poison" | "psychic" | "radiant" | "slashing" | "thunder";
+type WeaponOption = { id: string; name: string; category: "simple" | "martial"; kind: "melee" | "ranged"; damage: string | null; damageType: DamageType | null; properties: string[]; versatileDamage?: string; rangeFt?: { normal: number; long: number } };
+const fallbackWeapons: WeaponOption[] = [
+  { id: "dagger", name: "Кинжал", category: "simple", kind: "melee", damage: "1d4", damageType: "piercing", properties: ["finesse", "light", "thrown"], rangeFt: { normal: 20, long: 60 } },
+  { id: "longsword", name: "Длинный меч", category: "martial", kind: "melee", damage: "1d8", damageType: "slashing", properties: ["versatile"], versatileDamage: "1d10" },
+  { id: "shortbow", name: "Короткий лук", category: "simple", kind: "ranged", damage: "1d6", damageType: "piercing", properties: ["ammunition", "two-handed"], rangeFt: { normal: 80, long: 320 } },
+  { id: "greatsword", name: "Двуручный меч", category: "martial", kind: "melee", damage: "2d6", damageType: "slashing", properties: ["heavy", "two-handed"] },
+];
 const damageTypeOptions: { id: DamageType; label: string }[] = [
   { id: "acid", label: "Кислота" }, { id: "bludgeoning", label: "Дробящий" }, { id: "cold", label: "Холод" },
   { id: "fire", label: "Огонь" }, { id: "force", label: "Силовое поле" }, { id: "lightning", label: "Электричество" },
@@ -35,13 +42,15 @@ const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
 ];
 const parseDamageFormula = (formula: string) => {
-  const match = formula.trim().replace(/\s+/g, "").match(/^(\d{1,2})d(4|6|8|10|12|20|100)([+-]\d{1,3})?$/i);
+  const normalized = formula.trim().replace(/\s+/g, "");
+  if (/^\d{1,3}$/.test(normalized)) return { count: 0, sides: 0, modifier: 0, flatDamage: Number(normalized) };
+  const match = normalized.match(/^(\d{1,2})d(4|6|8|10|12|20|100)([+-]\d{1,3})?$/i);
   if (!match) return null;
   const count = Number(match[1]);
   const sides = Number(match[2]);
   const modifier = match[3] ? Number(match[3]) : 0;
   if (count < 1 || count > 10 || modifier < -100 || modifier > 100) return null;
-  return { count, sides, modifier };
+  return { count, sides, modifier, flatDamage: undefined as number | undefined };
 };
 
 const getAutoRollFlags = (token: Token, kind: RollKind, saveAbility: AbilityId) => {
@@ -69,7 +78,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -132,7 +141,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [rollKind, setRollKind] = useState<RollKind>("attack");
   const [rollModifier, setRollModifier] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState<SkillId>("acrobatics");
-  const [attackAbility, setAttackAbility] = useState<AbilityId>("strength");
+  const [attackAbility, setAttackAbility] = useState<AbilityId>("dexterity");
   const [useWeaponProficiency, setUseWeaponProficiency] = useState(false);
   const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
   const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
@@ -156,8 +165,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [hpAdjustment, setHpAdjustment] = useState(1);
   const [temporaryHpInput, setTemporaryHpInput] = useState(1);
   const [attackTargetId, setAttackTargetId] = useState("");
-  const [damageFormula, setDamageFormula] = useState("1d6+0");
-  const [damageType, setDamageType] = useState<DamageType>("slashing");
+  const [damageFormula, setDamageFormula] = useState("1d4");
+  const [damageType, setDamageType] = useState<DamageType>("piercing");
+  const [weaponOptions, setWeaponOptions] = useState<WeaponOption[]>(fallbackWeapons);
+  const [selectedWeaponId, setSelectedWeaponId] = useState("dagger");
+  const [useVersatileDamage, setUseVersatileDamage] = useState(false);
   const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
@@ -166,6 +178,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selected = tokens.find(token => token.id === selectedId);
   const attackTargets = selected ? tokens.filter(token => token.id !== selected.id) : [];
   const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
+  const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
+
+  useEffect(() => {
+    if (!selected || !selectedWeapon) {
+      setUseWeaponProficiency(false);
+      return;
+    }
+    const proficiencies = selected.weaponProficiencies ?? [];
+    const proficient = proficiencies.some(value => value === selectedWeapon.category || value === selectedWeapon.id || value === "all" || value === selectedWeapon.category + " weapons" || value === (selectedWeapon.category === "simple" ? "простое оружие" : "воинское оружие"));
+    setUseWeaponProficiency(proficient);
+  }, [selected?.id, selectedWeapon?.id, weaponOptions.length]);
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const attackerRollFlags = selected ? getAutoRollFlags(selected, rollKind, saveAbility) : { advantage: false, disadvantage: false };
@@ -263,6 +286,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
 
   useEffect(() => {
+    if (!remoteEnabled) return;
+    let active = true;
+    apiRequest<WeaponOption[]>("/rules/weapons")
+      .then(items => { if (active && Array.isArray(items)) setWeaponOptions(items.filter(item => item.damage && item.damageType)); })
+      .catch(error => { if (active) setTableError(error instanceof Error ? error.message : "Не удалось загрузить каталог оружия."); });
+    return () => { active = false; };
+  }, [remoteEnabled]);
+
+  useEffect(() => {
     if (!campaignId) return;
     if (!remoteEnabled) {
       try {
@@ -353,7 +385,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
     const rawAbilityModifiers = (data.abilityModifiers ?? {}) as Record<string, number>;
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus: Number(data.proficiencyBonus ?? 0), abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? 0), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? 0), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? 0), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? 0), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? 0), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? 0) }, temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus: Number(data.proficiencyBonus ?? 0), abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? 0), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? 0), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? 0), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? 0), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? 0), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? 0) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -430,6 +462,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`На карту добавлен участник: ${token.name}.`);
     setNewTokenName("");
   };
+  const selectWeapon = (weaponId: string) => {
+    const weapon = weaponOptions.find(item => item.id === weaponId);
+    if (!weapon) return;
+    setSelectedWeaponId(weaponId);
+    setUseVersatileDamage(false);
+    setDamageFormula(weapon.damage ?? "1d4");
+    if (weapon.damageType) setDamageType(weapon.damageType);
+    setAttackType(weapon.kind);
+    if (weapon.kind === "ranged") setAttackAbility("dexterity");
+    else if (!weapon.properties.includes("finesse")) setAttackAbility("strength");
+    const proficiencies = selected?.weaponProficiencies ?? [];
+    const proficient = proficiencies.some(value => value === weapon.category || value === weapon.id || value === "all" || value === weapon.category + " weapons" || value === (weapon.category === "simple" ? "простое оружие" : "воинское оружие"));
+    setUseWeaponProficiency(proficient);
+  };
+
+  const toggleVersatileDamage = (enabled: boolean) => {
+    setUseVersatileDamage(enabled);
+    if (selectedWeapon?.versatileDamage) setDamageFormula(enabled ? selectedWeapon.versatileDamage : selectedWeapon.damage ?? "1d4");
+  };
+
   const rollD20 = async () => {
     if (remoteEnabled) {
       setDiceBusy(true);
@@ -598,7 +650,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const naturalOne = kept === 1;
       const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
-        selected.name + " атакует " + target.name + ": " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
+        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
       );
       if (!hit) return;
@@ -608,10 +660,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
         return;
       }
-      const damageCount = parsed.count * (critical ? 2 : 1);
+      const damageCount = parsed.flatDamage !== undefined ? 0 : parsed.count * (critical ? 2 : 1);
       let damageRolls: number[];
       let damageTotal: number;
-      if (remoteEnabled) {
+      if (parsed.flatDamage !== undefined) {
+        damageRolls = [];
+        damageTotal = parsed.flatDamage;
+      } else if (remoteEnabled) {
         const damage = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
           method: "POST",
           body: JSON.stringify({ count: damageCount, sides: parsed.sides, modifier: parsed.modifier, mode: "normal" }),
@@ -628,8 +683,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       recordEditorHistory();
       const updatedTarget = applyDamageToToken(target, appliedDamage, critical);
       setTokens(items => items.map(token => token.id === target.id ? updatedTarget : token));
+      const damageExpression = parsed.flatDamage !== undefined
+        ? String(parsed.flatDamage)
+        : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? " (критический урон: кости удвоены)" : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -822,14 +880,20 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <input type="number" value={rollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Дополнительный модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор к базовому бонусу"}/>
               </div>
               {rollKind === "attack" && <div className="combat-attack-options">
+                <label>Оружие<select value={selectedWeaponId} onChange={event => selectWeapon(event.target.value)} disabled={!canEdit}>
+                  {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} · {damageTypeOptions.find(type => type.id === weapon.damageType)?.label ?? ""}{weapon.rangeFt ? " · " + weapon.rangeFt.normal + "/" + weapon.rangeFt.long + " фт." : ""}</option>)}
+                </select></label>
                 <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
                   {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
                 </select></label>
+                {selectedWeapon?.versatileDamage && <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useVersatileDamage} onChange={event => toggleVersatileDamage(event.target.checked)} disabled={!canEdit}/> Двумя руками ({selectedWeapon.versatileDamage})</label>}
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
                   <option value="melee">Ближний бой (до 5 футов)</option><option value="ranged">Дальний бой</option>
                 </select></label>
-                <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit}>
-                  <option value="strength">Сила</option><option value="dexterity">Ловкость</option>
+                <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit || !selectedWeapon?.properties.includes("finesse")}>
+                  {selectedWeapon?.properties.includes("finesse")
+                    ? <><option value="strength">Сила</option><option value="dexterity">Ловкость</option></>
+                    : <option value={selectedWeapon?.kind === "ranged" ? "dexterity" : "strength"}>{selectedWeapon?.kind === "ranged" ? "Ловкость" : "Сила"}</option>}
                 </select></label>
                 <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useWeaponProficiency} onChange={event => setUseWeaponProficiency(event.target.checked)} disabled={!canEdit}/> Владение оружием (+{selected?.proficiencyBonus ?? 0})</label>
                 <span className="attack-bonus-preview">Бонус атаки: {effectiveRollModifier >= 0 ? "+" : ""}{effectiveRollModifier}</span>
