@@ -129,6 +129,8 @@ const defaultMapView: MapView = { scale: 1, x: 0, y: 0 };
 
 const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true, gridCellSizePx: 38 };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
+const recoveryKey = (id: string) => `${localKey(id)}-pending-recovery`;
+type TableRecovery = { state: TableState; savedAt: number };
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
 export default function GameTable({ campaignName, campaignId, isGuest, onBack }: { campaignName: string; campaignId?: string; isGuest: boolean; onBack: () => void }) {
@@ -188,6 +190,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [useVersatileDamage, setUseVersatileDamage] = useState(false);
   const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
   const dirtyRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const latestStateRef = useRef<TableState | null>(null);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.find(token => token.id === activeTokenId) ?? initiative[0];
@@ -195,6 +199,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const attackTargets = selected ? tokens.filter(token => token.id !== selected.id) : [];
   const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
   const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
+  const latestTableState: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
+  latestStateRef.current = latestTableState;
 
   useEffect(() => {
     if (!selected || !selectedWeapon) {
@@ -342,8 +348,27 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       try {
         const response = await apiRequest<TableResponse>(`/campaigns/${campaignId}/table`);
         if (!active) return;
-        applyRemoteState(response);
-        setTableError("");
+        let restored = false;
+        try {
+          const rawRecovery = window.localStorage.getItem(recoveryKey(campaignId));
+          if (rawRecovery) {
+            const recovery = JSON.parse(rawRecovery) as TableRecovery;
+            const serverTime = response.updatedAt ? new Date(response.updatedAt).getTime() : 0;
+            if (recovery?.state && Number.isFinite(recovery.savedAt) && recovery.savedAt > serverTime) {
+              applyRemoteState({ ...response, state: recovery.state });
+              setTableError("Восстановлены последние локальные изменения комнаты. Сохраняем их на сервере…");
+              restored = true;
+            } else {
+              window.localStorage.removeItem(recoveryKey(campaignId));
+            }
+          }
+        } catch {
+          window.localStorage.removeItem(recoveryKey(campaignId));
+        }
+        if (!restored) {
+          applyRemoteState(response);
+          setTableError("");
+        }
       } catch (error) {
         if (active) setTableError(error instanceof Error ? error.message : "Не удалось загрузить игровую комнату.");
       } finally {
@@ -364,27 +389,69 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
+    const state = latestTableState;
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
     }
     if (!canEdit) return;
     dirtyRef.current = true;
-    const timeout = window.setTimeout(async () => {
+    try {
+      window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now() } satisfies TableRecovery));
+    } catch { /* The server remains the primary store if local recovery storage is unavailable. */ }
+    let cancelled = false;
+    let timeout = 0;
+    const save = async () => {
+      timeout = 0;
+      if (cancelled) return;
+      if (saveInFlightRef.current) {
+        timeout = window.setTimeout(save, 200);
+        return;
+      }
+      saveInFlightRef.current = true;
       try {
         const response = await apiRequest<TableResponse>(`/campaigns/${campaignId}/table`, { method: "PUT", body: JSON.stringify({ state }) });
         updatedAtRef.current = response.updatedAt;
         setLastUpdated(response.updatedAt ? new Date(response.updatedAt).toLocaleTimeString() : "");
+        try {
+          const rawRecovery = window.localStorage.getItem(recoveryKey(campaignId));
+          const recovery = rawRecovery ? JSON.parse(rawRecovery) as TableRecovery : null;
+          if (recovery && JSON.stringify(recovery.state) === JSON.stringify(state)) {
+            window.localStorage.removeItem(recoveryKey(campaignId));
+          }
+        } catch { /* Ignore recovery-cache cleanup failures. */ }
         setTableError("");
       } catch (error) {
-        setTableError(error instanceof Error ? error.message : "Не удалось сохранить комнату.");
+        setTableError(error instanceof Error ? error.message : "Не удалось сохранить комнату. Повторяем попытку…");
+        timeout = window.setTimeout(save, 2000);
       } finally {
-        dirtyRef.current = false;
+        saveInFlightRef.current = false;
+        if (JSON.stringify(latestStateRef.current) === JSON.stringify(state) && !timeout) dirtyRef.current = false;
       }
-    }, 500);
-    return () => window.clearTimeout(timeout);
+    };
+    timeout = window.setTimeout(save, 500);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
   }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+
+  useEffect(() => {
+    if (!remoteEnabled || !campaignId) return;
+    const saveOnPageHide = () => {
+      const state = latestStateRef.current;
+      if (!state || !canEdit) return;
+      try {
+        window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now() } satisfies TableRecovery));
+      } catch { /* Keepalive save is still attempted when local storage is unavailable. */ }
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      void apiRequest<TableResponse>(`/campaigns/${campaignId}/table`, {
+        method: "PUT",
+        body: JSON.stringify({ state }),
+        keepalive: true,
+      }).catch(() => undefined).finally(() => { saveInFlightRef.current = false; });
+    };
+    window.addEventListener("pagehide", saveOnPageHide);
+    return () => window.removeEventListener("pagehide", saveOnPageHide);
+  }, [campaignId, remoteEnabled, canEdit]);
 
   useEffect(() => {
     if (!remoteEnabled || !campaignId) return;
