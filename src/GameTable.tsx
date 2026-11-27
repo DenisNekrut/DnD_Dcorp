@@ -1,50 +1,66 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
 import "./styles/tabletop.css";
+import "./styles/tabletop-room.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
-type TableState = { tokens: Token[]; round: number; log: LogEntry[] };
+type RoomSettings = { configured: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
+type TableState = { room: RoomSettings; tokens: Token[]; round: number; log: LogEntry[] };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
-const initialTokens: Token[] = [
-  { id: "hero", name: "Искатель", kind: "hero", x: 25, y: 38, hp: 12, maxHp: 12, color: "gold", initiative: 16 },
-  { id: "ally", name: "Спутник", kind: "ally", x: 39, y: 57, hp: 9, maxHp: 9, color: "blue", initiative: 12 },
-  { id: "enemy-a", name: "Гоблин", kind: "enemy", x: 68, y: 37, hp: 7, maxHp: 7, color: "red", initiative: 14 },
-  { id: "enemy-b", name: "Гоблин", kind: "enemy", x: 77, y: 59, hp: 7, maxHp: 7, color: "red", initiative: 9 },
-];
+
+const emptyRoom: RoomSettings = { configured: false, name: "", description: "", mapTheme: "sand", grid: true };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
+const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
 export default function GameTable({ campaignName, campaignId, isGuest, onBack }: { campaignName: string; campaignId?: string; isGuest: boolean; onBack: () => void }) {
   const remoteEnabled = Boolean(campaignId && !isGuest && isApiConfigured());
-  const [tokens, setTokens] = useState(initialTokens);
-  const [selectedId, setSelectedId] = useState("hero");
+  const [room, setRoom] = useState<RoomSettings>({ ...emptyRoom });
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [round, setRound] = useState(1);
-  const [turn, setTurn] = useState(0);
   const [message, setMessage] = useState("");
-  const [log, setLog] = useState<LogEntry[]>([
-    { id: 1, text: "Игровая сцена подготовлена.", tone: "muted" },
-    { id: 2, text: "Порядок инициативы определён.", tone: "gold" },
-  ]);
-  const [showGrid, setShowGrid] = useState(true);
+  const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
   const [tableLoaded, setTableLoaded] = useState(!remoteEnabled);
   const [tableError, setTableError] = useState("");
   const [diceBusy, setDiceBusy] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [roomName, setRoomName] = useState(campaignName);
+  const [roomDescription, setRoomDescription] = useState("");
+  const [mapTheme, setMapTheme] = useState<RoomSettings["mapTheme"]>("sand");
+  const [grid, setGrid] = useState(true);
+  const [editingRoom, setEditingRoom] = useState(false);
+  const [newTokenName, setNewTokenName] = useState("");
+  const [newTokenKind, setNewTokenKind] = useState<Token["kind"]>("hero");
+  const [newTokenHp, setNewTokenHp] = useState(10);
+  const [newTokenInitiative, setNewTokenInitiative] = useState(10);
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
-  const activeToken = initiative[turn % Math.max(initiative.length, 1)];
-  const selected = tokens.find(token => token.id === selectedId) ?? tokens[0];
+  const activeToken = initiative.length ? initiative[(round - 1) % initiative.length] : undefined;
+  const selected = tokens.find(token => token.id === selectedId);
 
   const applyRemoteState = (response: TableResponse) => {
     const state = response.state ?? {};
-    if (Array.isArray(state.tokens) && state.tokens.length) setTokens(state.tokens);
+    // Older demo scenes had no room configuration. Migrate those to a genuinely empty room.
+    if (state.room?.configured) {
+      setRoom(state.room);
+      setRoomName(state.room.name);
+      setRoomDescription(state.room.description);
+      setMapTheme(state.room.mapTheme);
+      setGrid(state.room.grid);
+      setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+      setLog(Array.isArray(state.log) ? state.log : []);
+    } else {
+      setRoom({ ...emptyRoom });
+      setTokens([]);
+      setLog([]);
+    }
     if (typeof state.round === "number") setRound(state.round);
-    if (Array.isArray(state.log)) setLog(state.log);
     if (typeof response.permissions?.canEdit === "boolean") setCanEdit(response.permissions.canEdit);
     updatedAtRef.current = response.updatedAt;
     setLastUpdated(response.updatedAt ? new Date(response.updatedAt).toLocaleTimeString() : "");
@@ -57,11 +73,18 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         const saved = window.localStorage.getItem(localKey(campaignId));
         if (saved) {
           const state = JSON.parse(saved) as Partial<TableState>;
-          if (Array.isArray(state.tokens) && state.tokens.length) setTokens(state.tokens);
-          if (typeof state.round === "number") setRound(state.round);
-          if (Array.isArray(state.log)) setLog(state.log);
+          if (state.room?.configured) {
+            setRoom(state.room);
+            setRoomName(state.room.name);
+            setRoomDescription(state.room.description);
+            setMapTheme(state.room.mapTheme);
+            setGrid(state.room.grid);
+            setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+            setLog(Array.isArray(state.log) ? state.log : []);
+            if (typeof state.round === "number") setRound(state.round);
+          }
         }
-      } catch { /* Ignore invalid local table data and start a fresh scene. */ }
+      } catch { /* Invalid local state starts with an empty room. */ }
       setTableLoaded(true);
       return;
     }
@@ -73,7 +96,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         applyRemoteState(response);
         setTableError("");
       } catch (error) {
-        if (active) setTableError(error instanceof Error ? error.message : "Не удалось загрузить игровой стол.");
+        if (active) setTableError(error instanceof Error ? error.message : "Не удалось загрузить игровую комнату.");
       } finally {
         if (active) setTableLoaded(true);
       }
@@ -85,14 +108,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         const response = await apiRequest<TableResponse>(`/campaigns/${campaignId}/table`);
         if (!active || !response.updatedAt || response.updatedAt === updatedAtRef.current) return;
         applyRemoteState(response);
-      } catch { /* Keep the last known scene visible during temporary network loss. */ }
+      } catch { /* Keep the last known room visible during temporary network loss. */ }
     }, 3000);
     return () => { active = false; window.clearInterval(poll); };
   }, [campaignId, remoteEnabled]);
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { tokens, round, log };
+    const state: TableState = { room, tokens, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -106,23 +129,40 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         setLastUpdated(response.updatedAt ? new Date(response.updatedAt).toLocaleTimeString() : "");
         setTableError("");
       } catch (error) {
-        setTableError(error instanceof Error ? error.message : "Не удалось сохранить игровой стол.");
+        setTableError(error instanceof Error ? error.message : "Не удалось сохранить комнату.");
       } finally {
         dirtyRef.current = false;
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [tokens, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
   const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
-    setLog(items => [...items.slice(-19), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
+    setLog(items => [...items.slice(-99), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
+  };
+  const saveRoom = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!roomName.trim()) return;
+    setRoom({ configured: true, name: roomName.trim(), description: roomDescription.trim(), mapTheme, grid });
+    setEditingRoom(false);
+    addLog("Мастер подготовил игровую комнату.", "gold");
+  };
+  const addToken = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newTokenName.trim() || !canEdit) return;
+    const color = newTokenKind === "enemy" ? "red" : newTokenKind === "ally" ? "blue" : "gold";
+    const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative };
+    setTokens(items => [...items, token]);
+    setSelectedId(token.id);
+    addLog(`На карту добавлен участник: ${token.name}.`);
+    setNewTokenName("");
   };
   const rollD20 = async () => {
     if (remoteEnabled) {
       setDiceBusy(true);
       try {
         const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }) });
-        addLog(`Искатель бросает d20: ${result.rolls[0]} (итого ${result.total}).`, result.rolls[0] === 20 ? "gold" : "muted");
+        addLog(`Бросок d20: ${result.rolls[0]} (итого ${result.total}).`, result.rolls[0] === 20 ? "gold" : "muted");
       } catch (error) { setTableError(error instanceof Error ? error.message : "Не удалось выполнить бросок."); }
       finally { setDiceBusy(false); }
       return;
@@ -131,12 +171,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`Локальный бросок d20: ${value}.`, value === 20 ? "gold" : "muted");
   };
   const nextTurn = () => {
-    if (!canEdit) return;
-    if (turn + 1 >= initiative.length) {
-      setTurn(0);
-      setRound(value => value + 1);
-      addLog(`Начался раунд ${round + 1}.`, "gold");
-    } else setTurn(value => value + 1);
+    if (!canEdit || !initiative.length) return;
+    if (round > 0) setRound(value => value + 1);
+    addLog(`Начался раунд ${round + 1}.`, "gold");
   };
   const moveToken = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingId || !canEdit) return;
@@ -157,57 +194,74 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       <div>
         <button className="table-back" onClick={onBack}><ArrowLeft size={16}/> К кампаниям</button>
         <div className="eyebrow"><span/> ИГРОВАЯ СЕССИЯ</div>
-        <h1>{campaignName}</h1>
-        <p className="subtitle">Игровой стол · Раунд {round}</p>
+        <h1>{room.configured ? room.name : campaignName}</h1>
+        <p className="subtitle">{room.configured ? "Комната мастера" : "Подготовка игровой комнаты"}</p>
       </div>
-      <div className="tabletop-status"><span className="live-dot"/> {remoteEnabled ? "Общая сцена" : "Локальная сцена"} <small>{remoteEnabled ? (canEdit ? `Автосохранение · ${lastUpdated || "синхронизация"}` : "Режим просмотра · обновление каждые 3 сек") : "Данные сохраняются в этом браузере"}</small></div>
+      <div className="tabletop-status"><span className="live-dot"/> {remoteEnabled ? "Общая комната" : "Локальная комната"} <small>{remoteEnabled ? (canEdit ? `Автосохранение · ${lastUpdated || "синхронизация"}` : "Режим просмотра · обновление каждые 3 сек") : "Данные сохраняются в этом браузере"}</small></div>
     </div>
     {tableError && <p className="validation-note" role="alert">{tableError}</p>}
-    {!tableLoaded && <p className="table-sync-note">Загружаем сохранённую сцену кампании…</p>}
-    <div className="tabletop-layout">
-      <div className="tabletop-center">
-        <div className="table-toolbar">
-          <div className="table-tool-group">
-            <button title="Показать или скрыть сетку" className={showGrid ? "tool-active" : ""} onClick={() => setShowGrid(value => !value)}><Grid3X3 size={17}/></button>
-            <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button>
-            <span>{zoom}%</span>
-            <button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
+    {!tableLoaded && <p className="table-sync-note">Загружаем сохранённую комнату…</p>}
+
+    {(!room.configured || editingRoom) ? <section className="room-setup-panel">
+      <div className="room-setup-intro"><div className="room-setup-icon"><Map size={23}/></div><div><span className="eyebrow">МАСТЕРСКАЯ ВЕДУЩЕГО</span><h2>{room.configured ? "Настройки комнаты" : "Подготовь игровую комнату"}</h2><p>Сцена не будет заполнена автоматически. Выбери параметры и сам размести участников перед началом игры.</p></div></div>
+      <form className="room-setup-form" onSubmit={saveRoom}>
+        <label>Название комнаты<input value={roomName} onChange={event => setRoomName(event.target.value)} placeholder="Название приключения" required disabled={!canEdit}/></label>
+        <label>Описание и вступление<textarea value={roomDescription} onChange={event => setRoomDescription(event.target.value)} placeholder="Опиши место, атмосферу и начальные условия…" rows={3} disabled={!canEdit}/></label>
+        <label>Основа игровой карты<select value={mapTheme} onChange={event => setMapTheme(event.target.value as RoomSettings["mapTheme"])} disabled={!canEdit}><option value="sand">Песчаная карта</option><option value="stone">Каменная площадка</option><option value="forest">Лесная поляна</option></select></label>
+        <label className="room-grid-toggle"><input type="checkbox" checked={grid} onChange={event => setGrid(event.target.checked)} disabled={!canEdit}/> Показывать игровую сетку</label>
+        {canEdit ? <div className="room-setup-actions"><button className="button button-primary" type="submit"><Settings2 size={16}/> {room.configured ? "Сохранить настройки" : "Создать комнату"}</button>{room.configured && <button className="button button-secondary" type="button" onClick={() => setEditingRoom(false)}>Отмена</button>}</div> : <p className="validation-note">Настраивать комнату может только мастер или помощник.</p>}
+      </form>
+    </section> : <>
+      {room.description && <p className="room-description">{room.description}</p>}
+      <div className="tabletop-layout">
+        <div className="tabletop-center">
+          <div className="table-toolbar">
+            <div className="table-tool-group">
+              <button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button>
+              <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button><span>{zoom}%</span><button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
+            </div>
+            <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Управление сценой" : "Только просмотр"}</span></div>
-        </div>
-        <div className={`battle-map ${showGrid ? "with-grid" : ""}`} onPointerMove={moveToken} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
-          <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
-            <div className="map-decoration map-stone-one"/><div className="map-decoration map-stone-two"/>
-            <div className="map-ruin ruin-a"/><div className="map-ruin ruin-b"/><div className="map-water"/>
-            {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
-              <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
-            </button>)}
+          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""}`} onPointerMove={moveToken} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
+            <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
+              {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
+                <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
+              </button>)}
+            </div>
+            {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
+            <div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
-          <div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+          <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
-        <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
+        <aside className="table-sidebar">
+          <section className="table-panel">
+            <div className="table-panel-title"><div><Swords size={16}/><strong>Инициатива</strong></div><span>Раунд {round}</span></div>
+            {initiative.length ? <div className="initiative-list">{initiative.map(token => <button key={token.id} className={`initiative-row ${activeToken?.id === token.id ? "initiative-current" : ""} ${selectedId === token.id ? "initiative-selected" : ""}`} onClick={() => setSelectedId(token.id)}><span className={`initiative-avatar token-${token.color}`}>{token.kind === "enemy" ? "!" : "♟"}</span><span className="initiative-name">{token.name}<small>{token.kind === "enemy" ? "Противник" : "Участник"}</small></span><b>{token.initiative}</b>{activeToken?.id === token.id && <i className="turn-indicator"/>}</button>)}</div> : <p className="room-empty-note">Добавленные участники появятся здесь.</p>}
+            <button className="button button-primary full-width next-turn" onClick={nextTurn} disabled={!canEdit || !initiative.length}>Следующий раунд <ChevronRight size={16}/></button>
+          </section>
+          {selected && <section className="table-panel selected-panel">
+            <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
+            <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
+            <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            <div className="token-actions"><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token))}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token))}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
+          </section>}
+          <section className="table-panel">
+            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить участника</strong></div></div>
+            <form className="add-token-form" onSubmit={addToken}>
+              <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit}/></label>
+              <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit}/></label></div>
+              <button className="button button-secondary full-width" type="submit" disabled={!canEdit}><Plus size={15}/> Добавить на карту</button>
+            </form>
+          </section>
+          <section className="table-panel dice-panel"><div className="table-panel-title"><div><Dice5 size={16}/><strong>Быстрый бросок</strong></div></div><button className="dice-roll-button" onClick={rollD20} disabled={diceBusy}><Dice5 size={19}/> {diceBusy ? "Бросаем…" : "Бросить d20"}</button><small>{remoteEnabled ? "Результат рассчитывается сервером и попадает в журнал." : "Локальный демонстрационный бросок."}</small></section>
+          {canEdit && <button className="button button-secondary full-width" onClick={() => setEditingRoom(true)}><Settings2 size={15}/> Настройки комнаты</button>}
+        </aside>
       </div>
-      <aside className="table-sidebar">
-        <section className="table-panel">
-          <div className="table-panel-title"><div><Swords size={16}/><strong>Инициатива</strong></div><span>Раунд {round}</span></div>
-          <div className="initiative-list">{initiative.map(token => <button key={token.id} className={`initiative-row ${activeToken?.id === token.id ? "initiative-current" : ""} ${selectedId === token.id ? "initiative-selected" : ""}`} onClick={() => setSelectedId(token.id)}><span className={`initiative-avatar token-${token.color}`}>{token.kind === "enemy" ? "!" : "♟"}</span><span className="initiative-name">{token.name}<small>{token.kind === "enemy" ? "Противник" : "Участник"}</small></span><b>{token.initiative}</b>{activeToken?.id === token.id && <i className="turn-indicator"/>}</button>)}</div>
-          <button className="button button-primary full-width next-turn" onClick={nextTurn} disabled={!canEdit}>Следующий ход <ChevronRight size={16}/></button>
-        </section>
-        <section className="table-panel selected-panel">
-          <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
-          {selected && <><div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div><div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div><div className="token-actions"><button disabled={!canEdit} onClick={() => setTokens(items => items.map(t => t.id === selected.id ? { ...t, hp: Math.max(0, t.hp - 1) } : t))}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => setTokens(items => items.map(t => t.id === selected.id ? { ...t, hp: Math.min(t.maxHp, t.hp + 1) } : t))}><Plus size={14}/> Лечение</button></div></>}
-        </section>
-        <section className="table-panel dice-panel">
-          <div className="table-panel-title"><div><Dice5 size={16}/><strong>Быстрый бросок</strong></div></div>
-          <button className="dice-roll-button" onClick={rollD20} disabled={diceBusy}><Dice5 size={19}/> {diceBusy ? "Бросаем…" : "Бросить d20"}</button>
-          <small>{remoteEnabled ? "Результат рассчитывается сервером и попадает в журнал этой сцены." : "Локальный демонстрационный бросок. Для серверных бросков потребуется авторизованная сессия."}</small>
-        </section>
-        <section className="table-panel chat-panel">
-          <div className="table-panel-title"><div><Users size={16}/><strong>Журнал событий</strong></div></div>
-          <div className="table-log">{log.map(entry => <p key={entry.id} className={`log-${entry.tone}`}>{entry.text}</p>)}</div>
-          <form className="table-chat-form" onSubmit={sendMessage}><input value={message} onChange={event => setMessage(event.target.value)} placeholder="Добавить заметку…"/><button aria-label="Добавить заметку" type="submit"><Send size={15}/></button></form>
-        </section>
-      </aside>
-    </div>
+      <section className="table-panel table-events-panel">
+        <div className="table-panel-title"><div><Users size={16}/><strong>События и журнал игры</strong></div><span>{log.length} записей</span></div>
+        <div className="table-log table-log-below">{log.length ? log.map(entry => <p key={entry.id} className={`log-${entry.tone}`}>{entry.text}</p>) : <p className="room-empty-note">Событий пока нет. Здесь будут отображаться броски, заметки и ход игры.</p>}</div>
+        <form className="table-chat-form" onSubmit={sendMessage}><input value={message} onChange={event => setMessage(event.target.value)} placeholder="Добавить заметку в журнал…"/><button aria-label="Добавить заметку" type="submit"><Send size={15}/></button></form>
+      </section>
+    </>}
   </section>;
 }

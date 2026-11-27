@@ -1,0 +1,33 @@
+.room-setup-panel{padding:24px;border:1px solid rgba(198,154,85,.34);border-radius:9px;background:linear-gradient(145deg,#3b291a,#24180f);box-shadow:0 16px 38px rgba(0,0,0,.24)}
+.room-setup-intro{display:flex;align-items:flex-start;gap:14px;margin-bottom:22px}
+.room-setup-icon{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;border:1px solid rgba(198,154,85,.45);border-radius:9px;color:#e3bf7e;background:rgba(198,154,85,.1)}
+.room-setup-intro h2{margin:6px 0;color:#f0e2c9;font-family:Georgia,serif;font-size:23px}
+.room-setup-intro p{max-width:680px;margin:0;color:#bda786;font-size:12px;line-height:1.7}
+.room-setup-form{display:grid;gap:14px;max-width:760px}
+.room-setup-form>label,.add-token-form>label,.add-token-fields label{display:grid;gap:6px;color:#dfc89f;font-size:11px}
+.room-setup-form input,.room-setup-form textarea,.room-setup-form select,.add-token-form input,.add-token-form select{width:100%;min-width:0;padding:10px 11px;border:1px solid rgba(198,154,85,.32);border-radius:6px;outline:0;color:#f0e2c9;background:#1b130d;font:inherit;font-size:12px}
+.room-setup-form textarea{resize:vertical;line-height:1.6}
+.room-setup-form input:focus,.room-setup-form textarea:focus,.room-setup-form select:focus,.add-token-form input:focus,.add-token-form select:focus{border-color:#d6ad69;box-shadow:0 0 0 2px rgba(214,173,105,.12)}
+.room-grid-toggle{display:flex!important;align-items:center;gap:9px!important}
+.room-grid-toggle input{width:16px;height:16px;accent-color:#c69a55}
+.room-setup-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
+.room-description{margin:0;padding:12px 15px;border:1px solid rgba(198,154,85,.2);border-radius:7px;color:#cbb592;background:rgba(59,41,26,.55);font-size:12px;line-height:1.65}
+.battle-map.map-sand{background-color:#c9a978}
+.battle-map.map-stone{background-color:#8b8271;background-image:radial-gradient(ellipse at 30% 20%,rgba(255,244,215,.3),transparent 30%),repeating-linear-gradient(45deg,rgba(60,48,35,.07) 0 2px,transparent 2px 13px),linear-gradient(135deg,#aaa08b,#776d5d)}
+.battle-map.map-stone.with-grid{background-image:linear-gradient(rgba(67,54,39,.2) 1px,transparent 1px),linear-gradient(90deg,rgba(67,54,39,.2) 1px,transparent 1px),radial-gradient(ellipse at 30% 20%,rgba(255,244,215,.3),transparent 30%),repeating-linear-gradient(45deg,rgba(60,48,35,.07) 0 2px,transparent 2px 13px),linear-gradient(135deg,#aaa08b,#776d5d)}
+.battle-map.map-forest{background-color:#81906b;background-image:radial-gradient(ellipse at 22% 30%,rgba(213,225,164,.25),transparent 28%),radial-gradient(ellipse at 78% 70%,rgba(42,72,42,.28),transparent 35%),repeating-linear-gradient(25deg,rgba(43,75,39,.07) 0 2px,transparent 2px 15px),linear-gradient(135deg,#a8b184,#71845d)}
+.battle-map.map-forest.with-grid{background-image:linear-gradient(rgba(55,75,43,.2) 1px,transparent 1px),linear-gradient(90deg,rgba(55,75,43,.2) 1px,transparent 1px),radial-gradient(ellipse at 22% 30%,rgba(213,225,164,.25),transparent 28%),radial-gradient(ellipse at 78% 70%,rgba(42,72,42,.28),transparent 35%),repeating-linear-gradient(25deg,rgba(43,75,39,.07) 0 2px,transparent 2px 15px),linear-gradient(135deg,#a8b184,#71845d)}
+.empty-map-hint{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:9px;padding:24px;text-align:center;color:rgba(82,58,34,.72);pointer-events:none}
+.empty-map-hint strong{font-family:Georgia,serif;font-size:18px}
+.empty-map-hint span{max-width:360px;font-size:11px;line-height:1.6}
+.room-empty-note{margin:8px 0;color:#b49c7a;font-size:10px;line-height:1.6}
+.add-token-form{display:grid;gap:10px}
+.add-token-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:7px}
+.table-events-panel{padding:15px;border:1px solid rgba(198,154,85,.3);border-radius:7px;background:linear-gradient(145deg,#3b291a,#24180f);box-shadow:0 10px 24px rgba(0,0,0,.2)}
+.table-events-panel .table-panel-title{margin-bottom:13px}
+.table-log-below{max-height:230px;overflow:auto;padding-right:5px}
+.table-log-below p{font-size:11px}
+.table-events-panel .table-chat-form{max-width:100%;margin-top:13px}
+.table-events-panel .table-chat-form input{font-size:11px}
+.table-events-panel .table-chat-form button{width:38px;flex-basis:38px}
+@media(max-width:560px){.room-setup-panel{padding:16px}.room-setup-intro h2{font-size:19px}.add-token-fields{grid-template-columns:1fr 1fr}.add-token-fields label:first-child{grid-column:1/-1}.table-events-panel{padding:12px}}
