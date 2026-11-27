@@ -66,3 +66,8 @@
 .battle-map .map-scale { z-index:2; }
 
 .combat-roll-row select { min-width:0; flex:1 1 100%; }
+
+.combat-attack-options { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.combat-attack-options label { display:grid; gap:4px; color:#d7c29c; font-size:9px; }
+.combat-attack-options input,.combat-attack-options select { min-width:0; width:100%; padding:7px 8px; border:1px solid rgba(198,154,85,.3); border-radius:5px; color:#ead9b9; background:#24190f; font-size:10px; }
+@media(max-width:520px){.combat-attack-options{grid-template-columns:1fr}}
