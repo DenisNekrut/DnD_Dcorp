@@ -90,6 +90,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.find(token => token.id === activeTokenId) ?? initiative[0];
   const selected = tokens.find(token => token.id === selectedId);
+  const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
+  const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks, mapView });
   const recordEditorHistory = () => {
     if (historyGroupRef.current) return;
@@ -364,13 +366,16 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     event.preventDefault();
     if (!selected || !canEdit || layerLocks.figures) return;
     const current = selected.conditions ?? [];
-    if (current.includes(conditionToAdd)) return;
-    const condition = conditionCatalog.find(item => item.id === conditionToAdd);
+    const conditionId = conditionCatalog.find(item => item.id === conditionToAdd && !current.includes(item.id))?.id
+      ?? conditionCatalog.find(item => !current.includes(item.id))?.id;
+    if (!conditionId) return;
+    const condition = conditionCatalog.find(item => item.id === conditionId);
     recordEditorHistory();
     setTokens(items => items.map(token => token.id === selected.id
-      ? { ...token, conditions: [...(token.conditions ?? []), conditionToAdd] }
+      ? { ...token, conditions: [...(token.conditions ?? []), conditionId] }
       : token));
-    addLog(`${selected.name}: состояние «${condition?.label ?? conditionToAdd}» применено.`, "gold");
+    setConditionToAdd(conditionCatalog.find(item => !current.includes(item.id) && item.id !== conditionId)?.id ?? conditionId);
+    addLog(`${selected.name}: состояние «${condition?.label ?? conditionId}» применено.`, "gold");
   };
 
   const removeCondition = (conditionId: ConditionId) => {
@@ -505,10 +510,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 }) : <span className="condition-empty">Нет активных состояний</span>}
               </div>
               {canEdit && <form className="condition-add-form" onSubmit={addCondition}>
-                <select value={conditionToAdd} onChange={event => setConditionToAdd(event.target.value as ConditionId)} disabled={layerLocks.figures || (selected.conditions ?? []).length === conditionCatalog.length}>
-                  {conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)).map(condition => <option key={condition.id} value={condition.id}>{condition.label}</option>)}
+                <select value={activeConditionToAdd} onChange={event => setConditionToAdd(event.target.value as ConditionId)} disabled={layerLocks.figures || availableConditions.length === 0}>
+                  {availableConditions.map(condition => <option key={condition.id} value={condition.id}>{condition.label}</option>)}
                 </select>
-                <button type="submit" disabled={layerLocks.figures || (selected.conditions ?? []).length === conditionCatalog.length}>Добавить</button>
+                <button type="submit" disabled={layerLocks.figures || availableConditions.length === 0}>Добавить</button>
               </form>}
               <label className="exhaustion-control">Истощение
                 <select value={selected.exhaustionLevel ?? 0} onChange={event => setExhaustionLevel(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}>
