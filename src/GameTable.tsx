@@ -8,7 +8,29 @@ import "./styles/tabletop-map-editor.css";
 import "./styles/tabletop-publication.css";
 import "./styles/tabletop-layers.css";
 
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
+type ConditionId = "blinded" | "charmed" | "deafened" | "frightened" | "grappled" | "incapacitated" | "invisible" | "paralyzed" | "petrified" | "poisoned" | "prone" | "restrained" | "stunned" | "unconscious";
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number };
+const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
+  { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
+  { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
+  { id: "deafened", label: "Оглох", description: "Не слышит; проверки слуха невозможны." },
+  { id: "frightened", label: "Испуган", description: "Боится источника и не желает приближаться к нему." },
+  { id: "grappled", label: "Схвачен", description: "Скорость равна 0." },
+  { id: "incapacitated", label: "Недееспособен", description: "Не может совершать действия и реакции." },
+  { id: "invisible", label: "Невидим", description: "Не виден обычным зрением." },
+  { id: "paralyzed", label: "Парализован", description: "Не может двигаться или действовать." },
+  { id: "petrified", label: "Окаменел", description: "Окаменевшее существо не может действовать." },
+  { id: "poisoned", label: "Отравлен", description: "Помеха атакам и проверкам характеристик." },
+  { id: "prone", label: "Сбит с ног", description: "Лежит; чтобы встать, тратит часть перемещения." },
+  { id: "restrained", label: "Опутан", description: "Скорость 0; атаки и проверки Ловкости ограничены." },
+  { id: "stunned", label: "Ошеломлён", description: "Не может двигаться и совершать действия." },
+  { id: "unconscious", label: "Без сознания", description: "Не действует и находится ничком." },
+];
+const exhaustionOptions = [
+  "0 — нет", "1 — помеха проверкам характеристик", "2 — скорость вдвое меньше",
+  "3 — помеха атакам и спасброскам", "4 — максимум хитов вдвое меньше",
+  "5 — скорость равна 0", "6 — смерть",
+];
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
 type MapAsset = { key: string; url: string; contentType: string; size: number };
@@ -46,6 +68,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [zoom, setZoom] = useState(100);
   const [round, setRound] = useState(1);
   const [activeTokenId, setActiveTokenId] = useState<string | null>(null);
+  const [conditionToAdd, setConditionToAdd] = useState<ConditionId>("blinded");
   const [message, setMessage] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
@@ -337,6 +360,36 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
+  const addCondition = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const current = selected.conditions ?? [];
+    if (current.includes(conditionToAdd)) return;
+    const condition = conditionCatalog.find(item => item.id === conditionToAdd);
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id
+      ? { ...token, conditions: [...(token.conditions ?? []), conditionToAdd] }
+      : token));
+    addLog(`${selected.name}: состояние «${condition?.label ?? conditionToAdd}» применено.`, "gold");
+  };
+
+  const removeCondition = (conditionId: ConditionId) => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id
+      ? { ...token, conditions: (token.conditions ?? []).filter(item => item !== conditionId) }
+      : token));
+    const condition = conditionCatalog.find(item => item.id === conditionId);
+    addLog(`${selected.name}: состояние «${condition?.label ?? conditionId}» снято.`);
+  };
+
+  const setExhaustionLevel = (level: number) => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, exhaustionLevel: level } : token));
+    addLog(`${selected.name}: уровень истощения — ${level}.`);
+  };
+
   const removeSelectedToken = () => {
     if (!selected || !canEdit || layerLocks.figures) return;
     const currentIndex = initiative.findIndex(token => token.id === activeToken?.id);
@@ -425,7 +478,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </div>}
             <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
               {(layerVisibility.figures ? tokens : []).map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit && !layerLocks.figures ? "grab" : "default" }} onPointerDown={event => { if (!canEdit || layerLocks.figures) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
-                <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
+                <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>{((token.conditions?.length ?? 0) > 0 || (token.exhaustionLevel ?? 0) > 0) && <span className="token-condition-count" title={[...(token.conditions ?? []).map(id => conditionCatalog.find(condition => condition.id === id)?.label ?? id), ...(token.exhaustionLevel ? [`Истощение ${token.exhaustionLevel}`] : [])].join(", ")}>{(token.conditions?.length ?? 0) + (token.exhaustionLevel ? 1 : 0)}</span>}
               </button>)}
             </div>
             {tokens.length === 0 && (!mapAsset || !layerVisibility.background) && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
@@ -443,6 +496,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            <div className="condition-panel">
+              <strong>Состояния</strong>
+              <div className="condition-chip-list">
+                {(selected.conditions ?? []).length ? (selected.conditions ?? []).map(conditionId => {
+                  const condition = conditionCatalog.find(item => item.id === conditionId);
+                  return <button type="button" key={conditionId} className="condition-chip" title={condition?.description ?? conditionId} disabled={!canEdit || layerLocks.figures} onClick={() => removeCondition(conditionId)}>{condition?.label ?? conditionId}{canEdit ? " ×" : ""}</button>;
+                }) : <span className="condition-empty">Нет активных состояний</span>}
+              </div>
+              {canEdit && <form className="condition-add-form" onSubmit={addCondition}>
+                <select value={conditionToAdd} onChange={event => setConditionToAdd(event.target.value as ConditionId)} disabled={layerLocks.figures || (selected.conditions ?? []).length === conditionCatalog.length}>
+                  {conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)).map(condition => <option key={condition.id} value={condition.id}>{condition.label}</option>)}
+                </select>
+                <button type="submit" disabled={layerLocks.figures || (selected.conditions ?? []).length === conditionCatalog.length}>Добавить</button>
+              </form>}
+              <label className="exhaustion-control">Истощение
+                <select value={selected.exhaustionLevel ?? 0} onChange={event => setExhaustionLevel(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}>
+                  {exhaustionOptions.map((label, level) => <option key={level} value={level}>{label}</option>)}
+                </select>
+              </label>
+            </div>
             <div className="token-actions">{canEdit && <button disabled={activeToken?.id === selected.id} onClick={() => { setActiveTokenId(selected.id); addLog(`Текущий ход: ${selected.name}.`, "gold"); }}>Сделать активным</button>}<button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit || layerLocks.figures} onClick={removeSelectedToken}>Убрать</button></div>
           </section>}
           <section className="table-panel">
