@@ -64,3 +64,5 @@
 }
 .battle-map.has-uploaded-map:not(.with-grid):after { display:none; }
 .battle-map .map-scale { z-index:2; }
+
+.combat-roll-row select { min-width:0; flex:1 1 100%; }

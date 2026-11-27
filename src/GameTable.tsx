@@ -9,17 +9,29 @@ import "./styles/tabletop-publication.css";
 import "./styles/tabletop-layers.css";
 
 type ConditionId = "blinded" | "charmed" | "deafened" | "frightened" | "grappled" | "incapacitated" | "invisible" | "paralyzed" | "petrified" | "poisoned" | "prone" | "restrained" | "stunned" | "unconscious";
-type RollKind = "attack" | "ability" | "save";
+type RollKind = "attack" | "ability" | "skill" | "save";
 type RollMode = "normal" | "advantage" | "disadvantage";
 type RollModeOverride = "auto" | RollMode;
 type AbilityId = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma";
 const abilityLabels: Record<AbilityId, string> = { strength: "Сила", dexterity: "Ловкость", constitution: "Телосложение", intelligence: "Интеллект", wisdom: "Мудрость", charisma: "Харизма" };
+type SkillId = "acrobatics" | "animalHandling" | "arcana" | "athletics" | "deception" | "history" | "insight" | "intimidation" | "investigation" | "medicine" | "nature" | "perception" | "performance" | "persuasion" | "religion" | "sleightOfHand" | "stealth" | "survival";
+const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
+  { id: "acrobatics", label: "Акробатика", ability: "dexterity" }, { id: "animalHandling", label: "Уход за животными", ability: "wisdom" },
+  { id: "arcana", label: "Магия", ability: "intelligence" }, { id: "athletics", label: "Атлетика", ability: "strength" },
+  { id: "deception", label: "Обман", ability: "charisma" }, { id: "history", label: "История", ability: "intelligence" },
+  { id: "insight", label: "Проницательность", ability: "wisdom" }, { id: "intimidation", label: "Запугивание", ability: "charisma" },
+  { id: "investigation", label: "Расследование", ability: "intelligence" }, { id: "medicine", label: "Медицина", ability: "wisdom" },
+  { id: "nature", label: "Природа", ability: "intelligence" }, { id: "perception", label: "Внимательность", ability: "wisdom" },
+  { id: "performance", label: "Выступление", ability: "charisma" }, { id: "persuasion", label: "Убеждение", ability: "charisma" },
+  { id: "religion", label: "Религия", ability: "intelligence" }, { id: "sleightOfHand", label: "Ловкость рук", ability: "dexterity" },
+  { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
+];
 const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): RollMode => {
   const conditions = new Set(token.conditions ?? []);
   const advantage = kind === "attack" && conditions.has("invisible");
   const disadvantage = kind === "attack"
     ? ["blinded", "poisoned", "prone", "restrained"].some(condition => conditions.has(condition as ConditionId)) || (token.exhaustionLevel ?? 0) >= 3
-    : kind === "ability"
+    : kind === "ability" || kind === "skill"
       ? conditions.has("poisoned") || (token.exhaustionLevel ?? 0) >= 1
       : (token.exhaustionLevel ?? 0) >= 3 || (conditions.has("restrained") && saveAbility === "dexterity");
   if (advantage && disadvantage) return "normal";
@@ -27,7 +39,7 @@ const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): 
   if (disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -89,6 +101,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [conditionToAdd, setConditionToAdd] = useState<ConditionId>("blinded");
   const [rollKind, setRollKind] = useState<RollKind>("attack");
   const [rollModifier, setRollModifier] = useState(0);
+  const [selectedSkill, setSelectedSkill] = useState<SkillId>("acrobatics");
   const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
   const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
   const [message, setMessage] = useState("");
@@ -115,6 +128,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
+  const selectedSkillData = skillLabels.find(skill => skill.id === selectedSkill) ?? skillLabels[0];
+  const effectiveRollModifier = rollKind === "skill" ? selected?.skillModifiers?.[selectedSkill] ?? 0 : rollModifier;
   const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
   const selectedRollBlocked = Boolean(selected && ((selected.exhaustionLevel ?? 0) >= 6 || (rollKind === "attack" && selectedBlockedCondition)));
   const selectedAutoFailCondition = selected?.conditions?.find(condition => ["paralyzed", "stunned", "unconscious"].includes(condition));
@@ -286,7 +301,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -382,8 +397,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(`${selected.name}: атака невозможна. ${selectedRollBlockReason}`, "danger");
       return;
     }
-    const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : `Спасбросок: ${abilityLabels[saveAbility]}`;
-    const modifierText = rollModifier > 0 ? `+${rollModifier}` : `${rollModifier}`;
+    const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : rollKind === "skill" ? "Навык: " + selectedSkillData.label : `Спасбросок: ${abilityLabels[saveAbility]}`;
+    const modifierText = effectiveRollModifier > 0 ? `+${effectiveRollModifier}` : `${effectiveRollModifier}`;
     if (selectedSaveAutoFail) {
       addLog(`${selected.name}: ${checkLabel} — автоматический провал. ${selectedSaveFailReason}`, "danger");
       return;
@@ -393,7 +408,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       try {
         const result = await apiRequest<{ rolls: number[]; keptRoll: number | null; total: number; mode: RollMode }>(
           "/dice/roll",
-          { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: rollModifier, mode: selectedRollMode }) },
+          { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: effectiveRollModifier, mode: selectedRollMode }) },
         );
         const kept = result.keptRoll ?? result.rolls[0];
         const critical = rollKind === "attack" && kept === 20;
@@ -410,7 +425,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       ? [Math.floor(Math.random() * 20) + 1]
       : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
     const kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
-    const total = kept + rollModifier;
+    const total = kept + effectiveRollModifier;
     addLog(`${selected.name}: ${checkLabel} — ${rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${total}${rollKind === "attack" && kept === 1 ? " · естественная 1 — промах" : ""}.`, rollKind === "attack" && kept === 20 ? "gold" : "muted");
   };
 
@@ -573,12 +588,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <strong>Проверка D20</strong>
               <div className="combat-roll-row">
                 <select value={rollKind} onChange={event => setRollKind(event.target.value as RollKind)} disabled={!canEdit}>
-                  <option value="attack">Атака</option><option value="ability">Проверка характеристики</option><option value="save">Спасбросок</option>
+                  <option value="attack">Атака</option><option value="ability">Проверка характеристики</option><option value="skill">Проверка навыка</option><option value="save">Спасбросок</option>
                 </select>
+                {rollKind === "skill" && <select value={selectedSkill} onChange={event => setSelectedSkill(event.target.value as SkillId)} disabled={!canEdit}>
+                  {skillLabels.map(skill => <option key={skill.id} value={skill.id}>{skill.label} ({abilityLabels[skill.ability]})</option>)}
+                </select>}
                 {rollKind === "save" && <select value={saveAbility} onChange={event => setSaveAbility(event.target.value as AbilityId)} disabled={!canEdit}>
                   {(Object.keys(abilityLabels) as AbilityId[]).map(ability => <option key={ability} value={ability}>{abilityLabels[ability]}</option>)}
                 </select>}
-                <input type="number" value={rollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit} aria-label="Модификатор броска"/>
+                <input type="number" value={effectiveRollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор броска"}/>
               </div>
               <select className="combat-roll-mode" value={rollModeOverride} onChange={event => setRollModeOverride(event.target.value as RollModeOverride)} disabled={!canEdit}>
                 <option value="auto">Автоматически по состояниям</option><option value="normal">Обычный бросок</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option>
