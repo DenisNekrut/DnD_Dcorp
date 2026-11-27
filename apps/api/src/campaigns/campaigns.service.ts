@@ -147,7 +147,16 @@ export class CampaignsService {
 
   async members(userId: string, campaignId: string) {
     await this.assertManager(userId, campaignId);
-    return this.prisma.campaignMembership.findMany({
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        createdAt: true,
+        owner: { select: { id: true, username: true } },
+      },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    const members = await this.prisma.campaignMembership.findMany({
       where: { campaignId, status: MembershipStatus.APPROVED },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
       select: {
@@ -158,6 +167,18 @@ export class CampaignsService {
         user: { select: { id: true, username: true } },
       },
     });
+
+    return [
+      {
+        id: `owner-${campaignId}`,
+        role: CampaignRole.GAME_MASTER,
+        status: MembershipStatus.APPROVED,
+        createdAt: campaign.createdAt,
+        isOwner: true,
+        user: campaign.owner,
+      },
+      ...members,
+    ];
   }
 
   async updateMemberRole(
