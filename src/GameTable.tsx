@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -644,11 +644,41 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     };
   };
 
-  const applyManualDamage = () => {
+  const resolveConcentrationSave = async (token: Token, damageTaken: number): Promise<Token> => {
+    if (!token.concentrating || damageTaken <= 0 || token.hp <= 0) return token;
+    const dc = Math.max(10, Math.floor(damageTaken / 2));
+    const modifier = Number(token.abilityModifiers?.constitution ?? 0);
+    let roll: number;
+    if (remoteEnabled) {
+      const result = await apiRequest<{ rolls: number[]; keptRoll: number | null }>("/dice/roll", {
+        method: "POST",
+        body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+      });
+      roll = result.keptRoll ?? result.rolls[0];
+    } else {
+      roll = Math.floor(Math.random() * 20) + 1;
+    }
+    const total = roll + modifier;
+    const success = roll !== 1 && (roll === 20 || total >= dc);
+    const updated = success ? token : { ...token, concentrating: false };
+    addLog(token.name + ": спасбросок Телосложения для концентрации — " + roll + (modifier >= 0 ? " + " : " - ") + Math.abs(modifier) + " = " + total + " против СЛ " + dc + " — " + (success ? "успех, концентрация сохранена." : "провал, концентрация прервана."), success ? "gold" : "danger");
+    return updated;
+  };
+
+  const toggleConcentration = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    const next = !selected.concentrating;
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, concentrating: next } : token));
+    addLog(selected.name + (next ? " поддерживает концентрацию." : " прекращает концентрацию."), "muted");
+  };
+
+  const applyManualDamage = async () => {
     if (!selected || !canEdit || layerLocks.figures) return;
     recordEditorHistory();
     const adjusted = adjustDamageForTraits(selected, hpAdjustment, damageType);
-    const updated = applyDamageToToken(selected, adjusted.amount);
+    const damaged = applyDamageToToken(selected, adjusted.amount);
+    const updated = await resolveConcentrationSave(damaged, adjusted.amount);
     setTokens(items => items.map(token => token.id === selected.id ? updated : token));
     addLog("Урон " + selected.name + ": " + hpAdjustment + " " + damageType + (adjusted.note ? " (" + adjusted.note + ")" : "") + ". Хиты: " + updated.hp + "/" + updated.maxHp + ".", "danger");
   };
@@ -861,7 +891,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
       const appliedDamage = adjustedDamage.amount;
       recordEditorHistory();
-      const updatedTarget = applyDamageToToken(target, appliedDamage, critical);
+      const damagedTarget = applyDamageToToken(target, appliedDamage, critical);
+      const updatedTarget = await resolveConcentrationSave(damagedTarget, appliedDamage);
       setTokens(items => items.map(token => token.id === target.id ? updatedTarget : token));
       const damageExpression = parsed.flatDamage !== undefined
         ? String(parsed.flatDamage)
@@ -1109,6 +1140,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <button type="button" className={selected.bonusActionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("bonusActionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.bonusActionUsed ? "Бонус: использовано" : "Бонус: доступно"}</button>
                 <button type="button" className={selected.reactionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("reactionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.reactionUsed ? "Реакция: использована" : "Реакция: доступна"}</button>
               </div>
+            </div>
+            <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Концентрация</strong><small>{selected.concentrating ? "Заклинание поддерживается" : "Не активна"}</small></div>
+              <div className="combat-economy-buttons">
+                <button type="button" className={selected.concentrating ? "resource-used" : ""} onClick={toggleConcentration} disabled={!canEdit || layerLocks.figures || selected.hp <= 0}>{selected.concentrating ? "Прекратить концентрацию" : "Начать концентрацию"}</button>
+              </div>
+              <small>При получении урона автоматически выполняется спасбросок Телосложения (СЛ 10 или половина урона, если больше).</small>
             </div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}{(selected.temporaryHp ?? 0) > 0 ? ` · +${selected.temporaryHp} врем.` : ""}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
             <div className="hp-management">
