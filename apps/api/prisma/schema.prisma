@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CampaignRole {
+  GAME_MASTER
+  ASSISTANT
+  PLAYER
+  OBSERVER
+}
+
+enum MembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  BLOCKED
+}
+
+model User {
+  id           String               @id @default(cuid())
+  email        String               @unique
+  username     String               @unique
+  passwordHash String
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  campaigns    Campaign[]           @relation("CampaignOwner")
+  memberships  CampaignMembership[]
+  characters   Character[]          @relation("CharacterOwner")
+}
+
+model Campaign {
+  id              String               @id @default(cuid())
+  name            String
+  description     String?              @db.Text
+  ownerId         String
+  owner           User                 @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  inviteToken     String               @unique @default(cuid())
+  passwordHash    String?
+  applicationsOpen Boolean             @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  memberships     CampaignMembership[]
+  characters      Character[]          @relation("CampaignCharacters")
+
+  @@index([ownerId])
+}
+
+model CampaignMembership {
+  id         String           @id @default(cuid())
+  campaignId String
+  userId     String
+  role       CampaignRole     @default(PLAYER)
+  status     MembershipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  campaign   Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId, status])
+}
+
+model Character {
+  id              String    @id @default(cuid())
+  name            String
+  ownerId         String
+  campaignId      String?
+  isCampaignCopy  Boolean   @default(false)
+  data            Json
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  owner           User      @relation("CharacterOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  campaign        Campaign? @relation("CampaignCharacters", fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, isCampaignCopy])
+  @@index([campaignId])
+}
