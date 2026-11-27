@@ -47,6 +47,25 @@ const skillAbilities: Record<string,string> = {
 const proficiencyBonusForLevel = (level:number) => 2 + Math.floor((Math.max(1,Math.min(20,level))-1)/4);
 const signedBonus = (value:number) => value >= 0 ? `+${value}` : String(value);
 const toStringArray = (value:unknown):string[] => Array.isArray(value) ? value.filter((item):item is string => typeof item === "string") : [];
+const sheetListFields = [
+  {key:"equipment",label:"Снаряжение"},
+  {key:"features",label:"Особенности и способности"},
+  {key:"attacks",label:"Атаки"},
+  {key:"spells",label:"Заклинания"},
+  {key:"conditions",label:"Состояния"},
+  {key:"languages",label:"Языки"},
+] as const;
+const sheetBiographyFields = [
+  {key:"personalityTraits",label:"Черты характера"},
+  {key:"ideals",label:"Идеалы"},
+  {key:"bonds",label:"Привязанности"},
+  {key:"flaws",label:"Слабости"},
+  {key:"appearance",label:"Внешность"},
+  {key:"backstory",label:"Предыстория"},
+] as const;
+const currencyKeys = ["cp","sp","ep","gp","pp"] as const;
+type CurrencyKey = typeof currencyKeys[number];
+const currencyLabels: Record<CurrencyKey,string> = {cp:"ММ",sp:"СМ",ep:"ЭМ",gp:"ЗМ",pp:"ПМ"};
 const skillCatalog = [{id:"acrobatics",name:"Акробатика"},{id:"animalHandling",name:"Уход за животными"},{id:"arcana",name:"Магия"},{id:"athletics",name:"Атлетика"},{id:"deception",name:"Обман"},{id:"history",name:"История"},{id:"insight",name:"Проницательность"},{id:"intimidation",name:"Запугивание"},{id:"investigation",name:"Расследование"},{id:"medicine",name:"Медицина"},{id:"nature",name:"Природа"},{id:"perception",name:"Восприятие"},{id:"performance",name:"Выступление"},{id:"persuasion",name:"Убеждение"},{id:"religion",name:"Религия"},{id:"sleightOfHand",name:"Ловкость рук"},{id:"stealth",name:"Скрытность"},{id:"survival",name:"Выживание"}];
 const classSkillRules: Record<string,{count:number; options:string[]}> = {
   "Варвар":{count:2,options:["animalHandling","athletics","intimidation","nature","perception","survival"]},"Бард":{count:3,options:skillCatalog.map(skill=>skill.id)},"Жрец":{count:2,options:["history","insight","medicine","persuasion","religion"]},"Друид":{count:2,options:["animalHandling","arcana","insight","medicine","nature","perception","religion","survival"]},"Воин":{count:2,options:["acrobatics","animalHandling","athletics","history","insight","intimidation","perception","survival"]},"Монах":{count:2,options:["acrobatics","athletics","history","insight","religion","stealth"]},"Паладин":{count:2,options:["athletics","insight","intimidation","medicine","persuasion","religion"]},"Следопыт":{count:3,options:["animalHandling","athletics","insight","investigation","nature","perception","stealth","survival"]},"Плут":{count:4,options:["acrobatics","athletics","deception","insight","intimidation","investigation","perception","performance","persuasion","sleightOfHand","stealth"]},"Чародей":{count:2,options:["arcana","deception","insight","intimidation","persuasion","religion"]},"Колдун":{count:2,options:["arcana","deception","history","intimidation","investigation","nature","religion"]},"Волшебник":{count:2,options:["arcana","history","insight","investigation","medicine","religion"]}
@@ -119,6 +138,7 @@ function App() {
   const [sheetTemporaryHp, setSheetTemporaryHp] = useState("0");
   const [sheetSaveBusy, setSheetSaveBusy] = useState(false);
   const [sheetError, setSheetError] = useState("");
+  const [sheetDetailsError, setSheetDetailsError] = useState("");
   const [campaignModal, setCampaignModal] = useState(false);
   const [campaignError, setCampaignError] = useState("");
   const [campaignBusy, setCampaignBusy] = useState(false);
@@ -233,6 +253,7 @@ function App() {
     setSheetCurrentHp(String(hitPoints.current ?? character.derived.maxHp));
     setSheetTemporaryHp(String(hitPoints.temporary ?? 0));
     setSheetError("");
+    setSheetDetailsError("");
     setSelectedCharacter(character);
   };
 
@@ -273,6 +294,33 @@ function App() {
       }
     } catch (error) {
       setSheetError(error instanceof Error ? error.message : "Не удалось сохранить хиты персонажа.");
+    } finally {
+      setSheetSaveBusy(false);
+    }
+  };
+
+  const saveCharacterSheetData = async (patch: Record<string, unknown>): Promise<boolean> => {
+    if (!selectedCharacter) return false;
+    setSheetSaveBusy(true);
+    setSheetDetailsError("");
+    try {
+      if (isGuest) {
+        const updated = { ...selectedCharacter, rawData: { ...(selectedCharacter.rawData ?? {}), ...patch } };
+        setCharacters(items => items.map(item => item.id === updated.id ? updated : item));
+        setSelectedCharacter(updated);
+      } else {
+        const saved = await apiRequest<ApiCharacter>(`/characters/personal/${selectedCharacter.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ data: patch }),
+        });
+        const updated = mapApiCharacter(saved);
+        setCharacters(items => items.map(item => item.id === updated.id ? updated : item));
+        setSelectedCharacter(updated);
+      }
+      return true;
+    } catch (error) {
+      setSheetDetailsError(error instanceof Error ? error.message : "Не удалось сохранить данные листа персонажа.");
+      return false;
     } finally {
       setSheetSaveBusy(false);
     }
@@ -387,7 +435,7 @@ function App() {
       </div>
     </main>
     {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><p className="notice-strip">{isGuest ? "Кампания будет сохранена локально в этом браузере. При подключении аккаунта она автоматически на сервер не переносится." : "Кампания будет сохранена на сервере и появится в твоём списке. Настройки приватности и пароль добавим в управлении кампанией."}</p>{campaignError&&<p className="validation-note" role="alert">{campaignError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit" disabled={campaignBusy}>{campaignBusy?"Сохранение…":<><Plus size={16}/> Создать</>}</button></div></form></Modal>}
-    {selectedCharacter && <Modal title={`Лист персонажа — ${selectedCharacter.name}`} onClose={() => setSelectedCharacter(null)}><CharacterSheet character={selectedCharacter} currentHp={sheetCurrentHp} temporaryHp={sheetTemporaryHp} onCurrentHpChange={setSheetCurrentHp} onTemporaryHpChange={setSheetTemporaryHp} onSave={saveCharacterHitPoints} saving={sheetSaveBusy} error={sheetError}/></Modal>}
+    {selectedCharacter && <Modal title={`Лист персонажа — ${selectedCharacter.name}`} onClose={() => setSelectedCharacter(null)}><CharacterSheet character={selectedCharacter} currentHp={sheetCurrentHp} temporaryHp={sheetTemporaryHp} onCurrentHpChange={setSheetCurrentHp} onTemporaryHpChange={setSheetTemporaryHp} onSave={saveCharacterHitPoints} onSaveData={saveCharacterSheetData} saving={sheetSaveBusy} error={sheetError} detailsError={sheetDetailsError}/></Modal>}
     {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Пол<select required value={characterGender} onChange={e=>setCharacterGender(e.target.value)}><option value="" disabled>Выбери вариант</option>{characterGenders.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Раса<select required value={characterAncestry} onChange={e=>{setCharacterAncestry(e.target.value);setCharacterSubrace("");}}><option value="" disabled>Выбери расу</option>{characterAncestries.map(option=><option key={option} value={option}>{option}</option>)}</select></label>{(ancestrySubraces[characterAncestry] ?? []).length > 0 && <label>Подраса<select required value={characterSubrace} onChange={e=>setCharacterSubrace(e.target.value)}><option value="" disabled>Выбери подрасу</option>{(ancestrySubraces[characterAncestry] ?? []).map(option=><option key={option} value={option}>{option}</option>)}</select></label>}
     {characterAncestry==="Полуэльф"&&<div className="builder-section"><div><strong>Гибкое увеличение характеристик</strong><span>Полуэльф получает +1 к двум разным характеристикам, кроме Харизмы.</span></div><div className="ability-assignment"><label>Первое увеличение<select value={halfElfBonusOne} onChange={e=>setHalfElfBonusOne(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusTwo).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Второе увеличение<select value={halfElfBonusTwo} onChange={e=>setHalfElfBonusTwo(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusOne).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div></div>}<label>Класс персонажа<select required value={characterClass} onChange={e=>{setCharacterClass(e.target.value);setCharacterSkills([]);}}><option value="" disabled>Выбери класс</option>{characterClasses.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Предыстория<select required value={characterBackground} onChange={e=>setCharacterBackground(e.target.value)}><option value="" disabled>Выбери предысторию</option>{characterBackgrounds.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Мировоззрение<select required value={characterAlignment} onChange={e=>setCharacterAlignment(e.target.value)}><option value="" disabled>Выбери мировоззрение</option>{characterAlignments.map(option=><option key={option} value={option}>{option}</option>)}</select></label><div className="builder-section"><div><strong>Характеристики</strong><span>Стандартный набор 5e: 15, 14, 13, 12, 10, 8. Распредели каждое значение один раз.</span></div><div className="ability-assignment">{abilityFields.map(ability=><label key={ability.id}>{ability.name}<select value={characterAbilityScores[ability.id]} onChange={e=>setCharacterAbilityScores(current=>({...current,[ability.id]:Number(e.target.value)}))}>{standardArray.map(score=><option key={score} value={score}>{score} ({Math.floor((score-10)/2)>=0?"+":""}{Math.floor((score-10)/2)})</option>)}</select></label>)}</div>{new Set(Object.values(characterAbilityScores)).size!==6&&<small className="validation-note">Каждое значение стандартного набора должно использоваться ровно один раз.</small>}</div>
     {characterClass&&<div className="builder-section"><div><strong>Владения навыками</strong><span>Выбери {classSkillRules[characterClass]?.count??2} навыка из списка класса.</span></div><div className="skill-choice-grid">{(classSkillRules[characterClass]?.options??[]).map(id=>{const skill=skillCatalog.find(item=>item.id===id)!;const checked=characterSkills.includes(id);return <label className="skill-choice" key={id}><input type="checkbox" checked={checked} disabled={!checked&&characterSkills.length>=(classSkillRules[characterClass]?.count??2)} onChange={e=>setCharacterSkills(current=>e.target.checked?[...current,id]:current.filter(value=>value!==id))}/>{skill.name}</label>})}</div><small className="validation-note">Выбрано: {characterSkills.length} из {classSkillRules[characterClass]?.count??2}</small></div>}
@@ -395,8 +443,42 @@ function App() {
   </div>;
 }
 
-function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTemporaryHpChange,onSave,saving,error}:{character:Character;currentHp:string;temporaryHp:string;onCurrentHpChange:(value:string)=>void;onTemporaryHpChange:(value:string)=>void;onSave:(event:React.FormEvent)=>void;saving:boolean;error:string}) {
+function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTemporaryHpChange,onSave,onSaveData,saving,error,detailsError}:{character:Character;currentHp:string;temporaryHp:string;onCurrentHpChange:(value:string)=>void;onTemporaryHpChange:(value:string)=>void;onSave:(event:React.FormEvent)=>void;onSaveData:(data:Record<string,unknown>)=>Promise<boolean>;saving:boolean;error:string;detailsError:string}) {
   const data = character.rawData ?? {};
+  const createTextDraft = () => Object.fromEntries([
+    ...sheetListFields.map(field=>[field.key,toStringArray(data[field.key]).join("\n")]),
+    ...sheetBiographyFields.map(field=>[field.key,typeof data[field.key]==="string" ? String(data[field.key]) : ""]),
+  ]) as Record<typeof sheetListFields[number]["key"] | typeof sheetBiographyFields[number]["key"],string>;
+  const [editing,setEditing] = useState(false);
+  const [textDraft,setTextDraft] = useState(createTextDraft);
+  const savedCurrency = (data.currency ?? {}) as Partial<Record<CurrencyKey,number>>;
+  const createCurrencyDraft = () => Object.fromEntries(currencyKeys.map(key=>[key,String(savedCurrency[key] ?? 0)])) as Record<CurrencyKey,string>;
+  const [currencyDraft,setCurrencyDraft] = useState(createCurrencyDraft);
+  const [inspirationDraft,setInspirationDraft] = useState(data.inspiration === true);
+  const [detailsFormError,setDetailsFormError] = useState("");
+  const resetDetailsDraft = () => {
+    setTextDraft(createTextDraft());
+    setCurrencyDraft(createCurrencyDraft());
+    setInspirationDraft(data.inspiration === true);
+    setDetailsFormError("");
+    setEditing(false);
+  };
+  const submitDetails = async (event:React.FormEvent) => {
+    event.preventDefault();
+    const currency = Object.fromEntries(currencyKeys.map(key=>[key,Number(currencyDraft[key])])) as Record<CurrencyKey,number>;
+    if (currencyKeys.some(key=>!Number.isInteger(currency[key]) || currency[key] < 0)) {
+      setDetailsFormError("Количество монет должно быть целым неотрицательным числом.");
+      return;
+    }
+    const patch:Record<string,unknown> = {
+      ...Object.fromEntries(sheetListFields.map(field=>[field.key,textDraft[field.key].split(/\\r?\\n/).map(value=>value.trim()).filter(Boolean)])),
+      ...Object.fromEntries(sheetBiographyFields.map(field=>[field.key,textDraft[field.key].trim()])),
+      currency,
+      inspiration: inspirationDraft,
+    };
+    const saved = await onSaveData(patch);
+    if (saved) setEditing(false);
+  };
   const scores = character.abilityScores;
   const bonus = Number(data.proficiencyBonus ?? proficiencyBonusForLevel(character.level));
   const skillProficiencies = new Set(toStringArray(data.skillProficiencies ?? character.skillProficiencies));
@@ -437,16 +519,34 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
       <section className="sheet-panel"><h3>Спасброски</h3><div className="sheet-roll-list">{abilityFields.map(ability=><div key={ability.id}><span className={saveProficiencies.has(ability.id) ? "is-proficient" : ""}>{saveProficiencies.has(ability.id) ? "●" : "○"}</span><b>{ability.name}</b><strong>{signedBonus(modifier(ability.id) + (saveProficiencies.has(ability.id) ? bonus : 0))}</strong></div>)}</div></section>
       <section className="sheet-panel"><h3>Навыки</h3><div className="sheet-roll-list">{skillCatalog.map(skill=><div key={skill.id}><span className={skillExpertise.has(skill.id) ? "is-expert" : skillProficiencies.has(skill.id) ? "is-proficient" : ""}>{skillExpertise.has(skill.id) ? "◆" : skillProficiencies.has(skill.id) ? "●" : "○"}</span><b>{skill.name}</b><small>{abilityFields.find(a=>a.id===skillAbilities[skill.id])?.name.slice(0,3) ?? "Муд"}</small><strong>{signedBonus(skillBonus(skill.id))}</strong></div>)}</div></section>
     </div>
-    <div className="sheet-two-columns">
-      {listSection("Снаряжение", data.equipment)}
-      {listSection("Особенности и способности", data.features)}
-      {listSection("Атаки", data.attacks)}
-      {listSection("Заклинания", data.spells)}
-      {listSection("Состояния", data.conditions)}
-      {listSection("Языки", data.languages)}
-    </div>
-    <section className="sheet-panel"><h3>Спасение от смерти</h3><div className="sheet-death-saves"><span>Успехи: {deathSaves.successes ?? 0}/3</span><span>Провалы: {deathSaves.failures ?? 0}/3</span><span>Вдохновение: {data.inspiration === true ? "Есть" : "Нет"}</span></div></section>
-    {biographyKeys.some(key=>typeof data[key]==="string" && String(data[key]).trim()) && <section className="sheet-panel"><h3>Описание персонажа</h3><div className="sheet-biography">{biographyKeys.map(key=>typeof data[key]==="string" && String(data[key]).trim() ? <p key={key}><b>{biographyLabels[key]}:</b> {String(data[key])}</p> : null)}</div></section>}
+    <section className="sheet-panel sheet-details-panel">
+      <div className="sheet-details-heading"><div><h3>Снаряжение и записи</h3><p className="sheet-muted">Редактируй содержимое листа — изменения сохраняются в профиле персонажа.</p></div>
+        <button type="button" className="button button-secondary sheet-edit-toggle" onClick={()=>editing?resetDetailsDraft():setEditing(true)}>{editing ? "Отменить" : "Редактировать"}</button>
+      </div>
+      {editing ? <form className="sheet-details-editor" onSubmit={submitDetails}>
+        <div className="sheet-editor-grid">
+          {sheetListFields.map(field=><label key={field.key}>{field.label}<textarea rows={3} value={textDraft[field.key]} onChange={event=>setTextDraft(current=>({...current,[field.key]:event.target.value}))} placeholder="Каждый пункт — с новой строки"/></label>)}
+          {sheetBiographyFields.map(field=><label key={field.key}>{field.label}<textarea rows={2} value={textDraft[field.key]} onChange={event=>setTextDraft(current=>({...current,[field.key]:event.target.value}))} placeholder={field.label}/></label>)}
+        </div>
+        <div className="sheet-editor-subheading">Монеты</div>
+        <div className="sheet-currency-editor">{currencyKeys.map(key=><label key={key}>{currencyLabels[key]}<input type="number" min="0" step="1" required value={currencyDraft[key]} onChange={event=>setCurrencyDraft(current=>({...current,[key]:event.target.value}))}/></label>)}</div>
+        <label className="sheet-inspiration-toggle"><input type="checkbox" checked={inspirationDraft} onChange={event=>setInspirationDraft(event.target.checked)}/> Вдохновение</label>
+        {(detailsFormError || detailsError) && <p className="validation-note" role="alert">{detailsFormError || detailsError}</p>}
+        <div className="sheet-editor-actions"><button type="button" className="button button-secondary" onClick={resetDetailsDraft}>Отмена</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Сохраняем…" : "Сохранить лист"}</button></div>
+      </form> : <>
+        <div className="sheet-two-columns">
+          {listSection("Снаряжение", data.equipment)}
+          {listSection("Особенности и способности", data.features)}
+          {listSection("Атаки", data.attacks)}
+          {listSection("Заклинания", data.spells)}
+          {listSection("Состояния", data.conditions)}
+          {listSection("Языки", data.languages)}
+        </div>
+        <section className="sheet-panel sheet-currency-panel"><h3>Монеты</h3><div className="sheet-currency-list">{currencyKeys.map(key=><span key={key}><b>{currencyLabels[key]}</b>{Number(savedCurrency[key] ?? 0)}</span>)}</div></section>
+        <section className="sheet-panel"><h3>Спасение от смерти</h3><div className="sheet-death-saves"><span>Успехи: {deathSaves.successes ?? 0}/3</span><span>Провалы: {deathSaves.failures ?? 0}/3</span><span>Вдохновение: {data.inspiration === true ? "Есть" : "Нет"}</span></div></section>
+        {sheetBiographyFields.some(field=>typeof data[field.key]==="string" && String(data[field.key]).trim()) && <section className="sheet-panel"><h3>Описание персонажа</h3><div className="sheet-biography">{sheetBiographyFields.map(field=>typeof data[field.key]==="string" && String(data[field.key]).trim() ? <p key={field.key}><b>{field.label}:</b> {String(data[field.key])}</p> : null)}</div></section>}
+      </>}
+    </section>
   </div>;
 }
 
