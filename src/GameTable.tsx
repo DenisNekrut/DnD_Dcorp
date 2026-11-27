@@ -710,6 +710,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     setSpellName("");
   };
 
+  const recoverSpellSlotsAfterLongRest = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const slots = selected.spellSlots ?? {};
+    const spent = Object.values(slots).reduce((total, slot) => total + slot.used, 0);
+    if (!spent && !selected.actionUsed && !selected.bonusActionUsed && !selected.reactionUsed && !selected.concentrating) {
+      addLog(selected.name + ": восстанавливать нечего — ячейки и боевые ресурсы уже доступны.", "muted");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? {
+      ...token,
+      spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
+      actionUsed: false,
+      bonusActionUsed: false,
+      reactionUsed: false,
+      concentrating: false,
+    } : token));
+    addLog(selected.name + ": завершён длительный отдых. Ячейки заклинаний и боевые ресурсы восстановлены; концентрация прекращена.", "gold");
+  };
+
   const updateSpellSlotMaximum = (level: number, maximum: number) => {
     if (!selected || !canEdit || layerLocks.figures) return;
     const current = selected.spellSlots?.[level] ?? { max: 0, used: 0 };
@@ -1327,6 +1347,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Всего<input type="number" min="0" max="20" value={selected.spellSlots?.[spellLevel]?.max ?? 0} onChange={event => updateSpellSlotMaximum(spellLevel, Number(event.target.value) || 0)} disabled={!canEdit || layerLocks.figures}/></label>
               </div>}
               <label className="weapon-proficiency-toggle"><input type="checkbox" checked={spellConcentration} onChange={event => setSpellConcentration(event.target.checked)} disabled={!canEdit}/> Требуется концентрация</label>
+              <button type="button" className="secondary-button" onClick={recoverSpellSlotsAfterLongRest} disabled={!canEdit || layerLocks.figures}>Завершить длительный отдых</button>
               <button type="button" onClick={castTrackedSpell} disabled={!canEdit || diceBusy || !spellName.trim() || (spellLevel > 0 && ((selected.spellSlots?.[spellLevel]?.max ?? 0) <= (selected.spellSlots?.[spellLevel]?.used ?? 0)))} >Наложить заклинание</button>
               <small>Учёт ячеек и боевого ресурса. Дальность, компоненты, цели, эффекты и доступность заклинания пока проверяются вручную.</small>
             </section>
