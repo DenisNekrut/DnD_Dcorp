@@ -5,6 +5,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
 import { CharactersModule } from './characters/characters.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RulesModule } from './rules/rules.module';
+import { DiceModule } from './dice/dice.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { UsersModule } from './users/users.module';
     CampaignsModule,
     CharactersModule,
     RulesModule,
+    DiceModule,
   ],
 })
 export class AppModule {}
