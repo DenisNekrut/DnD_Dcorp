@@ -59,7 +59,7 @@
 .battle-map.has-uploaded-map.with-grid:after {
   content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
   background-image:linear-gradient(rgba(99,69,39,.2) 1px,transparent 1px),linear-gradient(90deg,rgba(99,69,39,.2) 1px,transparent 1px);
-  background-size:calc(var(--grid-cell-size,38px) * var(--map-zoom,1)) calc(var(--grid-cell-size,38px) * var(--map-zoom,1));
+  background-size:var(--grid-cell-size,38px) var(--grid-cell-size,38px);
   transform:scale(var(--map-zoom,1));
 }
 .battle-map.has-uploaded-map:not(.with-grid):after { display:none; }
