@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiRequest, isApiConfigured } from "./api";
 import GameTable from "./GameTable";
 import AdminPanel from "./AdminPanel";
+import "./styles/guest.css";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
