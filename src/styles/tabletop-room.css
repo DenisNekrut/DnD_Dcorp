@@ -127,3 +127,11 @@
 .initiative-turn-controls .next-turn{margin-top:0}
 .initiative-turn-controls .button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:520px){.initiative-turn-controls{grid-template-columns:1fr 1.5fr 1fr}.initiative-turn-controls .button{padding-inline:6px;font-size:10px}}
+.combat-economy{margin:12px 0;padding:11px;border:1px solid var(--panel-border,rgba(180,150,100,.22));border-radius:10px;background:rgba(0,0,0,.12)}
+.combat-economy-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}
+.combat-economy-heading strong{font-size:12px}
+.combat-economy-heading small{font-size:10px;opacity:.65}
+.combat-economy-buttons{display:grid;grid-template-columns:1fr;gap:6px}
+.combat-economy-buttons button{min-height:34px;border:1px solid rgba(180,150,100,.28);border-radius:7px;background:rgba(185,150,90,.10);color:inherit;text-align:left;padding:7px 10px;font-size:11px;cursor:pointer}
+.combat-economy-buttons button.resource-used{opacity:.7;background:rgba(150,90,65,.2);text-decoration:line-through}
+.combat-economy-buttons button:disabled{opacity:.4;cursor:not-allowed}
