@@ -156,3 +156,6 @@
 @media(max-width:820px) {
   .battle-map { min-height:360px; }
 }
+
+.table-tool-group button:disabled { opacity:.38; cursor:not-allowed; }
+.table-tool-group button:disabled:hover { color:#c5cfda; border-color:rgba(215,181,109,.2); background:#101827; }
