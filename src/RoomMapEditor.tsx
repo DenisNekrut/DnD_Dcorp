@@ -20,13 +20,14 @@ const labels: Record<MapObject["kind"], string> = {
   wall: "Стена", door: "Дверь", obstacle: "Препятствие", decoration: "Декорация",
 };
 
-export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayers, onVisibilityChange, snapToGrid }: {
+export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayers, onVisibilityChange, snapToGrid, gridCellSizePx }: {
   objects: MapObject[];
   onChange: (objects: MapObject[]) => void;
   canEdit: boolean;
   visibleLayers: LayerVisibility;
   onVisibilityChange: (visibility: LayerVisibility) => void;
   snapToGrid: boolean;
+  gridCellSizePx: number;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -68,8 +69,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const rect = event.currentTarget.getBoundingClientRect();
     const rawX = event.clientX - rect.left;
     const rawY = event.clientY - rect.top;
-    const x = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawX / 38) * 38 : rawX) / rect.width * 100));
-    const y = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawY / 38) * 38 : rawY) / rect.height * 100));
+    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+    const x = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
+    const y = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     onChange(objects.map(item => item.id === draggingId ? { ...item, x, y } : item));
   };
 
