@@ -44,17 +44,29 @@ const parseDamageFormula = (formula: string) => {
   return { count, sides, modifier };
 };
 
-const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): RollMode => {
+const getAutoRollFlags = (token: Token, kind: RollKind, saveAbility: AbilityId) => {
   const conditions = new Set(token.conditions ?? []);
   const advantage = kind === "attack" && conditions.has("invisible");
   const disadvantage = kind === "attack"
-    ? ["blinded", "poisoned", "prone", "restrained"].some(condition => conditions.has(condition as ConditionId)) || (token.exhaustionLevel ?? 0) >= 3
+    ? ["blinded", "poisoned", "prone", "restrained", "frightened"].some(condition => conditions.has(condition as ConditionId)) || (token.exhaustionLevel ?? 0) >= 3
     : kind === "ability" || kind === "skill"
-      ? conditions.has("poisoned") || (token.exhaustionLevel ?? 0) >= 1
+      ? conditions.has("poisoned") || conditions.has("frightened") || (token.exhaustionLevel ?? 0) >= 1
       : (token.exhaustionLevel ?? 0) >= 3 || (conditions.has("restrained") && saveAbility === "dexterity");
-  if (advantage && disadvantage) return "normal";
-  if (advantage) return "advantage";
-  if (disadvantage) return "disadvantage";
+  return { advantage, disadvantage };
+};
+
+const getTargetAttackFlags = (target: Token, attackType: "melee" | "ranged") => {
+  const conditions = new Set(target.conditions ?? []);
+  return {
+    advantage: ["blinded", "restrained", "paralyzed", "petrified", "stunned", "unconscious"].some(condition => conditions.has(condition as ConditionId)) || (conditions.has("prone") && attackType === "melee"),
+    disadvantage: conditions.has("invisible") || (conditions.has("prone") && attackType === "ranged"),
+  };
+};
+
+const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): RollMode => {
+  if (flags.advantage && flags.disadvantage) return "normal";
+  if (flags.advantage) return "advantage";
+  if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
@@ -144,6 +156,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [attackTargetId, setAttackTargetId] = useState("");
   const [damageFormula, setDamageFormula] = useState("1d6+0");
   const [damageType, setDamageType] = useState<DamageType>("slashing");
+  const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
@@ -153,7 +166,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
-  const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
+  const attackerRollFlags = selected ? getAutoRollFlags(selected, rollKind, saveAbility) : { advantage: false, disadvantage: false };
+  const targetRollFlags = rollKind === "attack" && attackTarget ? getTargetAttackFlags(attackTarget, attackType) : { advantage: false, disadvantage: false };
+  const selectedRollMode = selected
+    ? rollModeOverride === "auto"
+      ? resolveRollMode({ advantage: attackerRollFlags.advantage || targetRollFlags.advantage, disadvantage: attackerRollFlags.disadvantage || targetRollFlags.disadvantage })
+      : rollModeOverride
+    : "normal";
   const selectedSkillData = skillLabels.find(skill => skill.id === selectedSkill) ?? skillLabels[0];
   const effectiveRollModifier = rollKind === "skill" ? selected?.skillModifiers?.[selectedSkill] ?? 0 : rollModifier;
   const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
@@ -568,9 +587,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
       const target = attackTarget!;
       const targetAc = Math.max(0, Number(target.armorClass ?? 10));
-      const critical = kept === 20;
+      const critical = kept === 20 || (attackType === "melee" && (target.conditions ?? []).some(condition => condition === "paralyzed" || condition === "unconscious"));
       const naturalOne = kept === 1;
-      const hit = critical || (!naturalOne && total >= targetAc);
+      const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
         selected.name + " атакует " + target.name + ": " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
@@ -798,6 +817,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {rollKind === "attack" && <div className="combat-attack-options">
                 <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
                   {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
+                </select></label>
+                <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
+                  <option value="melee">Ближний бой (до 5 футов)</option><option value="ranged">Дальний бой</option>
                 </select></label>
                 <label>Урон<input value={damageFormula} onChange={event => setDamageFormula(event.target.value)} placeholder="1d8+3" disabled={!canEdit} aria-label="Формула урона"/></label>
               </div>}
