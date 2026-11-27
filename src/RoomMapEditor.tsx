@@ -2,10 +2,11 @@ import { useState } from "react";
 import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock } from "lucide-react";
 
 export type MapLayer = "terrain" | "structures" | "decorations";
-export type LayerVisibility = Record<MapLayer, boolean>;
-export const defaultLayerVisibility: LayerVisibility = { terrain: true, structures: true, decorations: true };
-export type LayerLocks = Record<MapLayer, boolean>;
-export const defaultLayerLocks: LayerLocks = { terrain: false, structures: false, decorations: false };
+export type TableLayer = "background" | MapLayer | "figures";
+export type LayerVisibility = Record<TableLayer, boolean>;
+export const defaultLayerVisibility: LayerVisibility = { background: true, terrain: true, structures: true, decorations: true, figures: true };
+export type LayerLocks = Record<TableLayer, boolean>;
+export const defaultLayerLocks: LayerLocks = { background: false, terrain: false, structures: false, decorations: false, figures: false };
 
 export type MapObject = {
   id: string;
@@ -42,7 +43,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" ? "structures" : item.kind === "obstacle" ? "terrain" : "decorations");
   const visibleObjects = objects.filter(item => visibleLayers[layerOf(item)]);
   const selected = objects.find(item => item.id === selectedId);
-  const layerNames: Record<MapLayer, string> = { terrain: "Местность", structures: "Конструкции", decorations: "Декорации" };
+  const layerNames: Record<TableLayer, string> = { background: "Подложка", terrain: "Местность", structures: "Конструкции", decorations: "Декорации", figures: "Фигуры" };
   const icons = { wall: Fence, door: DoorOpen, obstacle: Mountain, decoration: Trees };
   const selectedLocked = selected ? layerLocks[layerOf(selected)] : false;
 
@@ -100,7 +101,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         <button type="button" title="Повернуть на 15°" disabled={selectedLocked} onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}><RotateCw size={14}/></button>
         <button type="button" title="Удалить объект" disabled={selectedLocked} onClick={() => { if (selectedLocked) return; onChange(objects.filter(item => item.id !== selected.id)); setSelectedId(null); }}><Trash2 size={14}/></button>
       </>}
-      <div className="map-layer-visibility">{(["terrain", "structures", "decorations"] as MapLayer[]).map(layer => <div className="map-layer-control" key={layer}><button type="button" className={visibleLayers[layer] ? "layer-visible" : ""} disabled={!canEdit} title={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} aria-label={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} onClick={() => onVisibilityChange({ ...visibleLayers, [layer]: !visibleLayers[layer] })}>{visibleLayers[layer] ? <Eye size={13}/> : <EyeOff size={13}/>} {layerNames[layer]}</button><button type="button" className={layerLocks[layer] ? "layer-locked" : ""} disabled={!canEdit} title={`${layerLocks[layer] ? "Разблокировать" : "Заблокировать"} слой: ${layerNames[layer]}`} aria-label={`${layerLocks[layer] ? "Разблокировать" : "Заблокировать"} слой: ${layerNames[layer]}`} onClick={() => onLayerLocksChange({ ...layerLocks, [layer]: !layerLocks[layer] })}>{layerLocks[layer] ? <Lock size={13}/> : <Unlock size={13}/>}</button></div>)}</div>
+      <div className="map-layer-visibility">{(["background", "terrain", "structures", "decorations", "figures"] as TableLayer[]).map(layer => <div className="map-layer-control" key={layer}><button type="button" className={visibleLayers[layer] ? "layer-visible" : ""} disabled={!canEdit} title={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} aria-label={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} onClick={() => onVisibilityChange({ ...visibleLayers, [layer]: !visibleLayers[layer] })}>{visibleLayers[layer] ? <Eye size={13}/> : <EyeOff size={13}/>} {layerNames[layer]}</button><button type="button" className={layerLocks[layer] ? "layer-locked" : ""} disabled={!canEdit} title={`${layerLocks[layer] ? "Разблокировать" : "Заблокировать"} слой: ${layerNames[layer]}`} aria-label={`${layerLocks[layer] ? "Разблокировать" : "Заблокировать"} слой: ${layerNames[layer]}`} onClick={() => onLayerLocksChange({ ...layerLocks, [layer]: !layerLocks[layer] })}>{layerLocks[layer] ? <Lock size={13}/> : <Unlock size={13}/>}</button></div>)}</div>
     </div>
     {selected && canEdit && visibleLayers[layerOf(selected)] && <div className={`map-object-inspector ${selectedLocked ? "inspector-locked" : ""}`} onPointerDown={event => event.stopPropagation()}>
       <strong>Параметры объекта {selectedLocked && <span className="locked-hint"><Lock size={12}/> Слой заблокирован</span>}</strong>
