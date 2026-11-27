@@ -46,6 +46,7 @@ model Campaign {
   updatedAt        DateTime             @updatedAt
   memberships      CampaignMembership[]
   characters       Character[]          @relation("CampaignCharacters")
+  tableState       CampaignTableState?
 
   @@index([ownerId])
 }
@@ -84,4 +85,16 @@ model Character {
   @@index([ownerId, isCampaignCopy])
   @@index([campaignId])
   @@index([sourceCharacterId])
+}
+
+
+model CampaignTableState {
+  id         String   @id @default(cuid())
+  campaignId String   @unique
+  state      Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
 }
