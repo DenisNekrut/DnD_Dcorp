@@ -24,9 +24,21 @@ export class TabletopService {
       where: { campaignId },
       select: { state: true, updatedAt: true },
     });
+    const storedState = saved?.state as Record<string, unknown> | undefined;
+    const storedRoom = storedState?.room as Record<string, unknown> | undefined;
+    const isPublished = storedRoom?.published === true;
+    const visibleState = canEdit || isPublished
+      ? saved?.state ?? EMPTY_TABLE_STATE
+      : {
+          room: { configured: false, published: false },
+          tokens: [],
+          objects: [],
+          round: 1,
+          log: [],
+        };
     return {
       campaignId,
-      state: saved?.state ?? EMPTY_TABLE_STATE,
+      state: visibleState,
       updatedAt: saved?.updatedAt ?? null,
       permissions: { canEdit },
     };

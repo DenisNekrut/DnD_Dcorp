@@ -5,15 +5,16 @@ import RoomMapEditor, { type MapObject } from "./RoomMapEditor";
 import "./styles/tabletop.css";
 import "./styles/tabletop-room.css";
 import "./styles/tabletop-map-editor.css";
+import "./styles/tabletop-publication.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
-type RoomSettings = { configured: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
+type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
 type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 
-const emptyRoom: RoomSettings = { configured: false, name: "", description: "", mapTheme: "sand", grid: true };
+const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -170,9 +171,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const saveRoom = (event: React.FormEvent) => {
     event.preventDefault();
     if (!roomName.trim()) return;
-    setRoom({ configured: true, name: roomName.trim(), description: roomDescription.trim(), mapTheme, grid });
+    setRoom({ configured: true, published: false, name: roomName.trim(), description: roomDescription.trim(), mapTheme, grid });
     setEditingRoom(false);
     addLog("Мастер подготовил игровую комнату.", "gold");
+  };
+  const togglePublication = () => {
+    if (!canEdit || !room.configured) return;
+    const published = !room.published;
+    setRoom(value => ({ ...value, published }));
+    addLog(published ? "Мастер опубликовал игровую комнату для игроков." : "Мастер скрыл комнату от игроков.", "gold");
   };
   const addToken = (event: React.FormEvent) => {
     event.preventDefault();
@@ -229,7 +236,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     {tableError && <p className="validation-note" role="alert">{tableError}</p>}
     {!tableLoaded && <p className="table-sync-note">Загружаем сохранённую комнату…</p>}
 
-    {(!room.configured || editingRoom) ? <section className="room-setup-panel">
+    {!canEdit && !room.configured ? <section className="room-waiting-panel"><div className="room-setup-icon"><Eye size={24}/></div><div><span className="eyebrow">ИГРОВАЯ КОМНАТА</span><h2>Мастер готовит сессию</h2><p>Комната пока не опубликована. Когда ведущий завершит подготовку и откроет доступ, карта и участники появятся здесь автоматически.</p></div></section> : (!room.configured || editingRoom) ? <section className="room-setup-panel">
       <div className="room-setup-intro"><div className="room-setup-icon"><Map size={23}/></div><div><span className="eyebrow">МАСТЕРСКАЯ ВЕДУЩЕГО</span><h2>{room.configured ? "Настройки комнаты" : "Подготовь игровую комнату"}</h2><p>Сцена не будет заполнена автоматически. Выбери параметры и сам размести участников перед началом игры.</p></div></div>
       <form className="room-setup-form" onSubmit={saveRoom}>
         <label>Название комнаты<input value={roomName} onChange={event => setRoomName(event.target.value)} placeholder="Название приключения" required disabled={!canEdit}/></label>
@@ -239,6 +246,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         {canEdit ? <div className="room-setup-actions"><button className="button button-primary" type="submit"><Settings2 size={16}/> {room.configured ? "Сохранить настройки" : "Создать комнату"}</button>{room.configured && <button className="button button-secondary" type="button" onClick={() => setEditingRoom(false)}>Отмена</button>}</div> : <p className="validation-note">Настраивать комнату может только мастер или помощник.</p>}
       </form>
     </section> : <>
+      {canEdit && <div className={`room-publication-bar ${room.published ? "is-published" : ""}`}><div><strong>{room.published ? "Комната опубликована" : "Черновик комнаты"}</strong><span>{room.published ? "Игроки видят текущую сцену и её изменения." : "Игроки пока не видят карту, фигуры и журнал."}</span></div><button className="button button-primary" onClick={togglePublication}>{room.published ? "Скрыть от игроков" : "Опубликовать игрокам"}</button></div>}
       {room.description && <p className="room-description">{room.description}</p>}
       <div className="tabletop-layout">
         <div className="tabletop-center">
