@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt.strategy';
 import { SaveTableStateDto } from './dto/save-table-state.dto';
 import { DeleteMapAssetDto } from './dto/delete-map-asset.dto';
+import { SendTableMessageDto } from './dto/send-table-message.dto';
 import { TabletopService } from './tabletop.service';
 
 type AuthRequest = Request & { user: AuthenticatedUser };
@@ -33,6 +34,15 @@ export class TabletopController {
     @Param('campaignId') campaignId: string,
   ) {
     return this.tabletop.getState(request.user.id, campaignId);
+  }
+
+  @Post('messages')
+  sendMessage(
+    @Req() request: AuthRequest,
+    @Param('campaignId') campaignId: string,
+    @Body() dto: SendTableMessageDto,
+  ) {
+    return this.tabletop.sendMessage(request.user.id, campaignId, dto.content);
   }
 
   @Post('map')

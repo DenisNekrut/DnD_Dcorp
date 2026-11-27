@@ -121,7 +121,8 @@ type MapAsset = { key: string; url: string; contentType: string; size: number };
 type MapView = { scale: number; x: number; y: number };
 type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; mapView?: MapView; round: number; activeTokenId?: string | null; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
-type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
+type TableChatMessage = { id: string; content: string; createdAt: string; author: { username: string } };
+type TableResponse = { state: Partial<TableState>; updatedAt: string | null; chatMessages?: TableChatMessage[]; chatCursor?: string | null; permissions?: { canEdit: boolean } };
 type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks; mapView: MapView };
 type EditorHistory = { past: EditorSnapshot[]; future: EditorSnapshot[] };
 const cloneEditorSnapshot = (snapshot: EditorSnapshot): EditorSnapshot => JSON.parse(JSON.stringify(snapshot)) as EditorSnapshot;
@@ -129,6 +130,7 @@ const defaultMapView: MapView = { scale: 1, x: 0, y: 0 };
 
 const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true, gridCellSizePx: 38 };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
+const localChatKey = (id: string) => `${localKey(id)}-chat`;
 const recoveryKey = (id: string) => `${localKey(id)}-pending-recovery`;
 type TableRecovery = { state: TableState; savedAt: number; supersedes?: TableState };
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -145,6 +147,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [mapUploading, setMapUploading] = useState(false);
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const battleMapRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
   const historyGroupRef = useRef(false);
   const historyGroupStartRef = useRef<EditorSnapshot | null>(null);
@@ -164,6 +167,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
   const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
   const [message, setMessage] = useState("");
+  const [chatMessages, setChatMessages] = useState<TableChatMessage[]>([]);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
   const [tableLoaded, setTableLoaded] = useState(!remoteEnabled);
@@ -194,6 +200,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const inFlightStateRef = useRef<TableState | null>(null);
   const latestStateRef = useRef<TableState | null>(null);
   const updatedAtRef = useRef<string | null>(null);
+  const chatCursorRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.find(token => token.id === activeTokenId) ?? initiative[0];
   const selected = tokens.find(token => token.id === selectedId);
@@ -202,6 +209,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
   const latestTableState: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
   latestStateRef.current = latestTableState;
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chatMessages.length]);
 
   useEffect(() => {
     if (!selected || !selectedWeapon) {
@@ -304,6 +315,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (typeof state.round === "number") setRound(state.round);
     setActiveTokenId(state.activeTokenId ?? null);
     if (typeof response.permissions?.canEdit === "boolean") setCanEdit(response.permissions.canEdit);
+    setChatMessages(Array.isArray(response.chatMessages) ? response.chatMessages : []);
+    chatCursorRef.current = response.chatCursor ?? null;
     updatedAtRef.current = response.updatedAt;
     setLastUpdated(response.updatedAt ? new Date(response.updatedAt).toLocaleTimeString() : "");
   };
@@ -321,6 +334,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!campaignId) return;
     if (!remoteEnabled) {
       try {
+        const savedChat = window.localStorage.getItem(localChatKey(campaignId));
+        if (savedChat) {
+          const parsedChat = JSON.parse(savedChat) as unknown;
+          setChatMessages(Array.isArray(parsedChat) ? parsedChat as TableChatMessage[] : []);
+        }
         const saved = window.localStorage.getItem(localKey(campaignId));
         if (saved) {
           const state = JSON.parse(saved) as Partial<TableState>;
@@ -385,8 +403,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       if (dirtyRef.current) return;
       try {
         const response = await apiRequest<TableResponse>(`/campaigns/${campaignId}/table`);
-        if (!active || !response.updatedAt || response.updatedAt === updatedAtRef.current) return;
-        applyRemoteState(response);
+        if (!active) return;
+        const tableChanged = Boolean(response.updatedAt && response.updatedAt !== updatedAtRef.current);
+        const chatChanged = (response.chatCursor ?? null) !== chatCursorRef.current;
+        if (tableChanged) applyRemoteState(response);
+        else if (chatChanged) {
+          setChatMessages(Array.isArray(response.chatMessages) ? response.chatMessages : []);
+          chatCursorRef.current = response.chatCursor ?? null;
+        }
       } catch { /* Keep the last known room visible during temporary network loss. */ }
     }, 3000);
     return () => { active = false; window.clearInterval(poll); };
@@ -922,10 +946,39 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const y = Math.max(5, Math.min(95, (snap ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     setTokens(items => items.map(token => token.id === draggingId ? { ...token, x, y } : token));
   };
-  const sendMessage = (event: React.FormEvent) => {
+  const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!message.trim()) return;
-    addLog(`Заметка: ${message.trim()}`);
+    const content = message.trim();
+    if (!content || chatBusy) return;
+    if (remoteEnabled && campaignId) {
+      setChatBusy(true);
+      setChatError("");
+      try {
+        const created = await apiRequest<TableChatMessage>(`/campaigns/${campaignId}/table/messages`, {
+          method: "POST",
+          body: JSON.stringify({ content }),
+        });
+        setChatMessages(items => [...items.filter(item => item.id !== created.id), created].slice(-100));
+        chatCursorRef.current = created.id;
+        setMessage("");
+      } catch (error) {
+        setChatError(error instanceof Error ? error.message : "Не удалось отправить сообщение.");
+      } finally {
+        setChatBusy(false);
+      }
+      return;
+    }
+    const localMessage: TableChatMessage = {
+      id: newId(),
+      content,
+      createdAt: new Date().toISOString(),
+      author: { username: "Гость" },
+    };
+    const nextMessages = [...chatMessages, localMessage].slice(-100);
+    setChatMessages(nextMessages);
+    if (campaignId) {
+      try { window.localStorage.setItem(localChatKey(campaignId), JSON.stringify(nextMessages)); } catch { /* Local chat remains available until the page closes. */ }
+    }
     setMessage("");
   };
 
@@ -1121,8 +1174,23 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       </div>
       <section className="table-panel table-events-panel">
         <div className="table-panel-title"><div><Users size={16}/><strong>События и журнал игры</strong></div><span>{log.length} записей</span></div>
-        <div className="table-log table-log-below">{log.length ? log.map(entry => <p key={entry.id} className={`log-${entry.tone}`}>{entry.text}</p>) : <p className="room-empty-note">Событий пока нет. Здесь будут отображаться броски, заметки и ход игры.</p>}</div>
-        <form className="table-chat-form" onSubmit={sendMessage}><input value={message} onChange={event => setMessage(event.target.value)} placeholder="Добавить заметку в журнал…"/><button aria-label="Добавить заметку" type="submit"><Send size={15}/></button></form>
+        <div className="table-log table-log-below" aria-live="polite">{log.length ? log.map(entry => <p key={entry.id} className={`log-${entry.tone}`}>{entry.text}</p>) : <p className="room-empty-note">Событий пока нет. Здесь будут отображаться броски, заметки мастера и ход игры.</p>}</div>
+      </section>
+      <section className="table-panel table-chat-panel">
+        <div className="table-panel-title"><div><Send size={15}/><strong>Чат партии</strong></div><span>{chatMessages.length} сообщений</span></div>
+        <div className="table-chat-messages" role="log" aria-live="polite" aria-relevant="additions">
+          {chatMessages.length ? chatMessages.map(item => <article className="table-chat-message" key={item.id}>
+            <div><strong>{item.author.username}</strong><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></div>
+            <p>{item.content}</p>
+          </article>) : <p className="room-empty-note">Пока нет сообщений. Напиши первое сообщение для участников партии.</p>}
+          <div ref={chatEndRef}/>
+        </div>
+        <form className="table-chat-form" onSubmit={sendMessage}>
+          <input value={message} onChange={event => setMessage(event.target.value)} placeholder="Сообщение для участников…" maxLength={500} aria-label="Сообщение в чат" disabled={chatBusy}/>
+          <button aria-label="Отправить сообщение" type="submit" disabled={chatBusy || !message.trim()}><Send size={15}/></button>
+        </form>
+        {chatError && <p className="table-chat-error" role="alert">{chatError}</p>}
+        <small className="table-chat-hint">{remoteEnabled ? "Сообщения сохраняются в кампании и синхронизируются у участников." : "Локальный чат сохраняется в этом браузере."}</small>
       </section>
     </>}
   </section>;

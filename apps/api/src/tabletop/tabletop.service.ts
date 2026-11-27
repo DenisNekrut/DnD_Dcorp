@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -31,6 +32,20 @@ export class TabletopService {
     const storedState = saved?.state as Record<string, unknown> | undefined;
     const storedRoom = storedState?.room as Record<string, unknown> | undefined;
     const isPublished = storedRoom?.published === true;
+    const chatMessages = canEdit || isPublished
+      ? await this.prisma.campaignTableMessage.findMany({
+          where: { campaignId },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: { select: { username: true } },
+          },
+        })
+      : [];
+    chatMessages.reverse();
     const visibleState = canEdit
       ? saved?.state ?? EMPTY_TABLE_STATE
       : isPublished
@@ -68,6 +83,8 @@ export class TabletopService {
       campaignId,
       state: visibleState,
       updatedAt: saved?.updatedAt ?? null,
+      chatMessages,
+      chatCursor: chatMessages.at(-1)?.id ?? null,
       permissions: { canEdit },
     };
   }
@@ -82,6 +99,34 @@ export class TabletopService {
       select: { campaignId: true, state: true, updatedAt: true },
     });
     return { ...saved, permissions: { canEdit: true } };
+  }
+
+  async sendMessage(userId: string, campaignId: string, rawContent: string) {
+    const canEdit = await this.assertCampaignAccess(userId, campaignId, false);
+    const content = rawContent.trim();
+    if (!content || content.length > 500) {
+      throw new BadRequestException('Message must contain between 1 and 500 characters');
+    }
+    if (!canEdit) {
+      const saved = await this.prisma.campaignTableState.findUnique({
+        where: { campaignId },
+        select: { state: true },
+      });
+      const state = saved?.state as Record<string, unknown> | undefined;
+      const room = state?.room as Record<string, unknown> | undefined;
+      if (room?.published !== true) {
+        throw new ForbiddenException('The game room is not open for players yet');
+      }
+    }
+    return this.prisma.campaignTableMessage.create({
+      data: { campaignId, authorId: userId, content },
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        author: { select: { username: true } },
+      },
+    });
   }
 
   async uploadMap(userId: string, campaignId: string, file: Express.Multer.File) {

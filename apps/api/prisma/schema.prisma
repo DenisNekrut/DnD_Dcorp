@@ -42,6 +42,7 @@ model User {
   campaigns    Campaign[]           @relation("CampaignOwner")
   memberships  CampaignMembership[]
   characters   Character[]          @relation("CharacterOwner")
+  tableMessages CampaignTableMessage[]
 }
 
 model Campaign {
@@ -58,6 +59,7 @@ model Campaign {
   memberships      CampaignMembership[]
   characters       Character[]          @relation("CampaignCharacters")
   tableState       CampaignTableState?
+  tableMessages    CampaignTableMessage[]
 
   @@index([ownerId])
 }
@@ -124,4 +126,18 @@ model AdminAction {
 
   @@index([actorId, createdAt])
   @@index([targetUserId, createdAt])
+}
+
+
+model CampaignTableMessage {
+  id         String   @id @default(cuid())
+  campaignId String
+  authorId   String
+  content    String   @db.VarChar(500)
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@index([authorId, createdAt])
 }
