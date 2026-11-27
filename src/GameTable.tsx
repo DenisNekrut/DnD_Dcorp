@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -401,7 +401,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
     const rawAbilityModifiers = (data.abilityModifiers ?? {}) as Record<string, number>;
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus: Number(data.proficiencyBonus ?? 0), abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? 0), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? 0), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? 0), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? 0), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? 0), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? 0) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus: Number(data.proficiencyBonus ?? 0), abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? 0), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? 0), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? 0), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? 0), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? 0), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? 0) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -471,7 +471,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     event.preventDefault();
     if (!newTokenName.trim() || !canEdit || layerLocks.figures) return;
     const color = newTokenKind === "enemy" ? "red" : newTokenKind === "ally" ? "blue" : "gold";
-    const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative, armorClass: newTokenAc };
+    const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative, armorClass: newTokenAc, weaponAmmo: {}, loadingUsedWeapons: [] };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     setSelectedId(token.id);
@@ -618,6 +618,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
+  const resetWeaponLoading = () => {
+    if (!selected || !selectedWeapon || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id
+      ? { ...token, loadingUsedWeapons: (token.loadingUsedWeapons ?? []).filter(id => id !== selectedWeapon.id) }
+      : token));
+    addLog(selected.name + ": перезарядка «" + selectedWeapon.name + "» сброшена для дополнительного действия или реакции.", "gold");
+  };
+
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
     if (selectedRollBlocked) {
@@ -626,6 +635,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     if (rollKind === "attack" && !attackTarget) {
       addLog("Для атаки сначала добавь на карту цель.", "danger");
+      return;
+    }
+    const weaponUsesAmmo = rollKind === "attack" && (selectedWeapon?.properties.includes("ammunition") ?? false);
+    const weaponUsesLoading = rollKind === "attack" && (selectedWeapon?.properties.includes("loading") ?? false);
+    const weaponAmmoCount = selectedWeapon ? selected.weaponAmmo?.[selectedWeapon.id] ?? 0 : 0;
+    if (weaponUsesAmmo && weaponAmmoCount <= 0) {
+      addLog(selected.name + ": нет боеприпасов для " + selectedWeapon?.name + ".", "danger");
+      return;
+    }
+    if (weaponUsesLoading && selectedWeapon && (selected.loadingUsedWeapons ?? []).includes(selectedWeapon.id)) {
+      addLog(selected.name + ": оружие «" + selectedWeapon.name + "» уже использовало свойство «Перезарядка» в этом ходу.", "danger");
       return;
     }
     let finalRollMode = selectedRollMode;
@@ -680,6 +700,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
         kept = finalRollMode === "advantage" ? Math.max(...rolls) : finalRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
         total = kept + effectiveRollModifier;
+      }
+
+      if (rollKind === "attack" && selectedWeapon && (weaponUsesAmmo || weaponUsesLoading)) {
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? {
+          ...token,
+          ...(weaponUsesAmmo ? { weaponAmmo: { ...(token.weaponAmmo ?? {}), [selectedWeapon.id]: Math.max(0, weaponAmmoCount - 1) } } : {}),
+          ...(weaponUsesLoading ? { loadingUsedWeapons: [...new Set([...(token.loadingUsedWeapons ?? []), selectedWeapon.id])] } : {}),
+        } : token));
       }
 
       if (rollKind !== "attack") {
@@ -747,11 +776,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (nextIndex >= initiative.length) {
       const first = initiative[0];
       setActiveTokenId(first.id);
+      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [] } : token));
       setRound(value => value + 1);
       addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
     } else {
       const next = initiative[nextIndex];
       setActiveTokenId(next.id);
+      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [] } : token));
       addLog(`Ход переходит к ${next.name}.`, "gold");
     }
   };
@@ -930,6 +961,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
                 </select></label>
                 {selectedWeapon?.versatileDamage && <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useVersatileDamage} onChange={event => toggleVersatileDamage(event.target.checked)} disabled={!canEdit}/> Двумя руками ({selectedWeapon.versatileDamage})</label>}
+                {selectedWeapon?.properties.includes("ammunition") && <label className="ammo-count-control">Боеприпасы<input type="number" min="0" max="999" value={selected?.weaponAmmo?.[selectedWeapon.id] ?? 0} onFocus={beginHistoryGroup} onBlur={finishHistoryGroup} onChange={event => {
+                  const value = Math.max(0, Math.min(999, Number(event.target.value) || 0));
+                  if (!selected) return;
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, weaponAmmo: { ...(token.weaponAmmo ?? {}), [selectedWeapon.id]: value } } : token));
+                }} disabled={!canEdit || layerLocks.figures}/></label>}
+                {selectedWeapon?.properties.includes("loading") && <div className="weapon-loading-note"><small>{(selected?.loadingUsedWeapons ?? []).includes(selectedWeapon.id) ? "Перезарядка использована в этом ходу." : "Свойство «Перезарядка»: один выстрел за действие."}</small>{(selected?.loadingUsedWeapons ?? []).includes(selectedWeapon.id) && <button type="button" onClick={resetWeaponLoading} disabled={!canEdit || layerLocks.figures}>Сбросить для дополнительного действия</button>}</div>}
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
                   <option value="melee" disabled={selectedWeapon?.kind === "ranged"}>Ближний бой</option><option value="ranged" disabled={selectedWeapon?.kind === "melee" && !selectedWeapon?.properties.includes("thrown")}>Дальний бой</option>
                 </select></label>
