@@ -40,3 +40,14 @@
 .map-image-controls button { padding:6px 8px; border:1px solid rgba(224,190,132,.3); border-radius:5px; color:#e9d3a8; background:rgba(255,255,255,.06); font-size:9px; cursor:pointer; }
 .map-image-controls button:hover { background:rgba(225,189,123,.18); }
 @media(max-width:560px){.map-image-controls{top:150px;right:6px;width:180px;padding:8px}}
+
+.terrain-zone-select { display:inline-flex; align-items:center; gap:5px; color:#d9c49e; font-size:9px; }
+.terrain-zone-select select { max-width:142px; padding:5px 6px; border:1px solid rgba(224,190,132,.3); border-radius:5px; color:#f0dfbf; background:#25190f; font-size:9px; }
+.map-object-layer.drawing-zone-mode { pointer-events:auto; cursor:crosshair; }
+.map-object-zone { border:1px dashed rgba(241,213,151,.9); border-radius:5px; color:#f7e4bf; background:rgba(160,119,63,.28); }
+.map-object-zone .map-zone-label { padding:2px 5px; overflow:hidden; font-size:9px; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none; }
+.map-zone-difficult { background:rgba(175,127,59,.34); }
+.map-zone-water { border-color:rgba(129,195,221,.9); background:rgba(42,123,164,.34); }
+.map-zone-fire { border-color:rgba(235,130,75,.9); background:rgba(194,74,40,.34); }
+.map-zone-fog { border-color:rgba(208,213,220,.85); background:rgba(171,181,194,.3); }
+.map-zone-hazard { border-color:rgba(191,176,83,.95); background:rgba(143,123,36,.34); }
