@@ -10,6 +10,7 @@ import {
   SPECIES,
   SPELL_LEVELS,
 } from './rules-data';
+import { ADVENTURING_GEAR, ARMOR, TOOLS, WEAPONS } from './equipment-data';
 
 @Controller('rules')
 export class RulesController {
@@ -26,6 +27,10 @@ export class RulesController {
         'skills',
         'equipment-categories',
         'spell-levels',
+        'weapons',
+        'armor',
+        'adventuring-gear',
+        'tools',
       ],
     };
   }
@@ -38,4 +43,8 @@ export class RulesController {
   @Get('skills') skills() { return SKILLS; }
   @Get('equipment-categories') equipmentCategories() { return EQUIPMENT_CATEGORIES; }
   @Get('spell-levels') spellLevels() { return SPELL_LEVELS; }
+  @Get('weapons') weapons() { return WEAPONS; }
+  @Get('armor') armor() { return ARMOR; }
+  @Get('adventuring-gear') adventuringGear() { return ADVENTURING_GEAR; }
+  @Get('tools') tools() { return TOOLS; }
 }
