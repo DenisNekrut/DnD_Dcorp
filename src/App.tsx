@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiRequest, isApiConfigured } from "./api";
+import { apiRequest, clearSessionToken, isApiConfigured, storeSessionToken } from "./api";
 import GameTable from "./GameTable";
 import AdminPanel from "./AdminPanel";
 import "./styles/guest.css";
@@ -122,7 +122,7 @@ function App() {
     if (!isApiConfigured()) { setAuthLoading(false); return; }
     apiRequest<{ user: SessionUser }>("/auth/me")
       .then(result => setSessionUser(result.user))
-      .catch(() => setSessionUser(null))
+      .catch(() => { clearSessionToken(); setSessionUser(null); })
       .finally(() => setAuthLoading(false));
   }, []);
 
@@ -164,7 +164,8 @@ function App() {
       const body = authMode === "login"
         ? { email: authEmail.trim(), password: authPassword }
         : { email: authEmail.trim(), username: authUsername.trim(), password: authPassword };
-      const result = await apiRequest<{ user: SessionUser }>(path, { method: "POST", body: JSON.stringify(body) });
+      const result = await apiRequest<{ user: SessionUser; token: string }>(path, { method: "POST", body: JSON.stringify(body) });
+      storeSessionToken(result.token);
       setSessionUser(result.user); setAuthPassword("");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Не удалось выполнить вход.");
@@ -177,7 +178,7 @@ function App() {
       return;
     }
     try { await apiRequest("/auth/logout", { method: "POST" }); }
-    finally { setSessionUser(null); setCharacters([]); setCampaigns([]); setAuthError(""); }
+    finally { clearSessionToken(); setSessionUser(null); setCharacters([]); setCampaigns([]); setAuthError(""); }
   };
 
   const createCampaign = async (event: React.FormEvent) => {

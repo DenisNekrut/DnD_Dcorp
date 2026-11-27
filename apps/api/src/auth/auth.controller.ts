@@ -20,14 +20,14 @@ export class AuthController {
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.register(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user };
+    return { user: result.user, token: result.token };
   }
 
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.login(dto);
     this.setSessionCookie(response, result.token);
-    return { user: result.user };
+    return { user: result.user, token: result.token };
   }
 
   @Post('logout')

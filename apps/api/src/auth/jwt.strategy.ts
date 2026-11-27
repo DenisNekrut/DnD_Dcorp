@@ -16,6 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(config: ConfigService, private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
         (request: { cookies?: Record<string, string> }) => request?.cookies?.dnd_session ?? null,
       ]),
       ignoreExpiration: false,
