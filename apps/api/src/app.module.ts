@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RulesModule } from './rules/rules.module';
 import { DiceModule } from './dice/dice.module';
 import { UsersModule } from './users/users.module';
+import { TabletopModule } from './tabletop/tabletop.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from './users/users.module';
     CharactersModule,
     RulesModule,
     DiceModule,
+    TabletopModule,
   ],
 })
 export class AppModule {}
