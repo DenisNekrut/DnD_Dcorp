@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -651,7 +651,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       return { ...token, concentrating: false };
     }
     const dc = Math.max(10, Math.floor(damageTaken / 2));
-    const modifier = Number(token.abilityModifiers?.constitution ?? 0);
+    const abilityModifier = Number(token.abilityModifiers?.constitution ?? 0);
+    const proficiencyBonus = token.constitutionSaveProficient ? Number(token.proficiencyBonus ?? 0) : 0;
+    const modifier = abilityModifier + proficiencyBonus;
     let roll: number;
     if (remoteEnabled) {
       const result = await apiRequest<{ rolls: number[]; keptRoll: number | null }>("/dice/roll", {
@@ -675,6 +677,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const next = !selected.concentrating;
     setTokens(items => items.map(token => token.id === selected.id ? { ...token, concentrating: next } : token));
     addLog(selected.name + (next ? " поддерживает концентрацию." : " прекращает концентрацию."), "muted");
+  };
+
+  const toggleConstitutionSaveProficiency = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    const next = !selected.constitutionSaveProficient;
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, constitutionSaveProficient: next } : token));
+    addLog(selected.name + (next ? " получает владение спасброском Телосложения." : " теряет владение спасброском Телосложения."), "muted");
   };
 
   const applyManualDamage = async () => {
@@ -1143,6 +1153,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <button type="button" className={selected.actionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("actionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.actionUsed ? "Действие: использовано" : "Действие: доступно"}</button>
                 <button type="button" className={selected.bonusActionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("bonusActionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.bonusActionUsed ? "Бонус: использовано" : "Бонус: доступно"}</button>
                 <button type="button" className={selected.reactionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("reactionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.reactionUsed ? "Реакция: использована" : "Реакция: доступна"}</button>
+              </div>
+            </div>
+            <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Спасбросок Телосложения</strong><small>{selected.constitutionSaveProficient ? "С владением" : "Без владения"}</small></div>
+              <div className="combat-economy-buttons">
+                <button type="button" className={selected.constitutionSaveProficient ? "resource-used" : ""} onClick={toggleConstitutionSaveProficiency} disabled={!canEdit || layerLocks.figures}>{selected.constitutionSaveProficient ? "Владение включено" : "Нет владения"}</button>
               </div>
             </div>
             <div className="combat-economy">
