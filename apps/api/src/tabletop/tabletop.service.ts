@@ -19,7 +19,7 @@ export class TabletopService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getState(userId: string, campaignId: string) {
-    await this.assertCampaignAccess(userId, campaignId, false);
+    const canEdit = await this.assertCampaignAccess(userId, campaignId, false);
     const saved = await this.prisma.campaignTableState.findUnique({
       where: { campaignId },
       select: { state: true, updatedAt: true },
@@ -28,6 +28,7 @@ export class TabletopService {
       campaignId,
       state: saved?.state ?? EMPTY_TABLE_STATE,
       updatedAt: saved?.updatedAt ?? null,
+      permissions: { canEdit },
     };
   }
 
@@ -40,20 +41,20 @@ export class TabletopService {
       update: { state },
       select: { campaignId: true, state: true, updatedAt: true },
     });
-    return saved;
+    return { ...saved, permissions: { canEdit: true } };
   }
 
   private async assertCampaignAccess(
     userId: string,
     campaignId: string,
-    canEdit: boolean,
-  ): Promise<void> {
+    requireEdit: boolean,
+  ): Promise<boolean> {
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: campaignId },
       select: { ownerId: true },
     });
     if (!campaign) throw new NotFoundException('Campaign not found');
-    if (campaign.ownerId === userId) return;
+    if (campaign.ownerId === userId) return true;
 
     const membership = await this.prisma.campaignMembership.findUnique({
       where: { campaignId_userId: { campaignId, userId } },
@@ -63,12 +64,12 @@ export class TabletopService {
       throw new ForbiddenException('Approved campaign membership is required');
     }
 
-    if (
-      canEdit &&
-      membership.role !== CampaignRole.GAME_MASTER &&
-      membership.role !== CampaignRole.ASSISTANT
-    ) {
+    const canEdit =
+      membership.role === CampaignRole.GAME_MASTER ||
+      membership.role === CampaignRole.ASSISTANT;
+    if (requireEdit && !canEdit) {
       throw new ForbiddenException('Only the game master or an assistant can edit the shared table');
     }
+    return canEdit;
   }
 }
