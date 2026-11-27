@@ -589,7 +589,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const targetAc = Math.max(0, Number(target.armorClass ?? 10));
       const critical = kept === 20 || (attackType === "melee" && (target.conditions ?? []).some(condition => condition === "paralyzed" || condition === "unconscious"));
       const naturalOne = kept === 1;
-      const hit = critical || (!naturalOne && total >= targetAc);
+      const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
         selected.name + " атакует " + target.name + ": " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
