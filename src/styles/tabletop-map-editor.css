@@ -77,13 +77,16 @@
 
 .radius-size-select { display:inline-flex; align-items:center; gap:4px; color:#d9c49e; font-size:9px; white-space:nowrap; }
 .radius-size-select select { padding:5px 6px; border:1px solid rgba(224,190,132,.3); border-radius:5px; color:#f0dfbf; background:#25190f; font-size:9px; }
-.map-radius-preview {
-  position:absolute; z-index:8; transform:translate(-50%,-50%);
-  border:2px dashed rgba(159,205,240,.95); border-radius:50%;
+.map-area-preview {
+  position:absolute; z-index:8; border:2px dashed rgba(159,205,240,.95);
   background:rgba(78,143,195,.2); box-shadow:0 0 0 1px rgba(0,0,0,.4);
   pointer-events:none;
 }
-.map-radius-preview span {
+.map-area-radius { border-radius:50%; transform:translate(-50%,-50%); }
+.map-area-cube { border-radius:3px; transform:translate(-50%,-50%); }
+.map-area-cone { border:0; clip-path:polygon(0 50%,100% 0,100% 100%); background:rgba(78,143,195,.28); }
+.map-area-line { border-radius:2px; background:rgba(78,143,195,.35); }
+.map-area-preview span {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   padding:4px 7px; border:1px solid rgba(159,205,240,.65); border-radius:5px;
   color:#e4f2ff; background:rgba(18,37,55,.9); font-size:10px;
