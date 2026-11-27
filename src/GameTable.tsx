@@ -146,7 +146,25 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     return () => window.clearTimeout(timeout);
   }, [room, tokens, objects, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
-  useEffect(() => {\n    if (!remoteEnabled || !campaignId) return;\n    let active = true;\n    apiRequest<CampaignCharacter[]>(`/characters/campaigns/${campaignId}`)\n      .then(items => { if (active) { setCampaignCharacters(items); setRosterError(""); } })\n      .catch(error => { if (active) setRosterError(error instanceof Error ? error.message : "Не удалось загрузить персонажей кампании."); });\n    return () => { active = false; };\n  }, [campaignId, remoteEnabled]);\n\n  const addCampaignCharacter = (character: CampaignCharacter) => {\n    const data = character.data ?? {};\n    const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;\n    const initiativeValue = Number(data.initiative ?? 0);\n    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };\n    setTokens(items => [...items, token]);\n    addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);\n  };\n\n  const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
+  useEffect(() => {
+    if (!remoteEnabled || !campaignId) return;
+    let active = true;
+    apiRequest<CampaignCharacter[]>(`/characters/campaigns/${campaignId}`)
+      .then(items => { if (active) { setCampaignCharacters(items); setRosterError(""); } })
+      .catch(error => { if (active) setRosterError(error instanceof Error ? error.message : "Не удалось загрузить персонажей кампании."); });
+    return () => { active = false; };
+  }, [campaignId, remoteEnabled]);
+
+  const addCampaignCharacter = (character: CampaignCharacter) => {
+    const data = character.data ?? {};
+    const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
+    const initiativeValue = Number(data.initiative ?? 0);
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };
+    setTokens(items => [...items, token]);
+    addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
+  };
+
+  const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
     setLog(items => [...items.slice(-99), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
   };
   const saveRoom = (event: React.FormEvent) => {
