@@ -1,0 +1,7 @@
+.map-layer-select{display:inline-flex;align-items:center;gap:5px;color:#d9c49e;font-size:9px}
+.map-layer-select select{max-width:118px;padding:5px 6px;border:1px solid rgba(224,190,132,.3);border-radius:5px;color:#f0dfbf;background:#25190f;font-size:9px}
+.map-layer-visibility{display:inline-flex;align-items:center;gap:4px;margin-left:auto}
+.map-layer-visibility button{padding:5px 6px;font-size:8px;opacity:.62}
+.map-layer-visibility button.layer-visible{opacity:1;border-color:rgba(225,189,123,.48);color:#f3d9a8;background:rgba(225,189,123,.12)}
+.map-layer-visibility button:disabled{opacity:.42;cursor:not-allowed}
+@media(max-width:720px){.map-layer-visibility{width:100%;margin-left:0}.map-layer-visibility button{flex:1;justify-content:center}}
