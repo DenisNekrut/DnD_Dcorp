@@ -1,31 +1,29 @@
 # DnD_Dcorp
 
-## Развёртывание
+## Текущая публикация
 
-Проект разворачивается через Render Blueprint из `render.yaml`:
-- `dnd-dcorp-web` — React/Vite frontend (Static Site).
-- `dnd-dcorp-api` — NestJS API.
-- `dnd-dcorp-db` — PostgreSQL.
+Сейчас frontend публикуется через GitHub Pages:
 
-Импортируй репозиторий в Render через **New → Blueprint** и подтверди создание ресурсов. После первого развёртывания проверь, что публичный адрес Static Site совпадает с `WEB_ORIGIN` в API. Если Render назначит другой адрес, обнови `WEB_ORIGIN` в настройках API и запусти redeploy.
+https://denisnekrut.github.io/DnD_Dcorp/
 
-GitHub остаётся источником кода. Коммиты в `main` запускают автоматическую сборку и публикацию обоих сервисов.
+Workflow `.github/workflows/deploy-pages.yml` собирает сайт после изменений в `main`. Для подключения API в настройках репозитория GitHub Actions должна быть задана переменная `VITE_API_URL` с адресом API. Для GitHub Pages Vite использует базовый путь `/DnD_Dcorp/`.
 
-## Авторизация и мобильные браузеры
+API размещается отдельно. Для текущего адреса frontend в настройках API должны быть:
+- `WEB_ORIGIN=https://denisnekrut.github.io`
+- `COOKIE_SECURE=true`
+- `COOKIE_SAME_SITE=none`
 
-- Вход и регистрация устанавливают HttpOnly Cookie `dnd_session`.
-- JWT не передаётся в JavaScript и не хранится в localStorage/sessionStorage.
-- API-запросы отправляются с `credentials: include`.
-- Cookie защищена флагами `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`.
-- Срок Cookie и JWT — 30 дней.
-- Frontend и API используют поддомены `onrender.com`, поэтому браузер рассматривает их как один site для SameSite-политики, при этом CORS разрешает только точный адрес frontend.
+Авторизация использует HttpOnly Cookie `dnd_session`, запросы выполняются с `credentials: include`. Для разных доменов требуется `SameSite=None; Secure`. При этом некоторые мобильные браузеры могут ограничивать сторонние Cookie, поэтому устойчивость входа на GitHub Pages зависит от политики конкретного браузера. Перенос frontend и API на один сайт пока не выполняется.
 
-После деплоя проверь вход, обновление страницы, закрытие/повторное открытие браузера и выход из аккаунта на телефоне. Гостевой режим продолжает хранить локальные данные в браузере устройства.
+## Будущий вариант размещения
 
-## Переменные API
+Файл `render.yaml` содержит подготовленный вариант Render Blueprint для будущего переноса frontend, API и базы данных на общую платформу. Само наличие файла не запускает перенос. Не импортируй Blueprint, пока не решено перейти на Render.
 
-Обязательные: `DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN`.
-Cookie: `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=lax`, `JWT_EXPIRES_IN=30d`.
-Frontend: `VITE_API_URL=https://dnd-dcorp-api.onrender.com`.
+## Разработка
+
+- Frontend: React + Vite + TypeScript.
+- API: NestJS + Prisma + PostgreSQL.
+- Игровые механики: правила D&D 5e.
+- Интерфейс: тёмная древесная тема портала и песочная тема игрового стола.
 
 Не публикуй секреты и реальные значения переменных окружения в репозитории.
