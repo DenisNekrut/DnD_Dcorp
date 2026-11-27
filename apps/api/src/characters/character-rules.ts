@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 export const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 export type Ability = (typeof ABILITIES)[number];
 
+export const DAMAGE_TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'] as const;
+
 export const SKILL_ABILITIES: Record<string, Ability> = {
   acrobatics: 'dex',
   animalHandling: 'wis',
@@ -41,6 +43,16 @@ function stringArray(value: unknown, field: string): string[] {
     throw new BadRequestException(`${field} must be an array of strings`);
   }
   return [...new Set(value as string[])];
+}
+
+function damageTypeArray(value: unknown, field: string): string[] {
+  const values = stringArray(value, field);
+  for (const type of values) {
+    if (!(DAMAGE_TYPES as readonly string[]).includes(type)) {
+      throw new BadRequestException(`Unknown damage type in ${field}: ${type}`);
+    }
+  }
+  return values;
 }
 
 function textField(input: Record<string, unknown>, field: string): string {
@@ -180,6 +192,9 @@ export function normalizeCharacterData(input: Record<string, unknown>) {
     skillProficiencies,
     skillExpertise,
     savingThrowProficiencies,
+    damageResistances: damageTypeArray(input.damageResistances, 'damageResistances'),
+    damageVulnerabilities: damageTypeArray(input.damageVulnerabilities, 'damageVulnerabilities'),
+    damageImmunities: damageTypeArray(input.damageImmunities, 'damageImmunities'),
     savingThrowModifiers,
     skillModifiers,
     passivePerception,
