@@ -884,6 +884,30 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(`Ход переходит к ${next.name}.`, "gold");
     }
   };
+  const previousTurn = () => {
+    if (!canEdit || !initiative.length) return;
+    const currentIndex = initiative.findIndex(token => token.id === activeToken?.id);
+    const previousIndex = currentIndex <= 0 ? initiative.length - 1 : currentIndex - 1;
+    const previous = initiative[previousIndex];
+    if (!previous) return;
+    setActiveTokenId(previous.id);
+    setTokens(items => items.map(token => token.id === previous.id ? { ...token, loadingUsedWeapons: [] } : token));
+    if (currentIndex <= 0) {
+      setRound(value => Math.max(1, value - 1));
+      addLog(`Возврат к предыдущему раунду: ход ${previous.name}.`, "muted");
+    } else {
+      addLog(`Ход возвращён к ${previous.name}.`, "muted");
+    }
+  };
+
+  const resetInitiative = () => {
+    if (!canEdit || !initiative.length) return;
+    const first = initiative[0];
+    setRound(1);
+    setActiveTokenId(first.id);
+    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [] })));
+    addLog(`Инициатива сброшена. Раунд 1: ход ${first.name}.`, "gold");
+  };
 
   const addCondition = (event: React.FormEvent) => {
     event.preventDefault();
@@ -1047,7 +1071,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           <section className="table-panel">
             <div className="table-panel-title"><div><Swords size={16}/><strong>Инициатива</strong></div><span>Раунд {round}</span></div>
             {initiative.length ? <div className="initiative-list">{initiative.map(token => <button key={token.id} className={`initiative-row ${activeToken?.id === token.id ? "initiative-current" : ""} ${selectedId === token.id ? "initiative-selected" : ""}`} onClick={() => setSelectedId(token.id)}><span className={`initiative-avatar token-${token.color}`}>{token.kind === "enemy" ? "!" : "♟"}</span><span className="initiative-name">{token.name}<small>{token.kind === "enemy" ? "Противник" : "Участник"}</small></span><b>{token.initiative}</b>{activeToken?.id === token.id && <i className="turn-indicator"/>}</button>)}</div> : <p className="room-empty-note">Добавленные участники появятся здесь.</p>}
-            <button className="button button-primary full-width next-turn" onClick={nextTurn} disabled={!canEdit || !initiative.length}>Следующий ход <ChevronRight size={16}/></button>
+            <div className="initiative-turn-controls">
+              <button className="button button-secondary" type="button" onClick={previousTurn} disabled={!canEdit || !initiative.length} aria-label="Предыдущий ход">Назад</button>
+              <button className="button button-primary next-turn" type="button" onClick={nextTurn} disabled={!canEdit || !initiative.length}>Следующий ход <ChevronRight size={16}/></button>
+              <button className="button button-secondary" type="button" onClick={resetInitiative} disabled={!canEdit || !initiative.length} title="Вернуть инициативу к первому участнику и первому раунду">Сброс</button>
+            </div>
           </section>
           {selected && <section className="table-panel selected-panel">
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
