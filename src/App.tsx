@@ -471,7 +471,7 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
       return;
     }
     const patch:Record<string,unknown> = {
-      ...Object.fromEntries(sheetListFields.map(field=>[field.key,textDraft[field.key].split(/\\r?\\n/).map(value=>value.trim()).filter(Boolean)])),
+      ...Object.fromEntries(sheetListFields.map(field=>[field.key,textDraft[field.key].split(/\r?\n/).map(value=>value.trim()).filter(Boolean)])),
       ...Object.fromEntries(sheetBiographyFields.map(field=>[field.key,textDraft[field.key].trim()])),
       currency,
       inspiration: inspirationDraft,
@@ -494,8 +494,6 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
     const values = toStringArray(value);
     return <section className="sheet-panel"><h3>{title}</h3>{values.length ? <ul className="sheet-text-list">{values.map((item,index)=><li key={`${title}-${index}`}>{item}</li>)}</ul> : <p className="sheet-muted">Пока не заполнено</p>}</section>;
   };
-  const biographyLabels = {personalityTraits:"Черты характера",ideals:"Идеалы",bonds:"Привязанности",flaws:"Слабости",appearance:"Внешность",backstory:"Предыстория"};
-  const biographyKeys = Object.keys(biographyLabels) as Array<keyof typeof biographyLabels>;
   return <div className="character-sheet">
     <div className="sheet-identity"><div><span className="sheet-kicker">ПЕРСОНАЖ · УРОВЕНЬ {character.level}</span><h2>{character.name}</h2><p>{[character.ancestry, character.subrace, character.className, character.background].filter(Boolean).join(" · ")}</p></div><div className="sheet-bonus"><span>Бонус мастерства</span><strong>{signedBonus(bonus)}</strong></div></div>
     <div className="sheet-combat-strip">
