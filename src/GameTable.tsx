@@ -683,8 +683,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       recordEditorHistory();
       const updatedTarget = applyDamageToToken(target, appliedDamage, critical);
       setTokens(items => items.map(token => token.id === target.id ? updatedTarget : token));
+      const damageExpression = parsed.flatDamage !== undefined
+        ? String(parsed.flatDamage)
+        : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? " (критический урон: кости удвоены)" : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
