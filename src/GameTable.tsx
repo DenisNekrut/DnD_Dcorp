@@ -49,7 +49,7 @@ const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): 
   if (disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -131,6 +131,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [newTokenHp, setNewTokenHp] = useState(10);
   const [newTokenAc, setNewTokenAc] = useState(10);
   const [newTokenInitiative, setNewTokenInitiative] = useState(10);
+  const [hpAdjustment, setHpAdjustment] = useState(1);
+  const [temporaryHpInput, setTemporaryHpInput] = useState(1);
   const [attackTargetId, setAttackTargetId] = useState("");
   const [damageFormula, setDamageFormula] = useState("1d6+0");
   const dirtyRef = useRef(false);
@@ -316,7 +318,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -406,6 +408,101 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const value = Math.floor(Math.random() * 20) + 1;
     addLog(`Локальный бросок d20: ${value}.`, value === 20 ? "gold" : "muted");
   };
+  const applyDamageToToken = (token: Token, amount: number, critical = false): Token => {
+    const damage = Math.max(0, Math.floor(amount));
+    if (damage === 0) return token;
+    const temporaryHp = Math.max(0, token.temporaryHp ?? 0);
+    const absorbed = Math.min(temporaryHp, damage);
+    const remaining = damage - absorbed;
+    const nextTemporaryHp = temporaryHp - absorbed;
+    if (token.hp <= 0) {
+      const currentSaves = token.deathSaves ?? { successes: 0, failures: 0 };
+      const successes = currentSaves.successes >= 3 ? 0 : currentSaves.successes;
+      const failures = Math.min(3, currentSaves.failures + (critical ? 2 : 1));
+      return { ...token, temporaryHp: nextTemporaryHp, deathSaves: token.kind === "hero" ? { successes, failures } : token.deathSaves };
+    }
+    const nextHp = Math.max(0, token.hp - remaining);
+    const overflow = Math.max(0, remaining - token.hp);
+    const massiveDamage = nextHp === 0 && overflow >= token.maxHp;
+    return {
+      ...token,
+      hp: nextHp,
+      temporaryHp: nextTemporaryHp,
+      ...(token.kind === "hero" ? { deathSaves: massiveDamage ? { successes: 0, failures: 3 } : { successes: 0, failures: 0 } } : {}),
+    };
+  };
+
+  const applyManualDamage = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    recordEditorHistory();
+    const updated = applyDamageToToken(selected, hpAdjustment);
+    setTokens(items => items.map(token => token.id === selected.id ? updated : token));
+    addLog("Урон " + selected.name + ": " + hpAdjustment + ". Хиты: " + updated.hp + "/" + updated.maxHp + ".", "danger");
+  };
+
+  const applyHealing = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    if ((selected.deathSaves?.failures ?? 0) >= 3) {
+      addLog(selected.name + " погиб: обычное лечение не может вернуть его к жизни.", "danger");
+      return;
+    }
+    recordEditorHistory();
+    const healedHp = Math.min(selected.maxHp, selected.hp + hpAdjustment);
+    const updated = { ...selected, hp: healedHp, ...(healedHp > 0 ? { deathSaves: { successes: 0, failures: 0 } } : {}) };
+    setTokens(items => items.map(token => token.id === selected.id ? updated : token));
+    addLog("Лечение " + selected.name + ": +" + (healedHp - selected.hp) + ". Хиты: " + healedHp + "/" + selected.maxHp + ".", "gold");
+  };
+
+  const applyTemporaryHp = () => {
+    if (!selected || !canEdit || layerLocks.figures || temporaryHpInput <= 0) return;
+    const previous = selected.temporaryHp ?? 0;
+    const next = Math.max(previous, Math.floor(temporaryHpInput));
+    if (next === previous) {
+      addLog("Временные хиты не складываются: сохранено текущее большее значение (" + previous + ").");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, temporaryHp: next } : token));
+    addLog(selected.name + " получает " + next + " временных хитов. Они не складываются с прежними.", "gold");
+  };
+
+  const rollDeathSave = async () => {
+    if (!selected || selected.kind !== "hero" || selected.hp > 0 || !canEdit || diceBusy) return;
+    const current = selected.deathSaves ?? { successes: 0, failures: 0 };
+    if (current.successes >= 3 || current.failures >= 3) return;
+    setDiceBusy(true);
+    try {
+      let value: number;
+      if (remoteEnabled) {
+        const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+          method: "POST",
+          body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+        });
+        value = result.rolls[0];
+      } else {
+        value = Math.floor(Math.random() * 20) + 1;
+      }
+      if (value === 20) {
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: 1, deathSaves: { successes: 0, failures: 0 } } : token));
+        addLog(selected.name + ": спасбросок от смерти — естественная 20. Персонаж восстанавливает 1 хит.", "gold");
+        return;
+      }
+      const next = { ...current };
+      if (value === 1) next.failures = Math.min(3, next.failures + 2);
+      else if (value >= 10) next.successes = Math.min(3, next.successes + 1);
+      else next.failures = Math.min(3, next.failures + 1);
+      recordEditorHistory();
+      setTokens(items => items.map(token => token.id === selected.id ? { ...token, deathSaves: next } : token));
+      const state = next.failures >= 3 ? "смерть" : next.successes >= 3 ? "стабилизация" : value >= 10 ? "успех" : "провал";
+      addLog(selected.name + ": спасбросок от смерти — " + value + ". Успехи " + next.successes + "/3, провалы " + next.failures + "/3: " + state + ".", next.failures >= 3 ? "danger" : next.successes >= 3 ? "gold" : "muted");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось выполнить спасбросок от смерти.");
+    } finally {
+      setDiceBusy(false);
+    }
+  };
+
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
     if (selectedRollBlocked) {
@@ -481,9 +578,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       damageTotal = Math.max(0, damageTotal);
       const appliedDamage = damageTotal;
       recordEditorHistory();
-      setTokens(items => items.map(token => token.id === target.id ? { ...token, hp: Math.max(0, token.hp - appliedDamage) } : token));
+      const updatedTarget = applyDamageToToken(target, appliedDamage, critical);
+      setTokens(items => items.map(token => token.id === target.id ? updatedTarget : token));
       addLog(
-        "Урон " + target.name + ": " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (critical ? " (критический урон: кости удвоены)" : "") + ". Осталось хитов: " + Math.max(0, target.hp - appliedDamage) + "/" + target.maxHp + ".",
+        "Урон " + target.name + ": " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (critical ? " (критический урон: кости удвоены)" : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -647,7 +745,19 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           {selected && <section className="table-panel selected-panel">
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
-            <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}{(selected.temporaryHp ?? 0) > 0 ? ` · +${selected.temporaryHp} врем.` : ""}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            <div className="hp-management">
+              <label>Количество<input type="number" min="1" max="999" value={hpAdjustment} onChange={event => setHpAdjustment(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
+              <button type="button" onClick={applyManualDamage} disabled={!canEdit || layerLocks.figures}>Урон</button>
+              <button type="button" onClick={applyHealing} disabled={!canEdit || layerLocks.figures || (selected.deathSaves?.failures ?? 0) >= 3}>Лечение</button>
+              <label>Временные хиты<input type="number" min="1" max="999" value={temporaryHpInput} onChange={event => setTemporaryHpInput(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
+              <button type="button" onClick={applyTemporaryHp} disabled={!canEdit || layerLocks.figures}>Применить</button>
+            </div>
+            {selected.kind === "hero" && selected.hp === 0 && <div className="death-save-panel">
+              <strong>Спасброски от смерти</strong>
+              <span>Успехи: {selected.deathSaves?.successes ?? 0}/3 · Провалы: {selected.deathSaves?.failures ?? 0}/3</span>
+              <button type="button" onClick={rollDeathSave} disabled={!canEdit || diceBusy || (selected.deathSaves?.successes ?? 0) >= 3 || (selected.deathSaves?.failures ?? 0) >= 3}>{(selected.deathSaves?.successes ?? 0) >= 3 ? "Персонаж стабилизирован" : (selected.deathSaves?.failures ?? 0) >= 3 ? "Персонаж погиб" : diceBusy ? "Бросок…" : "Бросить спасбросок"}</button>
+            </div>}
             <div className="combat-roll-panel">
               <strong>Проверка D20</strong>
               <div className="combat-roll-row">
@@ -696,7 +806,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select>
               </label>
             </div>
-            <div className="token-actions">{canEdit && <button disabled={activeToken?.id === selected.id} onClick={() => { setActiveTokenId(selected.id); addLog(`Текущий ход: ${selected.name}.`, "gold"); }}>Сделать активным</button>}<button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit || layerLocks.figures} onClick={removeSelectedToken}>Убрать</button></div>
+            <div className="token-actions">{canEdit && <button disabled={activeToken?.id === selected.id} onClick={() => { setActiveTokenId(selected.id); addLog("Текущий ход: " + selected.name + ".", "gold"); }}>Сделать активным</button>}<button disabled={!canEdit || layerLocks.figures} onClick={removeSelectedToken}>Убрать</button></div>
           </section>}
           <section className="table-panel">
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
