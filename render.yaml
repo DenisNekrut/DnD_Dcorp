@@ -1,0 +1,38 @@
+# Render Blueprint for a temporary test deployment.
+# Free PostgreSQL expires after 30 days; do not use it for permanent campaign data.
+services:
+  - type: web
+    name: dnd-dcorp-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    dockerCommand: npm run start:render
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WEB_ORIGIN
+        value: https://denisnekrut.github.io
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dnd-dcorp-db
+          property: connectionString
+
+databases:
+  - name: dnd-dcorp-db
+    databaseName: dnd_dcorp
+    user: dnd_dcorp
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
+    ipAllowList: []
