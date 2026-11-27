@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiRequest, isApiConfigured } from "./api";
 import GameTable from "./GameTable";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
@@ -8,7 +9,7 @@ import {
 
 type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки";
 type Campaign = { id: number; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
-type Character = { id: number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
+type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
 const characterGenders = ["Мужской", "Женский", "Другое", "Не указывать"];
 const characterAncestries = ["Драконорождённый", "Дварф", "Эльф", "Гном", "Полуэльф", "Полуорк", "Полурослик", "Человек", "Тифлинг"];
@@ -46,7 +47,38 @@ const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Настройки", icon: Settings }
 ];
 
+type SessionUser = { id: string; email: string; username: string };
+type ApiCharacter = { id: string; name: string; data: Record<string, unknown> };
+
+function mapApiCharacter(item: ApiCharacter): Character {
+  const data = item.data;
+  const scores = (data.abilityScores ?? {}) as Record<string, number>;
+  const hp = (data.hitPoints ?? {}) as { maximum?: number };
+  const hitDice = (data.hitDice ?? {}) as { die?: string };
+  return {
+    id: item.id, name: item.name, gender: String(data.gender ?? ""),
+    ancestry: String(data.ancestry ?? data.species ?? ""), subrace: String(data.subrace ?? ""),
+    className: String(data.characterClass ?? ""), background: String(data.background ?? ""),
+    alignment: String(data.alignment ?? ""), level: Number(data.level ?? 1),
+    abilityScores: scores, skillProficiencies: Array.isArray(data.skillProficiencies) ? data.skillProficiencies as string[] : [],
+    derived: {
+      maxHp: Number(hp.maximum ?? 1), armorClass: Number(data.armorClass ?? 10),
+      initiative: Number(data.initiative ?? 0), speed: Number(data.speed ?? 30),
+      passivePerception: Number(data.passivePerception ?? 10), hitDie: String(hitDice.die ?? "d8").replace("d", "к"),
+    },
+  };
+}
+
 function App() {
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const apiReady = isApiConfigured();
   const [active, setActive] = useState<Section>("Главная");
   const [menuOpen, setMenuOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -71,13 +103,47 @@ function App() {
   const [halfElfBonusTwo, setHalfElfBonusTwo] = useState("dex");
   const [query, setQuery] = useState("");
 
+  useEffect(() => {
+    if (!isApiConfigured()) { setAuthLoading(false); return; }
+    apiRequest<{ user: SessionUser }>("/auth/me")
+      .then(result => setSessionUser(result.user))
+      .catch(() => setSessionUser(null))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!sessionUser) { setCharacters([]); return; }
+    apiRequest<ApiCharacter[]>("/characters/personal")
+      .then(items => setCharacters(items.map(mapApiCharacter)))
+      .catch(error => setAuthError(error instanceof Error ? error.message : "Не удалось загрузить персонажей."));
+  }, [sessionUser]);
+
+  const submitAuth = async (event: React.FormEvent) => {
+    event.preventDefault(); setAuthError(""); setAuthBusy(true);
+    try {
+      const path = authMode === "login" ? "/auth/login" : "/auth/register";
+      const body = authMode === "login"
+        ? { email: authEmail.trim(), password: authPassword }
+        : { email: authEmail.trim(), username: authUsername.trim(), password: authPassword };
+      const result = await apiRequest<{ user: SessionUser }>(path, { method: "POST", body: JSON.stringify(body) });
+      setSessionUser(result.user); setAuthPassword("");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Не удалось выполнить вход.");
+    } finally { setAuthBusy(false); }
+  };
+
+  const logout = async () => {
+    try { await apiRequest("/auth/logout", { method: "POST" }); }
+    finally { setSessionUser(null); setCharacters([]); setAuthError(""); }
+  };
+
   const createCampaign = (event: React.FormEvent) => {
     event.preventDefault();
     if (!campaignName.trim()) return;
     setCampaigns(items => [...items, { id: Date.now(), name: campaignName.trim(), description: campaignDescription.trim(), access: campaignAccess, players: 1 }]);
     setCampaignName(""); setCampaignDescription(""); setCampaignModal(false);
   };
-  const createCharacter = (event: React.FormEvent) => {
+  const createCharacter = async (event: React.FormEvent) => {
     event.preventDefault();
     setCharacterError("");
     const fail = (message: string) => { setCharacterError(message); };
@@ -101,20 +167,50 @@ function App() {
     const hitDie=classHitDice[characterClass];
     const speed=characterAncestry==="Дварф"||characterAncestry==="Гном"||characterAncestry==="Полурослик"?25:30;
     const passivePerception=10+wisMod+(characterSkills.includes("perception")?2:0);
-    setCharacters(items => [...items, { id: Date.now(), name: characterName.trim(), gender: characterGender, ancestry: characterAncestry, subrace: characterSubrace, background: characterBackground, alignment: characterAlignment, className: characterClass, level: 1, abilityScores: finalScores, skillProficiencies: [...characterSkills], derived:{maxHp:Math.max(1,hitDie+conMod),armorClass:10+dexMod,initiative:dexMod,speed,passivePerception,hitDie:"к"+hitDie} }]);
+    try {
+      const maximumHp = Math.max(1, hitDie + conMod);
+      const saved = await apiRequest<ApiCharacter>("/characters/personal", {
+        method: "POST",
+        body: JSON.stringify({
+          name: characterName.trim(),
+          data: {
+            gender: characterGender, ancestry: characterAncestry, species: characterAncestry,
+            subrace: characterSubrace, characterClass, background: characterBackground,
+            alignment: characterAlignment, level: 1, abilityScores: finalScores,
+            skillProficiencies: characterSkills, savingThrowProficiencies: [],
+            armorClass: 10 + dexMod, speed, hitPoints: { maximum: maximumHp, current: maximumHp, temporary: 0 },
+            hitDice: { total: 1, remaining: 1, die: `d${hitDie}` },
+          },
+        }),
+      });
+      setCharacters(items => [mapApiCharacter(saved), ...items]);
+    } catch (error) {
+      setCharacterError(error instanceof Error ? error.message : "Не удалось сохранить персонажа. Проверь соединение с сервером.");
+      return;
+    }
     setCharacterName(""); setCharacterGender(""); setCharacterAncestry(""); setCharacterClass(""); setCharacterSubrace(""); setCharacterBackground(""); setCharacterAlignment(""); setCharacterAbilityScores({str:15,dex:14,con:13,int:12,wis:10,cha:8}); setCharacterSkills([]); setHalfElfBonusOne("str"); setHalfElfBonusTwo("dex"); setCharacterError(""); setCharacterModal(false);
   };
+
+  if (authLoading) return <div className="auth-screen"><section className="auth-card"><h1>DnD_Dcorp</h1><p>Проверяем подключение к аккаунту…</p></section></div>;
+  if (!apiReady) return <div className="auth-screen"><section className="auth-card"><h1>DnD_Dcorp</h1><p>Сервер приложения пока не настроен.</p><p className="auth-hint">Для входа и сохранения персонажей необходимо указать адрес API в переменной окружения <code>VITE_API_URL</code>. Гостевой режим отключён.</p></section></div>;
+  if (!sessionUser) return <div className="auth-screen"><section className="auth-card"><div className="eyebrow"><span/> ЛИЧНЫЙ АККАУНТ</div><h1>{authMode === "login" ? "С возвращением" : "Создать аккаунт"}</h1><p>Войди, чтобы сохранять персонажей и участвовать в кампаниях.</p><form className="modal-form" onSubmit={submitAuth}>
+    <label>Электронная почта<input type="email" required autoComplete="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="name@example.com"/></label>
+    {authMode === "register" && <label>Имя пользователя<input required minLength={3} maxLength={32} value={authUsername} onChange={e=>setAuthUsername(e.target.value)} placeholder="Имя в игре"/></label>}
+    <label>Пароль<input type="password" required minLength={12} maxLength={128} autoComplete={authMode === "login" ? "current-password" : "new-password"} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder="Не менее 12 символов"/></label>
+    {authError && <p className="validation-note" role="alert">{authError}</p>}
+    <button className="button button-primary full-width" type="submit" disabled={authBusy}>{authBusy ? "Подождите…" : authMode === "login" ? "Войти" : "Зарегистрироваться"}</button>
+  </form><button className="text-button auth-switch" onClick={()=>{setAuthMode(authMode==="login"?"register":"login");setAuthError("");}}>{authMode==="login"?"Нет аккаунта? Зарегистрироваться":"Уже есть аккаунт? Войти"}</button></section></div>;
 
   return <div className="app-shell">
     <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
       <div className="brand"><div className="brand-mark"><Swords size={23}/></div><div><strong>DnD_Dcorp</strong><span>ПРИКЛЮЧЕНИЯ НАЧИНАЮТСЯ ЗДЕСЬ</span></div><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Закрыть меню"><X size={18}/></button></div>
       <div className="nav-caption">РАЗДЕЛЫ</div>
       <nav className="main-nav" aria-label="Основная навигация">{navigation.map(({label,icon:Icon})=><button key={label} className={`nav-item ${active===label?"active":""}`} onClick={()=>{setActive(label);setMenuOpen(false);}}><Icon size={18}/><span>{label}</span>{active===label&&<span className="nav-indicator"/>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="sidebar-tip"><Sparkles size={17}/><p>Твоя история. Твои решения. Твой мир.</p></div><div className="profile-mini"><div className="avatar">П</div><div><strong>Путешественник</strong><span>Демо-профиль</span></div><ChevronDown size={16}/></div></div>
+      <div className="sidebar-bottom"><div className="sidebar-tip"><Sparkles size={17}/><p>Твоя история. Твои решения. Твой мир.</p></div><div className="profile-mini"><div className="avatar">{sessionUser.username.slice(0,1).toUpperCase()}</div><div><strong>{sessionUser.username}</strong><span>Аккаунт</span></div><ChevronDown size={16}/></div></div>
     </aside>
     {menuOpen&&<button className="scrim" aria-label="Закрыть меню" onClick={()=>setMenuOpen(false)}/>}
     <main className="main-area">
-      <header className="topbar"><button className="icon-button menu-toggle" onClick={()=>setMenuOpen(true)} aria-label="Открыть меню"><Menu size={20}/></button><div className="breadcrumbs"><span>DnD_Dcorp</span><span className="crumb-separator">/</span><strong>{active}</strong></div><div className="top-actions"><button className="icon-button search-button" aria-label="Поиск"><Search size={18}/></button><button className="icon-button notification-button" aria-label="Уведомления"><Bell size={18}/><i/></button><div className="top-avatar">П</div></div></header>
+      <header className="topbar"><button className="icon-button menu-toggle" onClick={()=>setMenuOpen(true)} aria-label="Открыть меню"><Menu size={20}/></button><div className="breadcrumbs"><span>DnD_Dcorp</span><span className="crumb-separator">/</span><strong>{active}</strong></div><div className="top-actions"><button className="icon-button search-button" aria-label="Поиск"><Search size={18}/></button><button className="icon-button notification-button" aria-label="Уведомления"><Bell size={18}/><i/></button><button className="top-avatar" title={sessionUser.username} onClick={logout}>{sessionUser.username.slice(0,1).toUpperCase()}</button></div></header>
       <div className="content">
         {active==="Главная"&&<Dashboard campaigns={campaigns} characters={characters} onCampaign={()=>setActive("Кампании")} onCharacters={()=>setActive("Персонажи")} onCreate={()=>setCampaignModal(true)}/>}
         {active==="Кампании"&&<section className="page-section">
@@ -126,7 +222,7 @@ function App() {
         {active==="Игровой стол"&&<GameTable campaignName={selectedCampaign?.name ?? "Демонстрационная сцена"} onBack={()=>setActive("Кампании")}/>}
         {active==="Персонажи"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
-          <div className="notice-strip"><Shield size={17}/><span>Личные карточки независимы от персонажей в игровых кампаниях. Правила создания и расчёты будут реализованы по стандарту 5e.</span></div>
+          <div className="notice-strip"><Shield size={17}/><span>Личные карточки сохраняются в аккаунте и не зависят от копий персонажей в кампаниях.</span></div>{authError && <p className="validation-note" role="alert">{authError}</p>}
           {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.gender} · {c.ancestry}{c.subrace ? ` (${c.subrace})` : ""} · {c.className}</p><p className="character-background">{c.background} · {c.alignment}</p><div className="ability-preview">{abilityFields.map(ability=><span key={ability.id}><b>{ability.name}</b>{c.abilityScores[ability.id]} <small>{Math.floor((c.abilityScores[ability.id]-10)/2)>=0?"+":""}{Math.floor((c.abilityScores[ability.id]-10)/2)}</small></span>)}</div><div className="skill-preview"><b>Владения навыками</b><span>{c.skillProficiencies.map(id=>skillCatalog.find(skill=>skill.id===id)?.name).join(", ")}</span></div><div className="derived-preview"><span><b>ХИТЫ</b>{c.derived.maxHp}</span><span><b>КД</b>{c.derived.armorClass}</span><span><b>ИНИЦИАТИВА</b>{c.derived.initiative>=0?"+":""}{c.derived.initiative}</span><span><b>СКОРОСТЬ</b>{c.derived.speed} фт.</span><span><b>ПАСС. ВОСПРИЯТИЕ</b>{c.derived.passivePerception}</span><span><b>КОСТЬ ХИТОВ</b>{c.derived.hitDie}</span></div><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
         </section>}
         {active==="Библиотека"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> СПРАВОЧНЫЕ МАТЕРИАЛЫ</div><h1>Библиотека</h1><p className="subtitle">Игровые справочники и материалы кампаний.</p></div></div><div className="library-grid">{[{title:"Персонажи",desc:"Классы, происхождения, предыстории и развитие.",icon:<UserRound/>},{title:"Существа",desc:"Противники, союзники и игровые характеристики.",icon:<Swords/>},{title:"Заклинания",desc:"Магические эффекты и правила их применения.",icon:<WandSparkles/>},{title:"Предметы",desc:"Снаряжение, оружие, доспехи и сокровища.",icon:<Shield/>}].map(x=><article className="library-card" key={x.title}><div className="quick-icon purple-icon">{x.icon}</div><h3>{x.title}</h3><p>{x.desc}</p><span className="coming-label">Раздел готовится</span></article>)}</div></section>}
@@ -134,7 +230,7 @@ function App() {
         <footer>DnD_Dcorp <span>•</span> Пространство для настольных приключений</footer>
       </div>
     </main>
-    {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><label>Доступ<select value={campaignAccess} onChange={e=>setCampaignAccess(e.target.value as "Открытая"|"По приглашению")}><option>По приглашению</option><option>Открытая</option></select></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div><small className="prototype-note">Демо: кампания пока сохраняется только в памяти страницы. Аккаунты и серверное сохранение будут добавлены позже.</small></form></Modal>}
+    {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><label>Доступ<select value={campaignAccess} onChange={e=>setCampaignAccess(e.target.value as "Открытая"|"По приглашению")}><option>По приглашению</option><option>Открытая</option></select></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div><small className="prototype-note">Создание кампаний будет подключено к серверу следующим этапом.</small></form></Modal>}
     {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Пол<select required value={characterGender} onChange={e=>setCharacterGender(e.target.value)}><option value="" disabled>Выбери вариант</option>{characterGenders.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Раса<select required value={characterAncestry} onChange={e=>{setCharacterAncestry(e.target.value);setCharacterSubrace("");}}><option value="" disabled>Выбери расу</option>{characterAncestries.map(option=><option key={option} value={option}>{option}</option>)}</select></label>{(ancestrySubraces[characterAncestry] ?? []).length > 0 && <label>Подраса<select required value={characterSubrace} onChange={e=>setCharacterSubrace(e.target.value)}><option value="" disabled>Выбери подрасу</option>{(ancestrySubraces[characterAncestry] ?? []).map(option=><option key={option} value={option}>{option}</option>)}</select></label>}
     {characterAncestry==="Полуэльф"&&<div className="builder-section"><div><strong>Гибкое увеличение характеристик</strong><span>Полуэльф получает +1 к двум разным характеристикам, кроме Харизмы.</span></div><div className="ability-assignment"><label>Первое увеличение<select value={halfElfBonusOne} onChange={e=>setHalfElfBonusOne(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusTwo).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Второе увеличение<select value={halfElfBonusTwo} onChange={e=>setHalfElfBonusTwo(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusOne).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div></div>}<label>Класс персонажа<select required value={characterClass} onChange={e=>{setCharacterClass(e.target.value);setCharacterSkills([]);}}><option value="" disabled>Выбери класс</option>{characterClasses.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Предыстория<select required value={characterBackground} onChange={e=>setCharacterBackground(e.target.value)}><option value="" disabled>Выбери предысторию</option>{characterBackgrounds.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Мировоззрение<select required value={characterAlignment} onChange={e=>setCharacterAlignment(e.target.value)}><option value="" disabled>Выбери мировоззрение</option>{characterAlignments.map(option=><option key={option} value={option}>{option}</option>)}</select></label><div className="builder-section"><div><strong>Характеристики</strong><span>Стандартный набор 5e: 15, 14, 13, 12, 10, 8. Распредели каждое значение один раз.</span></div><div className="ability-assignment">{abilityFields.map(ability=><label key={ability.id}>{ability.name}<select value={characterAbilityScores[ability.id]} onChange={e=>setCharacterAbilityScores(current=>({...current,[ability.id]:Number(e.target.value)}))}>{standardArray.map(score=><option key={score} value={score}>{score} ({Math.floor((score-10)/2)>=0?"+":""}{Math.floor((score-10)/2)})</option>)}</select></label>)}</div>{new Set(Object.values(characterAbilityScores)).size!==6&&<small className="validation-note">Каждое значение стандартного набора должно использоваться ровно один раз.</small>}</div>
     {characterClass&&<div className="builder-section"><div><strong>Владения навыками</strong><span>Выбери {classSkillRules[characterClass]?.count??2} навыка из списка класса.</span></div><div className="skill-choice-grid">{(classSkillRules[characterClass]?.options??[]).map(id=>{const skill=skillCatalog.find(item=>item.id===id)!;const checked=characterSkills.includes(id);return <label className="skill-choice" key={id}><input type="checkbox" checked={checked} disabled={!checked&&characterSkills.length>=(classSkillRules[characterClass]?.count??2)} onChange={e=>setCharacterSkills(current=>e.target.checked?[...current,id]:current.filter(value=>value!==id))}/>{skill.name}</label>})}</div><small className="validation-note">Выбрано: {characterSkills.length} из {classSkillRules[characterClass]?.count??2}</small></div>}

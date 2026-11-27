@@ -353,3 +353,28 @@ button, .quick-card, .nav-item { -webkit-tap-highlight-color: transparent; }
 @media(max-width:520px) {
   .derived-preview { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+
+/* Authentication and API setup */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 18px;
+  background: radial-gradient(circle at 50% 0%, rgba(116, 84, 164, .18), transparent 42%), #101018;
+}
+.auth-card {
+  width: min(100%, 460px);
+  padding: 34px;
+  border: 1px solid rgba(202, 166, 105, .28);
+  border-radius: 18px;
+  background: rgba(27, 26, 37, .96);
+  box-shadow: 0 24px 80px rgba(0,0,0,.38);
+}
+.auth-card h1 { margin: 12px 0; color: #ead9b5; font-family: Cinzel, Georgia, serif; }
+.auth-card > p { color: #b7b1c2; line-height: 1.6; }
+.auth-card .modal-form { margin-top: 24px; }
+.auth-hint { padding: 14px; border-radius: 10px; background: rgba(196, 155, 91, .1); }
+.auth-hint code { color: #e8c98f; }
+.auth-switch { display: block; margin: 18px auto 0; }
+.auth-card button:disabled { opacity: .65; cursor: wait; }

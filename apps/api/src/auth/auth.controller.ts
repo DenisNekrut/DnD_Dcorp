@@ -50,10 +50,15 @@ export class AuthController {
   }
 
   private cookieOptions() {
+    const sameSite = this.config.get<'lax' | 'strict' | 'none'>('COOKIE_SAME_SITE') ?? 'lax';
+    const secure = this.config.get<string>('COOKIE_SECURE') === 'true';
+    if (sameSite === 'none' && !secure) {
+      throw new Error('COOKIE_SECURE=true is required when COOKIE_SAME_SITE=none');
+    }
     return {
       httpOnly: true,
-      secure: this.config.get<string>('COOKIE_SECURE') === 'true',
-      sameSite: 'lax' as const,
+      secure,
+      sameSite,
       path: '/',
     };
   }
