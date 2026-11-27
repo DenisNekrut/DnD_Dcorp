@@ -35,11 +35,13 @@
  
 /* The configurable cell size is shared by the grid and all snapping tools. */
 .battle-map.map-sand.with-grid {
-  background-size: var(--grid-cell-size,38px) var(--grid-cell-size,38px), var(--grid-cell-size,38px) var(--grid-cell-size,38px), auto, auto, auto, auto, auto, auto;
+  background-position:50% 50%;
+  background-size: var(--scaled-grid-cell-size,38px) var(--scaled-grid-cell-size,38px), var(--scaled-grid-cell-size,38px) var(--scaled-grid-cell-size,38px), auto, auto, auto, auto, auto, auto;
 }
 .battle-map.map-stone.with-grid,
 .battle-map.map-forest.with-grid {
-  background-size: var(--grid-cell-size,38px) var(--grid-cell-size,38px), var(--grid-cell-size,38px) var(--grid-cell-size,38px), auto, auto, auto;
+  background-position:50% 50%;
+  background-size: var(--scaled-grid-cell-size,38px) var(--scaled-grid-cell-size,38px), var(--scaled-grid-cell-size,38px) var(--scaled-grid-cell-size,38px), auto, auto, auto;
 }
 .grid-cell-toolbar { display:inline-flex; align-items:center; gap:5px; color:#d5c09d; font-size:10px; white-space:nowrap; }
 .grid-cell-toolbar input { width:58px; padding:5px 6px; border:1px solid rgba(198,154,85,.35); border-radius:5px; color:#f0e2c9; background:#1b130d; font:inherit; font-size:10px; }
