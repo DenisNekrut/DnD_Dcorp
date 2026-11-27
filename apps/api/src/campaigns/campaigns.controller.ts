@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from '../auth/jwt.strategy';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { JoinCampaignDto } from './dto/join-campaign.dto';
+import { UpdateCampaignMemberRoleDto } from './dto/update-campaign-member-role.dto';
 
 type AuthRequest = Request & { user: AuthenticatedUser };
 
@@ -54,6 +55,30 @@ export class CampaignsController {
     @Body() dto: JoinCampaignDto,
   ) {
     return this.campaigns.requestToJoin(request.user.id, campaignId, dto.password);
+  }
+
+  @Get(':campaignId/members')
+  members(@Req() request: AuthRequest, @Param('campaignId') campaignId: string) {
+    return this.campaigns.members(request.user.id, campaignId);
+  }
+
+  @Post(':campaignId/members/:membershipId/role')
+  updateMemberRole(
+    @Req() request: AuthRequest,
+    @Param('campaignId') campaignId: string,
+    @Param('membershipId') membershipId: string,
+    @Body() dto: UpdateCampaignMemberRoleDto,
+  ) {
+    return this.campaigns.updateMemberRole(request.user.id, campaignId, membershipId, dto.role);
+  }
+
+  @Post(':campaignId/members/:membershipId/remove')
+  removeMember(
+    @Req() request: AuthRequest,
+    @Param('campaignId') campaignId: string,
+    @Param('membershipId') membershipId: string,
+  ) {
+    return this.campaigns.removeMember(request.user.id, campaignId, membershipId);
   }
 
   @Get(':campaignId/requests')

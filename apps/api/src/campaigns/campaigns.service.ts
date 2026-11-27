@@ -145,6 +145,101 @@ export class CampaignsService {
     });
   }
 
+  async members(userId: string, campaignId: string) {
+    await this.assertManager(userId, campaignId);
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        createdAt: true,
+        owner: { select: { id: true, username: true } },
+      },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    const members = await this.prisma.campaignMembership.findMany({
+      where: { campaignId, status: MembershipStatus.APPROVED },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        user: { select: { id: true, username: true } },
+      },
+    });
+
+    return [
+      {
+        id: `owner-${campaignId}`,
+        role: CampaignRole.GAME_MASTER,
+        status: MembershipStatus.APPROVED,
+        createdAt: campaign.createdAt,
+        isOwner: true,
+        user: campaign.owner,
+      },
+      ...members,
+    ];
+  }
+
+  async updateMemberRole(
+    userId: string,
+    campaignId: string,
+    membershipId: string,
+    role: CampaignRole,
+  ) {
+    await this.assertManager(userId, campaignId);
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { ownerId: true },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    const membership = await this.prisma.campaignMembership.findFirst({
+      where: { id: membershipId, campaignId, status: MembershipStatus.APPROVED },
+      select: { id: true, role: true },
+    });
+    if (!membership) throw new NotFoundException('Approved campaign member not found');
+
+    if (userId !== campaign.ownerId && (role === CampaignRole.GAME_MASTER || membership.role === CampaignRole.GAME_MASTER)) {
+      throw new ForbiddenException('Only the campaign owner can assign or change game master roles');
+    }
+
+    return this.prisma.campaignMembership.update({
+      where: { id: membershipId },
+      data: { role },
+      select: {
+        id: true,
+        role: true,
+        status: true,
+        user: { select: { id: true, username: true } },
+      },
+    });
+  }
+
+  async removeMember(userId: string, campaignId: string, membershipId: string) {
+    await this.assertManager(userId, campaignId);
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { ownerId: true },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    const membership = await this.prisma.campaignMembership.findFirst({
+      where: { id: membershipId, campaignId, status: MembershipStatus.APPROVED },
+      select: { id: true, role: true, user: { select: { username: true } } },
+    });
+    if (!membership) throw new NotFoundException('Approved campaign member not found');
+    if (
+      userId !== campaign.ownerId &&
+      (membership.role === CampaignRole.GAME_MASTER || membership.role === CampaignRole.ASSISTANT)
+    ) {
+      throw new ForbiddenException('Only the campaign owner can remove a game master or assistant');
+    }
+
+    await this.prisma.campaignMembership.delete({ where: { id: membershipId } });
+    return { removed: true, username: membership.user.username };
+  }
+
   async pending(userId: string, campaignId: string) {
     await this.assertManager(userId, campaignId);
     return this.prisma.campaignMembership.findMany({
