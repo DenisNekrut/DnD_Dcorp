@@ -48,6 +48,21 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     setSelectedId(object.id);
   };
 
+  const updateSelected = (patch: Partial<MapObject>) => {
+    if (!selected) return;
+    onChange(objects.map(item => item.id === selected.id ? { ...item, ...patch } : item));
+  };
+
+  const reorderSelected = (direction: -1 | 1) => {
+    if (!selected) return;
+    const index = objects.findIndex(item => item.id === selected.id);
+    const next = index + direction;
+    if (index < 0 || next < 0 || next >= objects.length) return;
+    const reordered = [...objects];
+    [reordered[index], reordered[next]] = [reordered[next], reordered[index]];
+    onChange(reordered);
+  };
+
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingId || !canEdit) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -76,6 +91,16 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       </>}
       <div className="map-layer-visibility">{(["terrain", "structures", "decorations"] as MapLayer[]).map(layer => <button key={layer} type="button" className={visibleLayers[layer] ? "layer-visible" : ""} disabled={!canEdit} title={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} onClick={() => onVisibilityChange({ ...visibleLayers, [layer]: !visibleLayers[layer] })}>{visibleLayers[layer] ? <Eye size={13}/> : <EyeOff size={13}/>} {layerNames[layer]}</button>)}</div>
     </div>
+    {selected && canEdit && visibleLayers[layerOf(selected)] && <div className="map-object-inspector" onPointerDown={event => event.stopPropagation()}>
+      <strong>Параметры объекта</strong>
+      <label>X <input type="number" min="2" max="98" step="0.5" value={selected.x} onChange={event => updateSelected({ x: Math.max(2, Math.min(98, Number(event.target.value))) })}/></label>
+      <label>Y <input type="number" min="2" max="98" step="0.5" value={selected.y} onChange={event => updateSelected({ y: Math.max(2, Math.min(98, Number(event.target.value))) })}/></label>
+      <label>Ш <input type="number" min="2" max="80" step="0.5" value={selected.width} onChange={event => updateSelected({ width: Math.max(2, Math.min(80, Number(event.target.value))) })}/></label>
+      <label>В <input type="number" min="2" max="80" step="0.5" value={selected.height} onChange={event => updateSelected({ height: Math.max(2, Math.min(80, Number(event.target.value))) })}/></label>
+      <label>° <input type="number" min="0" max="359" step="15" value={selected.rotation} onChange={event => updateSelected({ rotation: ((Number(event.target.value) % 360) + 360) % 360 })}/></label>
+      <button type="button" title="На один уровень вперёд" onClick={() => reorderSelected(1)}>Вперёд</button>
+      <button type="button" title="На один уровень назад" onClick={() => reorderSelected(-1)}>Назад</button>
+    </div>}
     <div className="map-object-layer" onPointerMove={move} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
