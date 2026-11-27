@@ -735,21 +735,36 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const recoverSpellSlotsAfterLongRest = () => {
     if (!selected || !canEdit || layerLocks.figures) return;
     const slots = selected.spellSlots ?? {};
-    const spent = Object.values(slots).reduce((total, slot) => total + slot.used, 0);
-    if (!spent && !selected.actionUsed && !selected.bonusActionUsed && !selected.reactionUsed && !selected.concentrating) {
-      addLog(selected.name + ": восстанавливать нечего — ячейки и боевые ресурсы уже доступны.", "muted");
+    const hitDice = selected.hitDice ?? { dieSides: 8, total: 0, used: 0 };
+    const spentSlots = Object.values(slots).reduce((total, slot) => total + slot.used, 0);
+    const hitDiceRecovery = hitDice.used > 0 ? Math.max(1, Math.floor(hitDice.total / 2)) : 0;
+    const hasChanges = spentSlots > 0 || hitDice.used > 0 || selected.hp < selected.maxHp ||
+      (selected.temporaryHp ?? 0) > 0 || (selected.exhaustionLevel ?? 0) > 0 ||
+      selected.actionUsed || selected.bonusActionUsed || selected.reactionUsed || selected.concentrating;
+    if (!hasChanges) {
+      addLog(selected.name + ": длительный отдых не изменил состояние — ресурсы уже восстановлены.", "muted");
       return;
     }
     recordEditorHistory();
-    setTokens(items => items.map(token => token.id === selected.id ? {
-      ...token,
-      spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
-      actionUsed: false,
-      bonusActionUsed: false,
-      reactionUsed: false,
-      concentrating: false,
-    } : token));
-    addLog(selected.name + ": завершён длительный отдых. Ячейки заклинаний и боевые ресурсы восстановлены; концентрация прекращена.", "gold");
+    setTokens(items => items.map(token => {
+      if (token.id !== selected.id) return token;
+      const tokenHitDice = token.hitDice ?? hitDice;
+      const recoveredDice = Math.min(tokenHitDice.used, hitDiceRecovery);
+      return {
+        ...token,
+        hp: token.maxHp,
+        temporaryHp: 0,
+        hitDice: { ...tokenHitDice, used: Math.max(0, tokenHitDice.used - recoveredDice) },
+        spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
+        actionUsed: false,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        concentrating: false,
+        exhaustionLevel: Math.max(0, (token.exhaustionLevel ?? 0) - 1),
+        deathSaves: { successes: 0, failures: 0 },
+      };
+    }));
+    addLog(selected.name + ": длительный отдых завершён. Восстановлены все хиты и ячейки; возвращено " + hitDiceRecovery + " костей хитов (фактически: " + Math.min(hitDice.used, hitDiceRecovery) + "); истощение уменьшено на 1, временные хиты и концентрация сброшены.", "gold");
   };
 
   const updateSpellSlotMaximum = (level: number, maximum: number) => {
