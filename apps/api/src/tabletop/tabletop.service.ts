@@ -39,6 +39,9 @@ export class TabletopService {
             tokens: storedState?.layerVisibility && (storedState.layerVisibility as Record<string, unknown>).figures === false
               ? []
               : Array.isArray(storedState?.tokens) ? storedState.tokens : [],
+            activeTokenId: (storedState?.layerVisibility as Record<string, unknown> | undefined)?.figures === false
+              ? null
+              : storedState?.activeTokenId ?? null,
             objects: (Array.isArray(storedState?.objects) ? storedState.objects : []).filter((value) => {
               if (!value || typeof value !== 'object') return false;
               const item = value as Record<string, unknown>;

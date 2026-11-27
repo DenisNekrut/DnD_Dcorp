@@ -13,7 +13,7 @@ type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
 type MapAsset = { key: string; url: string; contentType: string; size: number };
 type MapView = { scale: number; x: number; y: number };
-type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; mapView?: MapView; round: number; log: LogEntry[] };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; mapView?: MapView; round: number; activeTokenId?: string | null; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks; mapView: MapView };
@@ -45,6 +45,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [round, setRound] = useState(1);
+  const [activeTokenId, setActiveTokenId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
@@ -64,7 +65,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
-  const activeToken = initiative.length ? initiative[(round - 1) % initiative.length] : undefined;
+  const activeToken = initiative.find(token => token.id === activeTokenId) ?? initiative[0];
   const selected = tokens.find(token => token.id === selectedId);
   const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks, mapView });
   const recordEditorHistory = () => {
@@ -130,9 +131,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setLayerLocks({ ...defaultLayerLocks });
       setMapAsset(null);
       setMapView({ ...defaultMapView });
+      setActiveTokenId(null);
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
+    setActiveTokenId(state.activeTokenId ?? null);
     if (typeof response.permissions?.canEdit === "boolean") setCanEdit(response.permissions.canEdit);
     updatedAtRef.current = response.updatedAt;
     setLastUpdated(response.updatedAt ? new Date(response.updatedAt).toLocaleTimeString() : "");
@@ -192,7 +195,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, log };
+    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -212,7 +215,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
   useEffect(() => {
     if (!remoteEnabled || !campaignId) return;
@@ -320,8 +323,33 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
   const nextTurn = () => {
     if (!canEdit || !initiative.length) return;
-    if (round > 0) setRound(value => value + 1);
-    addLog(`Начался раунд ${round + 1}.`, "gold");
+    const currentIndex = initiative.findIndex(token => token.id === activeToken?.id);
+    const nextIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+    if (nextIndex >= initiative.length) {
+      const first = initiative[0];
+      setActiveTokenId(first.id);
+      setRound(value => value + 1);
+      addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
+    } else {
+      const next = initiative[nextIndex];
+      setActiveTokenId(next.id);
+      addLog(`Ход переходит к ${next.name}.`, "gold");
+    }
+  };
+
+  const removeSelectedToken = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const currentIndex = initiative.findIndex(token => token.id === activeToken?.id);
+    const remaining = initiative.filter(token => token.id !== selected.id);
+    if (selected.id === activeToken?.id) {
+      const next = initiative[currentIndex + 1] ?? remaining[0];
+      if (currentIndex === initiative.length - 1 && remaining.length) setRound(value => value + 1);
+      setActiveTokenId(next?.id ?? null);
+    }
+    recordEditorHistory();
+    setTokens(items => items.filter(token => token.id !== selected.id));
+    setSelectedId(null);
+    addLog(`${selected.name} удалён с карты.`);
   };
   const moveToken = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingId || !canEdit || layerLocks.figures) return;
@@ -409,13 +437,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           <section className="table-panel">
             <div className="table-panel-title"><div><Swords size={16}/><strong>Инициатива</strong></div><span>Раунд {round}</span></div>
             {initiative.length ? <div className="initiative-list">{initiative.map(token => <button key={token.id} className={`initiative-row ${activeToken?.id === token.id ? "initiative-current" : ""} ${selectedId === token.id ? "initiative-selected" : ""}`} onClick={() => setSelectedId(token.id)}><span className={`initiative-avatar token-${token.color}`}>{token.kind === "enemy" ? "!" : "♟"}</span><span className="initiative-name">{token.name}<small>{token.kind === "enemy" ? "Противник" : "Участник"}</small></span><b>{token.initiative}</b>{activeToken?.id === token.id && <i className="turn-indicator"/>}</button>)}</div> : <p className="room-empty-note">Добавленные участники появятся здесь.</p>}
-            <button className="button button-primary full-width next-turn" onClick={nextTurn} disabled={!canEdit || !initiative.length}>Следующий раунд <ChevronRight size={16}/></button>
+            <button className="button button-primary full-width next-turn" onClick={nextTurn} disabled={!canEdit || !initiative.length}>Следующий ход <ChevronRight size={16}/></button>
           </section>
           {selected && <section className="table-panel selected-panel">
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
-            <div className="token-actions"><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
+            <div className="token-actions">{canEdit && <button disabled={activeToken?.id === selected.id} onClick={() => { setActiveTokenId(selected.id); addLog(`Текущий ход: ${selected.name}.`, "gold"); }}>Сделать активным</button>}<button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit || layerLocks.figures} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit || layerLocks.figures} onClick={removeSelectedToken}>Убрать</button></div>
           </section>}
           <section className="table-panel">
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
