@@ -13,3 +13,5 @@
 .map-object-inspector .locked-hint { display:inline-flex; align-items:center; gap:4px; margin-left:7px; color:#e4a18c; font-size:9px; font-weight:500; }
 .map-object-inspector input:disabled { opacity:.55; cursor:not-allowed; }
 @media(max-width:720px){.map-layer-control{flex:1}.map-layer-control button:first-child{flex:1;justify-content:center}}
+
+.map-object-layer { touch-action:none; }
