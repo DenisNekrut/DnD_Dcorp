@@ -293,6 +293,8 @@ function App() {
         description: created.description ?? "",
         access: created.applicationsOpen === false ? "По приглашению" : "Открытая",
         players: 1,
+        canManage: true,
+        isOwner: true,
       }]);
       setCampaignName(""); setCampaignDescription(""); setCampaignModal(false);
     } catch (error) {
