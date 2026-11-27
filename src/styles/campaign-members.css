@@ -1,0 +1,43 @@
+.campaign-members-panel{display:grid;gap:18px;color:#ead9b9}
+.campaign-members-summary{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.campaign-members-summary>div{display:flex;align-items:center;gap:9px;padding:12px;border:1px solid rgba(198,154,85,.22);border-radius:7px;background:rgba(255,255,255,.025)}
+.campaign-members-summary svg{color:#d8b576}
+.campaign-members-summary span{color:#c3ad89;font-size:11px}
+.campaign-members-summary strong{margin-left:auto;color:#f0dfbf;font-size:15px;font-variant-numeric:tabular-nums}
+.campaign-members-section{display:grid;gap:9px}
+.campaign-members-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.campaign-members-heading h3{margin:0;color:#e8c98f;font-family:Georgia,serif;font-size:16px}
+.campaign-members-heading>span{color:#b49c7a;font-size:11px}
+.campaign-members-refresh{width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(198,154,85,.3);border-radius:6px;color:#dec18d;background:rgba(198,154,85,.08);cursor:pointer}
+.campaign-members-refresh:disabled{opacity:.45}
+.campaign-member-list{display:grid;gap:7px}
+.campaign-member-row{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border:1px solid rgba(198,154,85,.18);border-radius:7px;background:rgba(19,13,9,.36)}
+.campaign-member-avatar{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border:1px solid rgba(198,154,85,.38);border-radius:50%;color:#f1d8a8;background:rgba(198,154,85,.13);font-size:13px;font-weight:700}
+.campaign-member-identity{display:grid;gap:3px;flex:1;min-width:0}
+.campaign-member-identity strong{overflow:hidden;color:#f0e2c9;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.campaign-member-identity span{color:#aa9677;font-size:9px}
+.campaign-member-role{width:168px;max-width:40%}
+.campaign-member-role select{width:100%;min-width:0;padding:7px 8px;border:1px solid rgba(198,154,85,.25);border-radius:5px;color:#e9d8bb;background:#21170f;font:inherit;font-size:10px}
+.campaign-member-role select:disabled{opacity:.65}
+.campaign-member-remove{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border:1px solid rgba(190,100,77,.38);border-radius:6px;color:#d99580;background:rgba(130,53,38,.12);cursor:pointer}
+.campaign-member-remove:disabled{opacity:.35;cursor:not-allowed}
+.campaign-request-actions{display:flex;gap:6px}
+.campaign-request-actions button{width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(198,154,85,.38);border-radius:6px;color:#e8c88a;background:rgba(198,154,85,.1);cursor:pointer}
+.campaign-request-actions button:first-child{color:#a7c58c;border-color:rgba(129,166,100,.42);background:rgba(100,140,75,.12)}
+.campaign-request-actions button:last-child{color:#d99580;border-color:rgba(190,100,77,.38);background:rgba(130,53,38,.12)}
+.campaign-request-actions button:disabled{opacity:.4;cursor:not-allowed}
+.campaign-members-empty{margin:0;padding:14px;border:1px dashed rgba(198,154,85,.22);border-radius:6px;color:#ae9978;text-align:center;font-size:11px;line-height:1.55}
+.campaign-members-error,.campaign-members-notice{margin:0;padding:9px 11px;border-radius:6px;font-size:11px;line-height:1.45}
+.campaign-members-error{border:1px solid rgba(190,100,77,.35);color:#e5a08c;background:rgba(130,53,38,.1)}
+.campaign-members-notice{border:1px solid rgba(129,166,100,.3);color:#b7ce9e;background:rgba(100,140,75,.1)}
+.campaign-members-footnote{display:flex;align-items:flex-start;gap:7px;margin:0;color:#a99473;font-size:9px;line-height:1.5}
+.campaign-members-footnote svg{flex:0 0 auto;color:#d8b576}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:520px){
+ .campaign-members-panel{gap:14px}
+ .campaign-member-row{gap:7px;padding:8px}
+ .campaign-member-role{width:130px;max-width:43%}
+ .campaign-member-role select{font-size:9px;padding:7px 4px}
+ .campaign-member-identity strong{font-size:10px}
+ .campaign-member-remove,.campaign-request-actions button{width:30px;height:30px;flex-basis:30px}
+}
