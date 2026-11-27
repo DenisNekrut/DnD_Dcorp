@@ -69,7 +69,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -132,6 +132,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [rollKind, setRollKind] = useState<RollKind>("attack");
   const [rollModifier, setRollModifier] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState<SkillId>("acrobatics");
+  const [attackAbility, setAttackAbility] = useState<AbilityId>("strength");
+  const [useWeaponProficiency, setUseWeaponProficiency] = useState(false);
   const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
   const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
   const [message, setMessage] = useState("");
@@ -174,7 +176,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       : rollModeOverride
     : "normal";
   const selectedSkillData = skillLabels.find(skill => skill.id === selectedSkill) ?? skillLabels[0];
-  const effectiveRollModifier = rollKind === "skill" ? selected?.skillModifiers?.[selectedSkill] ?? 0 : rollModifier;
+  const effectiveRollModifier = rollKind === "skill"
+    ? selected?.skillModifiers?.[selectedSkill] ?? 0
+    : rollKind === "attack"
+      ? (selected?.abilityModifiers?.[attackAbility] ?? 0) + (useWeaponProficiency ? selected?.proficiencyBonus ?? 0 : 0) + rollModifier
+      : rollModifier;
   const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
   const selectedRollBlocked = Boolean(selected && ((selected.exhaustionLevel ?? 0) >= 6 || (rollKind === "attack" && selectedBlockedCondition)));
   const selectedAutoFailCondition = selected?.conditions?.find(condition => ["paralyzed", "stunned", "unconscious"].includes(condition));
@@ -346,7 +352,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const rawAbilityModifiers = (data.abilityModifiers ?? {}) as Record<string, number>;
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus: Number(data.proficiencyBonus ?? 0), abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? 0), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? 0), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? 0), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? 0), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? 0), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? 0) }, temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -812,7 +819,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 {rollKind === "save" && <select value={saveAbility} onChange={event => setSaveAbility(event.target.value as AbilityId)} disabled={!canEdit}>
                   {(Object.keys(abilityLabels) as AbilityId[]).map(ability => <option key={ability} value={ability}>{abilityLabels[ability]}</option>)}
                 </select>}
-                <input type="number" value={effectiveRollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор броска"}/>
+                <input type="number" value={rollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Дополнительный модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор к базовому бонусу"}/>
               </div>
               {rollKind === "attack" && <div className="combat-attack-options">
                 <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
@@ -821,6 +828,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
                   <option value="melee">Ближний бой (до 5 футов)</option><option value="ranged">Дальний бой</option>
                 </select></label>
+                <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit}>
+                  <option value="strength">Сила</option><option value="dexterity">Ловкость</option>
+                </select></label>
+                <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useWeaponProficiency} onChange={event => setUseWeaponProficiency(event.target.checked)} disabled={!canEdit}/> Владение оружием (+{selected?.proficiencyBonus ?? 0})</label>
+                <span className="attack-bonus-preview">Бонус атаки: {effectiveRollModifier >= 0 ? "+" : ""}{effectiveRollModifier}</span>
                 <label>Урон<input value={damageFormula} onChange={event => setDamageFormula(event.target.value)} placeholder="1d8+3" disabled={!canEdit} aria-label="Формула урона"/></label>
               </div>}
               <select className="combat-roll-mode" value={rollModeOverride} onChange={event => setRollModeOverride(event.target.value as RollModeOverride)} disabled={!canEdit}>
