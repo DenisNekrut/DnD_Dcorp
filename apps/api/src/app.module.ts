@@ -9,8 +9,10 @@ import { DiceModule } from './dice/dice.module';
 import { UsersModule } from './users/users.module';
 import { TabletopModule } from './tabletop/tabletop.module';
 import { AdminModule } from './admin/admin.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
+  controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
