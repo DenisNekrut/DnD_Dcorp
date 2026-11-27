@@ -22,7 +22,7 @@
 .empty-map-hint span{max-width:360px;font-size:11px;line-height:1.6}
 .room-empty-note{margin:8px 0;color:#b49c7a;font-size:10px;line-height:1.6}
 .add-token-form{display:grid;gap:10px}
-.add-token-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:7px}
+.add-token-fields{display:grid;grid-template-columns:1.2fr .7fr .7fr .7fr;gap:7px}
 .table-events-panel{padding:15px;border:1px solid rgba(198,154,85,.3);border-radius:7px;background:linear-gradient(145deg,#3b291a,#24180f);box-shadow:0 10px 24px rgba(0,0,0,.2)}
 .table-events-panel .table-panel-title{margin-bottom:13px}
 .table-log-below{max-height:230px;overflow:auto;padding-right:5px}
@@ -66,3 +66,8 @@
 .battle-map .map-scale { z-index:2; }
 
 .combat-roll-row select { min-width:0; flex:1 1 100%; }
+
+.combat-attack-options { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.combat-attack-options label { display:grid; gap:4px; color:#d7c29c; font-size:9px; }
+.combat-attack-options input,.combat-attack-options select { min-width:0; width:100%; padding:7px 8px; border:1px solid rgba(198,154,85,.3); border-radius:5px; color:#ead9b9; background:#24190f; font-size:10px; }
+@media(max-width:520px){.combat-attack-options{grid-template-columns:1fr}}
