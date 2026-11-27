@@ -31,3 +31,17 @@
 .table-events-panel .table-chat-form input{font-size:11px}
 .table-events-panel .table-chat-form button{width:38px;flex-basis:38px}
 @media(max-width:560px){.room-setup-panel{padding:16px}.room-setup-intro h2{font-size:19px}.add-token-fields{grid-template-columns:1fr 1fr}.add-token-fields label:first-child{grid-column:1/-1}.table-events-panel{padding:12px}}
+
+ 
+/* The configurable cell size is shared by the grid and all snapping tools. */
+.battle-map.map-sand.with-grid {
+  background-size: var(--grid-cell-size,38px) var(--grid-cell-size,38px), var(--grid-cell-size,38px) var(--grid-cell-size,38px), auto, auto, auto, auto, auto, auto;
+}
+.battle-map.map-stone.with-grid,
+.battle-map.map-forest.with-grid {
+  background-size: var(--grid-cell-size,38px) var(--grid-cell-size,38px), var(--grid-cell-size,38px) var(--grid-cell-size,38px), auto, auto, auto;
+}
+.grid-cell-toolbar { display:inline-flex; align-items:center; gap:5px; color:#d5c09d; font-size:10px; white-space:nowrap; }
+.grid-cell-toolbar input { width:58px; padding:5px 6px; border:1px solid rgba(198,154,85,.35); border-radius:5px; color:#f0e2c9; background:#1b130d; font:inherit; font-size:10px; }
+.grid-cell-toolbar input:disabled { opacity:.55; }
+.grid-cell-toolbar span { color:#ae9676; }
