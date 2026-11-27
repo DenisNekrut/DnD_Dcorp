@@ -8,7 +8,8 @@
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "admin:promote": "node scripts/promote-admin.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.11",

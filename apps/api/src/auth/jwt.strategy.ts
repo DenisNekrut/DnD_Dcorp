@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.module';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -6,11 +7,13 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  username: string;
+  platformRole: 'USER' | 'ADMIN';
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(config: ConfigService, private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: { cookies?: Record<string, string> }) => request?.cookies?.dnd_session ?? null,
@@ -20,7 +23,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: { sub: string; email: string }): AuthenticatedUser {
-    return { id: payload.sub, email: payload.email };
+  async validate(payload: { sub: string; email: string }): Promise<AuthenticatedUser> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, username: true, platformRole: true, bannedAt: true, bannedUntil: true },
+    });
+    if (!user) throw new UnauthorizedException('Account no longer exists');
+    if (user.bannedAt && (!user.bannedUntil || user.bannedUntil > new Date())) {
+      throw new UnauthorizedException('This account is suspended. Contact portal support if you believe this is a mistake.');
+    }
+    return { id: user.id, email: user.email, username: user.username, platformRole: user.platformRole };
   }
 }
