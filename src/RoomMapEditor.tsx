@@ -47,7 +47,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : item.kind === "room" || item.kind === "wall" || item.kind === "door" ? "structures" : "decorations");
+  const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" || item.kind === "room" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : "decorations");
   const visibleObjects = objects.filter(item => visibleLayers[layerOf(item)]);
   const selected = objects.find(item => item.id === selectedId);
   const layerNames: Record<TableLayer, string> = { background: "Подложка", terrain: "Местность", structures: "Конструкции", decorations: "Декорации", figures: "Фигуры" };
