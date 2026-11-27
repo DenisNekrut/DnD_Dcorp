@@ -6,6 +6,7 @@ import {
 import { CampaignRole, MembershipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { SaveTableStateDto } from './dto/save-table-state.dto';
+import { MapStorageService } from './map-storage.service';
 
 const EMPTY_TABLE_STATE = {
   tokens: [],
@@ -16,7 +17,10 @@ const EMPTY_TABLE_STATE = {
 
 @Injectable()
 export class TabletopService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mapStorage: MapStorageService,
+  ) {}
 
   async getState(userId: string, campaignId: string) {
     const canEdit = await this.assertCampaignAccess(userId, campaignId, false);
@@ -54,6 +58,54 @@ export class TabletopService {
       select: { campaignId: true, state: true, updatedAt: true },
     });
     return { ...saved, permissions: { canEdit: true } };
+  }
+
+  async uploadMap(userId: string, campaignId: string, file: Express.Multer.File) {
+    await this.assertCampaignAccess(userId, campaignId, true);
+    const uploaded = await this.mapStorage.upload(campaignId, file);
+    const saved = await this.prisma.campaignTableState.findUnique({
+      where: { campaignId },
+      select: { state: true },
+    });
+    const currentState = (saved?.state as Record<string, unknown> | undefined) ?? {};
+    const previousAsset = currentState.mapAsset as { key?: string } | undefined;
+
+    try {
+      const nextState = { ...currentState, mapAsset: uploaded } as Prisma.InputJsonValue;
+      await this.prisma.campaignTableState.upsert({
+        where: { campaignId },
+        create: { campaignId, state: nextState },
+        update: { state: nextState },
+      });
+    } catch (error) {
+      await this.mapStorage.delete(campaignId, uploaded.key).catch(() => undefined);
+      throw error;
+    }
+
+    if (previousAsset?.key && previousAsset.key !== uploaded.key) {
+      await this.mapStorage.delete(campaignId, previousAsset.key).catch(() => undefined);
+    }
+    return uploaded;
+  }
+
+  async deleteMap(userId: string, campaignId: string, key: string) {
+    await this.assertCampaignAccess(userId, campaignId, true);
+    const saved = await this.prisma.campaignTableState.findUnique({
+      where: { campaignId },
+      select: { state: true },
+    });
+    const currentState = (saved?.state as Record<string, unknown> | undefined) ?? {};
+    const currentAsset = currentState.mapAsset as { key?: string } | undefined;
+    if (currentAsset?.key !== key) throw new NotFoundException('Map asset not found');
+
+    const nextState = { ...currentState, mapAsset: null } as Prisma.InputJsonValue;
+    await this.prisma.campaignTableState.upsert({
+      where: { campaignId },
+      create: { campaignId, state: nextState },
+      update: { state: nextState },
+    });
+    await this.mapStorage.delete(campaignId, key).catch(() => undefined);
+    return { deleted: true };
   }
 
   private async assertCampaignAccess(

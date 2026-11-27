@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet, Undo2, Redo2, ImagePlus, Trash2 } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
 import RoomMapEditor, { type MapObject, type LayerVisibility, type LayerLocks, defaultLayerVisibility, defaultLayerLocks } from "./RoomMapEditor";
 import "./styles/tabletop.css";
@@ -11,7 +11,8 @@ import "./styles/tabletop-layers.css";
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
-type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; round: number; log: LogEntry[] };
+type MapAsset = { key: string; url: string; contentType: string; size: number };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks };
@@ -29,6 +30,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [objects, setObjects] = useState<MapObject[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
   const [layerLocks, setLayerLocks] = useState<LayerLocks>({ ...defaultLayerLocks });
+  const [mapAsset, setMapAsset] = useState<MapAsset | null>(null);
+  const [mapUploading, setMapUploading] = useState(false);
+  const mapFileInputRef = useRef<HTMLInputElement>(null);
   const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
   const historyGroupRef = useRef(false);
   const historyGroupStartRef = useRef<EditorSnapshot | null>(null);
@@ -111,6 +115,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setObjects(Array.isArray(state.objects) ? state.objects : []);
       setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
       setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
+      setMapAsset(state.mapAsset ?? null);
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
@@ -118,6 +123,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setObjects([]);
       setLayerVisibility({ ...defaultLayerVisibility });
       setLayerLocks({ ...defaultLayerLocks });
+      setMapAsset(null);
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -143,6 +149,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setObjects(Array.isArray(state.objects) ? state.objects : []);
             setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
             setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
+            setMapAsset(state.mapAsset ?? null);
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
@@ -178,7 +185,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, round, log };
+    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -198,7 +205,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, objects, layerVisibility, layerLocks, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
   useEffect(() => {
     if (!remoteEnabled || !campaignId) return;
@@ -221,6 +228,47 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
     setLog(items => [...items.slice(-99), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
+  };
+  const handleMapFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      setTableError("Размер изображения карты не должен превышать 15 МБ.");
+      return;
+    }
+    if (!remoteEnabled || !campaignId || !canEdit) {
+      setTableError("Загрузка карты доступна мастеру в общей кампании.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    setMapUploading(true);
+    try {
+      const uploaded = await apiRequest<MapAsset>(`/campaigns/${campaignId}/table/map`, { method: "POST", body: formData });
+      setMapAsset(uploaded);
+      addLog("Изображение карты загружено в постоянное хранилище.", "gold");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось загрузить изображение карты.");
+    } finally {
+      setMapUploading(false);
+    }
+  };
+  const removeMapAsset = async () => {
+    if (!mapAsset || !campaignId || !remoteEnabled || !canEdit) return;
+    setMapUploading(true);
+    try {
+      await apiRequest<{ deleted: boolean }>(`/campaigns/${campaignId}/table/map`, {
+        method: "DELETE",
+        body: JSON.stringify({ key: mapAsset.key }),
+      });
+      setMapAsset(null);
+      addLog("Подложка карты удалена.", "gold");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось удалить изображение карты.");
+    } finally {
+      setMapUploading(false);
+    }
   };
   const saveRoom = (event: React.FormEvent) => {
     event.preventDefault();
@@ -316,18 +364,19 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         <div className="tabletop-center">
           <div className="table-toolbar">
             <div className="table-tool-group">
-              <button title="Отменить последнее действие" aria-label="Отменить последнее действие" disabled={!canEdit || editorHistory.past.length === 0} onClick={undoEditor}><Undo2 size={16}/></button><button title="Повторить действие" aria-label="Повторить действие" disabled={!canEdit || editorHistory.future.length === 0} onClick={redoEditor}><Redo2 size={16}/></button><button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
+              <input ref={mapFileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={handleMapFileChange}/><button type="button" title="Загрузить изображение карты" aria-label="Загрузить изображение карты" disabled={!canEdit || !remoteEnabled || mapUploading} onClick={() => mapFileInputRef.current?.click()}><ImagePlus size={16}/></button>{mapAsset && <button type="button" title="Удалить подложку карты" aria-label="Удалить подложку карты" disabled={!canEdit || mapUploading} onClick={removeMapAsset}><Trash2 size={16}/></button>}<button title="Отменить последнее действие" aria-label="Отменить последнее действие" disabled={!canEdit || editorHistory.past.length === 0} onClick={undoEditor}><Undo2 size={16}/></button><button title="Повторить действие" aria-label="Повторить действие" disabled={!canEdit || editorHistory.future.length === 0} onClick={redoEditor}><Redo2 size={16}/></button><button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
               <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button><span>{zoom}%</span><button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
+          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--map-zoom": zoom / 100 } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
+            {mapAsset && <img className="uploaded-map-image" src={mapAsset.url} alt="Загруженная карта игровой комнаты"/>}
             <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
               {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
                 <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
               </button>)}
             </div>
-            {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
+            {tokens.length === 0 && !mapAsset && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
             <RoomMapEditor objects={objects} onChange={updateObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={updateLayerVisibility} layerLocks={layerLocks} onLayerLocksChange={updateLayerLocks} onEditStart={beginHistoryGroup} onEditEnd={finishHistoryGroup} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
