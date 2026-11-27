@@ -103,7 +103,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!target || !canEdit) return;
     const current = getEditorSnapshot();
     setEditorHistory({ past: [...editorHistory.past, current].slice(-50), future: editorHistory.future.slice(0, -1) });
-    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks);
+    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks); setMapView(target.mapView);
   };
 
   const applyRemoteState = (response: TableResponse) => {
