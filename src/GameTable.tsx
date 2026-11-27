@@ -9,7 +9,9 @@ import "./styles/tabletop-publication.css";
 import "./styles/tabletop-layers.css";
 
 type ConditionId = "blinded" | "charmed" | "deafened" | "frightened" | "grappled" | "incapacitated" | "invisible" | "paralyzed" | "petrified" | "poisoned" | "prone" | "restrained" | "stunned" | "unconscious";
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number };
+type AbilityId = "str" | "dex" | "con" | "int" | "wis" | "cha";
+type SkillId = "acrobatics" | "animalHandling" | "arcana" | "athletics" | "deception" | "history" | "insight" | "intimidation" | "investigation" | "medicine" | "nature" | "perception" | "performance" | "persuasion" | "religion" | "sleightOfHand" | "stealth" | "survival";
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; skillModifiers?: Partial<Record<SkillId, number>>; savingThrowModifiers?: Partial<Record<AbilityId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -30,6 +32,21 @@ const exhaustionOptions = [
   "0 — нет", "1 — помеха проверкам характеристик", "2 — скорость вдвое меньше",
   "3 — помеха атакам и спасброскам", "4 — максимум хитов вдвое меньше",
   "5 — скорость равна 0", "6 — смерть",
+];
+const abilityOptions: { id: AbilityId; label: string }[] = [
+  { id: "str", label: "Сила" }, { id: "dex", label: "Ловкость" }, { id: "con", label: "Телосложение" },
+  { id: "int", label: "Интеллект" }, { id: "wis", label: "Мудрость" }, { id: "cha", label: "Харизма" },
+];
+const skillOptions: { id: SkillId; label: string; ability: AbilityId }[] = [
+  { id: "acrobatics", label: "Акробатика", ability: "dex" }, { id: "animalHandling", label: "Уход за животными", ability: "wis" },
+  { id: "arcana", label: "Магия", ability: "int" }, { id: "athletics", label: "Атлетика", ability: "str" },
+  { id: "deception", label: "Обман", ability: "cha" }, { id: "history", label: "История", ability: "int" },
+  { id: "insight", label: "Проницательность", ability: "wis" }, { id: "intimidation", label: "Запугивание", ability: "cha" },
+  { id: "investigation", label: "Расследование", ability: "int" }, { id: "medicine", label: "Медицина", ability: "wis" },
+  { id: "nature", label: "Природа", ability: "int" }, { id: "perception", label: "Внимательность", ability: "wis" },
+  { id: "performance", label: "Выступление", ability: "cha" }, { id: "persuasion", label: "Убеждение", ability: "cha" },
+  { id: "religion", label: "Религия", ability: "int" }, { id: "sleightOfHand", label: "Ловкость рук", ability: "dex" },
+  { id: "stealth", label: "Скрытность", ability: "dex" }, { id: "survival", label: "Выживание", ability: "wis" },
 ];
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
@@ -69,6 +86,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [round, setRound] = useState(1);
   const [activeTokenId, setActiveTokenId] = useState<string | null>(null);
   const [conditionToAdd, setConditionToAdd] = useState<ConditionId>("blinded");
+  const [checkKind, setCheckKind] = useState<"ability" | "skill" | "save">("ability");
+  const [checkAbility, setCheckAbility] = useState<AbilityId>("str");
+  const [checkSkill, setCheckSkill] = useState<SkillId>("acrobatics");
+  const [checkMode, setCheckMode] = useState<"normal" | "advantage" | "disadvantage">("normal");
   const [message, setMessage] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
@@ -256,7 +277,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, abilityModifiers: data.abilityModifiers as Partial<Record<AbilityId, number>> | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, savingThrowModifiers: data.savingThrowModifiers as Partial<Record<AbilityId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -333,6 +354,46 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`На карту добавлен участник: ${token.name}.`);
     setNewTokenName("");
   };
+  const rollCheck = async () => {
+    if (!selected || diceBusy) return;
+    const skill = skillOptions.find(item => item.id === checkSkill) ?? skillOptions[0];
+    const ability = checkKind === "skill" ? skill.ability : checkAbility;
+    const modifier = checkKind === "skill"
+      ? selected.skillModifiers?.[skill.id] ?? selected.abilityModifiers?.[ability] ?? 0
+      : checkKind === "save"
+        ? selected.savingThrowModifiers?.[ability] ?? selected.abilityModifiers?.[ability] ?? 0
+        : selected.abilityModifiers?.[ability] ?? 0;
+    const label = checkKind === "skill" ? skill.label : abilityOptions.find(item => item.id === ability)?.label ?? ability;
+    const action = checkKind === "save" ? "Спасбросок" : checkKind === "skill" ? "Проверка навыка" : "Проверка характеристики";
+    setDiceBusy(true);
+    try {
+      let rolls: number[];
+      let keptRoll: number;
+      let total: number;
+      if (remoteEnabled) {
+        const result = await apiRequest<{ rolls: number[]; keptRoll: number | null; total: number }>("/dice/roll", {
+          method: "POST",
+          body: JSON.stringify({ count: 1, sides: 20, modifier, mode: checkMode }),
+        });
+        rolls = result.rolls;
+        keptRoll = result.keptRoll ?? rolls[0];
+        total = result.total;
+      } else {
+        rolls = checkMode === "normal"
+          ? [Math.floor(Math.random() * 20) + 1]
+          : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
+        keptRoll = checkMode === "advantage" ? Math.max(...rolls) : checkMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
+        total = keptRoll + modifier;
+      }
+      const modeLabel = checkMode === "advantage" ? "преимущество" : checkMode === "disadvantage" ? "помеха" : "обычный бросок";
+      addLog(action + " " + label + " — " + selected.name + ": " + total + " (d20 " + keptRoll + (modifier >= 0 ? " +" : " ") + modifier + "); " + modeLabel + ".", "gold");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось выполнить проверку.");
+    } finally {
+      setDiceBusy(false);
+    }
+  };
+
   const rollD20 = async () => {
     if (remoteEnabled) {
       setDiceBusy(true);
@@ -536,6 +597,22 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <button className="button button-secondary full-width" type="submit" disabled={!canEdit || layerLocks.figures}><Plus size={15}/> Добавить на карту</button>
             </form>
           </section>
+          {selected && <section className="table-panel dnd-check-panel">
+            <div className="table-panel-title"><div><Dice5 size={16}/><strong>Проверки D&D 5e</strong></div></div>
+            <label>Тип броска<select value={checkKind} onChange={event => setCheckKind(event.target.value as "ability" | "skill" | "save")}>
+              <option value="ability">Проверка характеристики</option><option value="skill">Проверка навыка</option><option value="save">Спасбросок</option>
+            </select></label>
+            {checkKind === "skill" ? <label>Навык<select value={checkSkill} onChange={event => setCheckSkill(event.target.value as SkillId)}>
+              {skillOptions.map(skill => <option key={skill.id} value={skill.id}>{skill.label} ({abilityOptions.find(item => item.id === skill.ability)?.label})</option>)}
+            </select></label> : <label>Характеристика<select value={checkAbility} onChange={event => setCheckAbility(event.target.value as AbilityId)}>
+              {abilityOptions.map(ability => <option key={ability.id} value={ability.id}>{ability.label}</option>)}
+            </select></label>}
+            <label>Условия броска<select value={checkMode} onChange={event => setCheckMode(event.target.value as "normal" | "advantage" | "disadvantage")}>
+              <option value="normal">Обычный бросок</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option>
+            </select></label>
+            <button className="dice-roll-button" type="button" onClick={rollCheck} disabled={diceBusy}>{diceBusy ? "Бросаем…" : "Бросить проверку"}</button>
+            <small>Модификаторы берутся из листа выбранного персонажа. Для NPC без листа используется +0.</small>
+          </section>}
           <section className="table-panel dice-panel"><div className="table-panel-title"><div><Dice5 size={16}/><strong>Быстрый бросок</strong></div></div><button className="dice-roll-button" onClick={rollD20} disabled={diceBusy}><Dice5 size={19}/> {diceBusy ? "Бросаем…" : "Бросить d20"}</button><small>{remoteEnabled ? "Результат рассчитывается сервером и попадает в журнал." : "Локальный демонстрационный бросок."}</small></section>
           {canEdit && <button className="button button-secondary full-width" onClick={() => setEditingRoom(true)}><Settings2 size={15}/> Настройки комнаты</button>}
         </aside>
