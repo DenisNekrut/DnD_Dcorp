@@ -22,7 +22,7 @@ const labels: Record<MapObject["kind"], string> = {
   wall: "Стена", door: "Дверь", obstacle: "Препятствие", decoration: "Декорация",
 };
 
-export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayers, onVisibilityChange, layerLocks, onLayerLocksChange, snapToGrid, gridCellSizePx }: {
+export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayers, onVisibilityChange, layerLocks, onLayerLocksChange, onEditStart, onEditEnd, snapToGrid, gridCellSizePx }: {
   objects: MapObject[];
   onChange: (objects: MapObject[]) => void;
   canEdit: boolean;
@@ -30,6 +30,8 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   onVisibilityChange: (visibility: LayerVisibility) => void;
   layerLocks: LayerLocks;
   onLayerLocksChange: (locks: LayerLocks) => void;
+  onEditStart: () => void;
+  onEditEnd: () => void;
   snapToGrid: boolean;
   gridCellSizePx: number;
 }) {
@@ -110,13 +112,13 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       <button type="button" title="На один уровень вперёд" disabled={selectedLocked} onClick={() => reorderSelected(1)}>Вперёд</button>
       <button type="button" title="На один уровень назад" disabled={selectedLocked} onClick={() => reorderSelected(-1)}>Назад</button>
     </div>}
-    <div className="map-object-layer" onPointerMove={move} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
+    <div className="map-object-layer" onPointerMove={move} onPointerUp={() => { setDraggingId(null); onEditEnd(); }} onPointerLeave={() => { setDraggingId(null); onEditEnd(); }}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
         return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${selectedId === item.id ? "map-object-selected" : ""}`}
           style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.width}%`, height: `${item.height}%`, zIndex: layerOf(item) === "terrain" ? 1 : layerOf(item) === "structures" ? 2 : 3, transform: `translate(-50%,-50%) rotate(${item.rotation}deg)` }}
           title={labels[item.kind]} aria-label={labels[item.kind]}
-          onPointerDown={event => { setSelectedId(item.id); if (!canEdit || layerLocks[layerOf(item)]) return; event.preventDefault(); setDraggingId(item.id); event.currentTarget.setPointerCapture(event.pointerId); }}
+          onPointerDown={event => { setSelectedId(item.id); if (!canEdit || layerLocks[layerOf(item)]) return; event.preventDefault(); onEditStart(); setDraggingId(item.id); event.currentTarget.setPointerCapture(event.pointerId); }}
           onClick={() => setSelectedId(item.id)} disabled={!canEdit}>
           <Icon size={16}/>
         </button>;
