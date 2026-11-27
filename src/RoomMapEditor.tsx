@@ -94,9 +94,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (measurementMode === "distance" && isMeasuring && measurementStartRef.current) {
-      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
-      const rawEndX = event.clientX - rect.left;
-      const rawEndY = event.clientY - rect.top;
+      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+      const rawEndX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+      const rawEndY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
       const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
       const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const start = measurementStartRef.current;
@@ -115,9 +115,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     }
     if ((measurementMode === "cone" || measurementMode === "line") && isMeasuring && measurementStartRef.current) {
       const start = measurementStartRef.current;
-      const rawEndX = event.clientX - rect.left;
-      const rawEndY = event.clientY - rect.top;
-      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
+      const rawEndX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+      const rawEndY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
+      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
       const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
       const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const dx = (endX - start.x) * rect.width / 100;
@@ -140,9 +140,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     if (drawingId && drawingStartRef.current && drawingMode && canEdit) {
       const expectedLayer = drawingMode === "zone" ? "terrain" : "structures";
       if (layerLocks[expectedLayer]) return;
-      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
-      const rawEndX = event.clientX - rect.left;
-      const rawEndY = event.clientY - rect.top;
+      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+      const rawEndX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+      const rawEndY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
       const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
       const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const start = drawingStartRef.current;
@@ -164,9 +164,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     }
     const draggedObject = objects.find(item => item.id === draggingId);
     if (!draggingId || !canEdit || !draggedObject || layerLocks[layerOf(draggedObject)]) return;
-    const rawX = event.clientX - rect.left;
-    const rawY = event.clientY - rect.top;
-    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
+    const rawX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+    const rawY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
+    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
     const x = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(2, Math.min(98, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     onChange(objects.map(item => item.id === draggingId ? { ...item, x, y } : item));
@@ -177,9 +177,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     if (!drawingMode || !canEdit || activeLayer !== expectedLayer || layerLocks[expectedLayer] || !visibleLayers[expectedLayer] || event.target !== event.currentTarget) return;
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
-    const rawX = event.clientX - rect.left;
-    const rawY = event.clientY - rect.top;
+    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+    const rawX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+    const rawY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     const kind: MapObject["kind"] = drawingMode === "zone" ? "zone" : drawingMode === "wall" ? "wall" : "room";
@@ -200,9 +200,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     if (!measurementMode || event.target !== event.currentTarget) return;
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38)) * zoom / 100;
-    const rawX = event.clientX - rect.left;
-    const rawY = event.clientY - rect.top;
+    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+    const rawX = (event.clientX - rect.left - rect.width / 2) / (zoom / 100) + rect.width / 2;
+    const rawY = (event.clientY - rect.top - rect.height / 2) / (zoom / 100) + rect.height / 2;
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     if (measurementMode === "radius" || measurementMode === "cube") {
@@ -314,15 +314,8 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       <button type="button" title="На один уровень вперёд" disabled={selectedLocked} onClick={() => reorderSelected(1)}>Вперёд</button>
       <button type="button" title="На один уровень назад" disabled={selectedLocked} onClick={() => reorderSelected(-1)}>Назад</button>
     </div>}
-    <div className={`map-object-layer ${drawingMode ? "drawing-object-mode" : ""} ${measurementMode ? "measuring-mode" : ""}`} style={{
-      inset: "auto",
-      left: `${50 - 5000 / Math.max(1, zoom)}%`,
-      top: `${50 - 5000 / Math.max(1, zoom)}%`,
-      width: `${10000 / Math.max(1, zoom)}%`,
-      height: `${10000 / Math.max(1, zoom)}%`,
-      transform: `scale(${zoom / 100})`,
-      transformOrigin: "center",
-    }} onPointerDown={event => measurementMode ? beginMeasure(event) : beginDrawObject(event)} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
+    <div className={`map-object-layer ${drawingMode ? "drawing-object-mode" : ""} ${measurementMode ? "measuring-mode" : ""}`}  onPointerDown={event => measurementMode ? beginMeasure(event) : beginDrawObject(event)} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
+      <div className="map-object-content" style={{ transform: `scale(${zoom / 100})`, transformOrigin: "center" }}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
         return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${item.kind === "zone" ? `map-zone-${item.zoneType ?? "difficult"}` : ""} ${item.kind === "room" ? "map-object-room" : ""} ${selectedId === item.id ? "map-object-selected" : ""}`}
@@ -342,6 +335,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       {measurement && <div className="map-ruler-line" style={{ left: `${measurement.x}%`, top: `${measurement.y}%`, width: `${measurement.width}%`, transform: `rotate(${measurement.angle}deg)` }}>
         <span>{measurement.feet} ft · {Number(measurement.cells.toFixed(1))} клетки</span>
       </div>}
+      </div>
     </div>
   </>;
 }
