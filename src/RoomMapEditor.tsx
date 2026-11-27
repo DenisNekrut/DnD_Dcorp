@@ -64,7 +64,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     if (!selected || !canEdit || layerLocks[layerOf(selected)]) return;
     const index = objects.findIndex(item => item.id === selected.id);
     const next = index + direction;
-    if (index < 0 || next < 0 || next >= objects.length) return;
+    if (index < 0 || next < 0 || next >= objects.length || layerLocks[layerOf(objects[next])]) return;
     const reordered = [...objects];
     [reordered[index], reordered[next]] = [reordered[next], reordered[index]];
     onChange(reordered);
