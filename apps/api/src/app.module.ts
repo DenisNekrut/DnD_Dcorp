@@ -8,6 +8,7 @@ import { RulesModule } from './rules/rules.module';
 import { DiceModule } from './dice/dice.module';
 import { UsersModule } from './users/users.module';
 import { TabletopModule } from './tabletop/tabletop.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TabletopModule } from './tabletop/tabletop.module';
     RulesModule,
     DiceModule,
     TabletopModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
