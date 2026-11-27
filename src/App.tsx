@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки";
-type Campaign = { id: number; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
+type Campaign = { id: string; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
 type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
 const characterGenders = ["Мужской", "Женский", "Другое", "Не указывать"];
@@ -49,6 +49,7 @@ const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
 
 type SessionUser = { id: string; email: string; username: string };
 type ApiCharacter = { id: string; name: string; data: Record<string, unknown> };
+type ApiCampaign = { id: string; name: string; description?: string | null; applicationsOpen?: boolean; memberships?: Array<{ status: string }>; _count?: { memberships?: number } };
 
 function mapApiCharacter(item: ApiCharacter): Character {
   const data = item.data;
@@ -85,10 +86,11 @@ function App() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [campaignModal, setCampaignModal] = useState(false);
+  const [campaignError, setCampaignError] = useState("");
+  const [campaignBusy, setCampaignBusy] = useState(false);
   const [characterModal, setCharacterModal] = useState(false);
   const [campaignName, setCampaignName] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
-  const [campaignAccess, setCampaignAccess] = useState<"Открытая" | "По приглашению">("По приглашению");
   const [characterName, setCharacterName] = useState("");
   const [characterError, setCharacterError] = useState("");
   const [characterGender, setCharacterGender] = useState("");
@@ -112,10 +114,19 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!sessionUser) { setCharacters([]); return; }
+    if (!sessionUser) { setCharacters([]); setCampaigns([]); return; }
     apiRequest<ApiCharacter[]>("/characters/personal")
       .then(items => setCharacters(items.map(mapApiCharacter)))
       .catch(error => setAuthError(error instanceof Error ? error.message : "Не удалось загрузить персонажей."));
+    apiRequest<ApiCampaign[]>("/campaigns/mine")
+      .then(items => setCampaigns(items.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description ?? "",
+        access: item.applicationsOpen === false ? "По приглашению" : "Открытая",
+        players: 1 + (item.memberships ?? []).filter(member => member.status === "APPROVED").length,
+      }))))
+      .catch(error => setCampaignError(error instanceof Error ? error.message : "Не удалось загрузить кампании."));
   }, [sessionUser]);
 
   const submitAuth = async (event: React.FormEvent) => {
@@ -137,11 +148,27 @@ function App() {
     finally { setSessionUser(null); setCharacters([]); setAuthError(""); }
   };
 
-  const createCampaign = (event: React.FormEvent) => {
+  const createCampaign = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!campaignName.trim()) return;
-    setCampaigns(items => [...items, { id: Date.now(), name: campaignName.trim(), description: campaignDescription.trim(), access: campaignAccess, players: 1 }]);
-    setCampaignName(""); setCampaignDescription(""); setCampaignModal(false);
+    setCampaignError("");
+    if (campaignName.trim().length < 2) { setCampaignError("Название должно содержать не менее двух символов."); return; }
+    setCampaignBusy(true);
+    try {
+      const created = await apiRequest<ApiCampaign & { inviteToken?: string }>("/campaigns", {
+        method: "POST",
+        body: JSON.stringify({ name: campaignName.trim(), description: campaignDescription.trim() }),
+      });
+      setCampaigns(items => [...items, {
+        id: created.id,
+        name: created.name,
+        description: created.description ?? "",
+        access: created.applicationsOpen === false ? "По приглашению" : "Открытая",
+        players: 1,
+      }]);
+      setCampaignName(""); setCampaignDescription(""); setCampaignModal(false);
+    } catch (error) {
+      setCampaignError(error instanceof Error ? error.message : "Не удалось создать кампанию. Попробуй ещё раз.");
+    } finally { setCampaignBusy(false); }
   };
   const createCharacter = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -230,7 +257,7 @@ function App() {
         <footer>DnD_Dcorp <span>•</span> Пространство для настольных приключений</footer>
       </div>
     </main>
-    {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><label>Доступ<select value={campaignAccess} onChange={e=>setCampaignAccess(e.target.value as "Открытая"|"По приглашению")}><option>По приглашению</option><option>Открытая</option></select></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div><small className="prototype-note">Создание кампаний будет подключено к серверу следующим этапом.</small></form></Modal>}
+    {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><p className="notice-strip">Кампания будет сохранена на сервере и появится в твоём списке. Настройки приватности и пароль добавим в управлении кампанией.</p>{campaignError&&<p className="validation-note" role="alert">{campaignError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit" disabled={campaignBusy}>{campaignBusy?"Сохранение…":<><Plus size={16}/> Создать</>}</button></div></form></Modal>}
     {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Пол<select required value={characterGender} onChange={e=>setCharacterGender(e.target.value)}><option value="" disabled>Выбери вариант</option>{characterGenders.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Раса<select required value={characterAncestry} onChange={e=>{setCharacterAncestry(e.target.value);setCharacterSubrace("");}}><option value="" disabled>Выбери расу</option>{characterAncestries.map(option=><option key={option} value={option}>{option}</option>)}</select></label>{(ancestrySubraces[characterAncestry] ?? []).length > 0 && <label>Подраса<select required value={characterSubrace} onChange={e=>setCharacterSubrace(e.target.value)}><option value="" disabled>Выбери подрасу</option>{(ancestrySubraces[characterAncestry] ?? []).map(option=><option key={option} value={option}>{option}</option>)}</select></label>}
     {characterAncestry==="Полуэльф"&&<div className="builder-section"><div><strong>Гибкое увеличение характеристик</strong><span>Полуэльф получает +1 к двум разным характеристикам, кроме Харизмы.</span></div><div className="ability-assignment"><label>Первое увеличение<select value={halfElfBonusOne} onChange={e=>setHalfElfBonusOne(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusTwo).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Второе увеличение<select value={halfElfBonusTwo} onChange={e=>setHalfElfBonusTwo(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusOne).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div></div>}<label>Класс персонажа<select required value={characterClass} onChange={e=>{setCharacterClass(e.target.value);setCharacterSkills([]);}}><option value="" disabled>Выбери класс</option>{characterClasses.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Предыстория<select required value={characterBackground} onChange={e=>setCharacterBackground(e.target.value)}><option value="" disabled>Выбери предысторию</option>{characterBackgrounds.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Мировоззрение<select required value={characterAlignment} onChange={e=>setCharacterAlignment(e.target.value)}><option value="" disabled>Выбери мировоззрение</option>{characterAlignments.map(option=><option key={option} value={option}>{option}</option>)}</select></label><div className="builder-section"><div><strong>Характеристики</strong><span>Стандартный набор 5e: 15, 14, 13, 12, 10, 8. Распредели каждое значение один раз.</span></div><div className="ability-assignment">{abilityFields.map(ability=><label key={ability.id}>{ability.name}<select value={characterAbilityScores[ability.id]} onChange={e=>setCharacterAbilityScores(current=>({...current,[ability.id]:Number(e.target.value)}))}>{standardArray.map(score=><option key={score} value={score}>{score} ({Math.floor((score-10)/2)>=0?"+":""}{Math.floor((score-10)/2)})</option>)}</select></label>)}</div>{new Set(Object.values(characterAbilityScores)).size!==6&&<small className="validation-note">Каждое значение стандартного набора должно использоваться ровно один раз.</small>}</div>
     {characterClass&&<div className="builder-section"><div><strong>Владения навыками</strong><span>Выбери {classSkillRules[characterClass]?.count??2} навыка из списка класса.</span></div><div className="skill-choice-grid">{(classSkillRules[characterClass]?.options??[]).map(id=>{const skill=skillCatalog.find(item=>item.id===id)!;const checked=characterSkills.includes(id);return <label className="skill-choice" key={id}><input type="checkbox" checked={checked} disabled={!checked&&characterSkills.length>=(classSkillRules[characterClass]?.count??2)} onChange={e=>setCharacterSkills(current=>e.target.checked?[...current,id]:current.filter(value=>value!==id))}/>{skill.name}</label>})}</div><small className="validation-note">Выбрано: {characterSkills.length} из {classSkillRules[characterClass]?.count??2}</small></div>}
