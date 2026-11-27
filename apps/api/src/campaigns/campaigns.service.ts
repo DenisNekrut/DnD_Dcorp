@@ -77,6 +77,15 @@ export class CampaignsService {
     });
   }
 
+  async requestToJoinByInvite(userId: string, inviteToken: string, password?: string) {
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { inviteToken },
+      select: { id: true },
+    });
+    if (!campaign) throw new NotFoundException('Invitation link is invalid');
+    return this.requestToJoin(userId, campaign.id, password, inviteToken);
+  }
+
   async requestToJoin(userId: string, campaignId: string, password?: string, inviteToken?: string) {
     const campaign = await this.prisma.campaign.findFirst({
       where: {
