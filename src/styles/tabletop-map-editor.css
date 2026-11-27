@@ -43,7 +43,7 @@
 
 .terrain-zone-select { display:inline-flex; align-items:center; gap:5px; color:#d9c49e; font-size:9px; }
 .terrain-zone-select select { max-width:142px; padding:5px 6px; border:1px solid rgba(224,190,132,.3); border-radius:5px; color:#f0dfbf; background:#25190f; font-size:9px; }
-.map-object-layer.drawing-zone-mode { cursor:crosshair; }
+.map-object-layer.drawing-zone-mode { pointer-events:auto; cursor:crosshair; }
 .map-object-zone { border:1px dashed rgba(241,213,151,.9); border-radius:5px; color:#f7e4bf; background:rgba(160,119,63,.28); }
 .map-object-zone .map-zone-label { padding:2px 5px; overflow:hidden; font-size:9px; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none; }
 .map-zone-difficult { background:rgba(175,127,59,.34); }
