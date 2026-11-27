@@ -71,7 +71,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         <button type="button" title="Повернуть на 15°" onClick={() => onChange(objects.map(item => item.id === selected.id ? { ...item, rotation: (item.rotation + 15) % 360 } : item))}><RotateCw size={14}/></button>
         <button type="button" title="Удалить объект" onClick={() => { onChange(objects.filter(item => item.id !== selected.id)); setSelectedId(null); }}><Trash2 size={14}/></button>
       </>}
-      <div className="map-layer-visibility">{(["terrain", "structures", "decorations"] as MapLayer[]).map(layer => <button key={layer} type="button" className={visibleLayers[layer] ? "layer-visible" : ""} title={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} onClick={() => onVisibilityChange({ ...visibleLayers, [layer]: !visibleLayers[layer] })}>{visibleLayers[layer] ? <Eye size={13}/> : <EyeOff size={13}/>} {layerNames[layer]}</button>)}</div>
+      <div className="map-layer-visibility">{(["terrain", "structures", "decorations"] as MapLayer[]).map(layer => <button key={layer} type="button" className={visibleLayers[layer] ? "layer-visible" : ""} disabled={!canEdit} title={`${visibleLayers[layer] ? "Скрыть" : "Показать"} слой: ${layerNames[layer]}`} onClick={() => onVisibilityChange({ ...visibleLayers, [layer]: !visibleLayers[layer] })}>{visibleLayers[layer] ? <Eye size={13}/> : <EyeOff size={13}/>} {layerNames[layer]}</button>)}</div>
     </div>
     <div className="map-object-layer" onPointerMove={move} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
       {visibleObjects.map(item => {
