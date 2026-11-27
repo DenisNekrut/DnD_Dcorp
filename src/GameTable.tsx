@@ -478,7 +478,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         damageRolls = Array.from({ length: damageCount }, () => Math.floor(Math.random() * parsed.sides) + 1);
         damageTotal = damageRolls.reduce((sum, value) => sum + value, 0) + parsed.modifier;
       }
-      const appliedDamage = Math.max(0, damageTotal);
+      damageTotal = Math.max(0, damageTotal);
+      const appliedDamage = damageTotal;
       recordEditorHistory();
       setTokens(items => items.map(token => token.id === target.id ? { ...token, hp: Math.max(0, token.hp - appliedDamage) } : token));
       addLog(
