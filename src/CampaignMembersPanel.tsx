@@ -9,6 +9,7 @@ type CampaignMember = {
   role: MemberRole;
   status: "APPROVED" | "PENDING" | "REJECTED" | "BLOCKED";
   createdAt: string;
+  isOwner?: boolean;
   user: { id: string; username: string };
 };
 
@@ -131,9 +132,9 @@ export default function CampaignMembersPanel({
                 <div className="campaign-member-avatar">{member.user.username.slice(0, 1).toUpperCase()}</div>
                 <div className="campaign-member-identity">
                   <strong>{member.user.username}</strong>
-                  <span>{roleLabels[member.role]}</span>
+                  <span>{member.isOwner ? "Владелец кампании" : roleLabels[member.role]}</span>
                 </div>
-                <label className="campaign-member-role">
+                {!member.isOwner && <label className="campaign-member-role">
                   <span className="sr-only">Роль: {member.user.username}</span>
                   <select
                     value={member.role}
@@ -144,10 +145,10 @@ export default function CampaignMembersPanel({
                       .filter(role => isOwner || role !== "GAME_MASTER")
                       .map(role => <option key={role} value={role}>{roleLabels[role]}</option>)}
                   </select>
-                </label>
-                <button type="button" className="campaign-member-remove" onClick={() => void removeMember(member)} disabled={Boolean(busyId) || (member.role !== "PLAYER" && member.role !== "OBSERVER" && !isOwner)} title="Удалить из кампании" aria-label={`Удалить ${member.user.username}`}>
+                </label>}
+                {!member.isOwner && <button type="button" className="campaign-member-remove" onClick={() => void removeMember(member)} disabled={Boolean(busyId) || (member.role !== "PLAYER" && member.role !== "OBSERVER" && !isOwner)} title="Удалить из кампании" aria-label={`Удалить ${member.user.username}`}>
                   {busyId === member.id ? <RefreshCw size={15}/> : <UserMinus size={15}/>}
-                </button>
+                </button>}
               </article>
             ))}
           </div>
