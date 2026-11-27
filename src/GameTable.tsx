@@ -446,7 +446,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const state = latestStateRef.current;
       if (!state || !canEdit) return;
       try {
-        window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now() } satisfies TableRecovery));
+        window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now(), supersedes: inFlightStateRef.current ?? undefined } satisfies TableRecovery));
       } catch { /* Keepalive save is still attempted when local storage is unavailable. */ }
       if (saveInFlightRef.current) return;
       saveInFlightRef.current = true;
