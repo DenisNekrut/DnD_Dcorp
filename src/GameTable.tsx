@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -874,7 +874,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (nextIndex >= initiative.length) {
       const first = initiative[0];
       setActiveTokenId(first.id);
-      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [] } : token));
+      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false } : token));
       setRound(value => value + 1);
       addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
     } else {
@@ -905,8 +905,20 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const first = initiative[0];
     setRound(1);
     setActiveTokenId(first.id);
-    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [] })));
+    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false })));
     addLog(`Инициатива сброшена. Раунд 1: ход ${first.name}.`, "gold");
+  };
+
+  const toggleCombatResource = (resource: "actionUsed" | "bonusActionUsed" | "reactionUsed") => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    if ((selected.conditions ?? []).includes("incapacitated")) {
+      addLog(selected.name + " недееспособен и не может использовать действия или реакции.", "danger");
+      return;
+    }
+    const next = !selected[resource];
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, [resource]: next } : token));
+    const labels = { actionUsed: "Действие", bonusActionUsed: "Бонусное действие", reactionUsed: "Реакция" };
+    addLog(selected.name + ": " + labels[resource] + (next ? " использовано." : " снова доступно."), next ? "muted" : "gold");
   };
 
   const addCondition = (event: React.FormEvent) => {
@@ -1080,6 +1092,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           {selected && <section className="table-panel selected-panel">
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
+            <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Ресурсы хода</strong><small>{activeToken?.id === selected.id ? "Сейчас ход этой фигуры" : "Не активный ход"}</small></div>
+              <div className="combat-economy-buttons">
+                <button type="button" className={selected.actionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("actionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.actionUsed ? "Действие: использовано" : "Действие: доступно"}</button>
+                <button type="button" className={selected.bonusActionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("bonusActionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.bonusActionUsed ? "Бонус: использовано" : "Бонус: доступно"}</button>
+                <button type="button" className={selected.reactionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("reactionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.reactionUsed ? "Реакция: использована" : "Реакция: доступна"}</button>
+              </div>
+            </div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}{(selected.temporaryHp ?? 0) > 0 ? ` · +${selected.temporaryHp} врем.` : ""}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
             <div className="hp-management">
               <label>Количество<input type="number" min="1" max="999" value={hpAdjustment} onChange={event => setHpAdjustment(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
