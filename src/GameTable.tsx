@@ -9,6 +9,24 @@ import "./styles/tabletop-publication.css";
 import "./styles/tabletop-layers.css";
 
 type ConditionId = "blinded" | "charmed" | "deafened" | "frightened" | "grappled" | "incapacitated" | "invisible" | "paralyzed" | "petrified" | "poisoned" | "prone" | "restrained" | "stunned" | "unconscious";
+type RollKind = "attack" | "ability" | "save";
+type RollMode = "normal" | "advantage" | "disadvantage";
+type RollModeOverride = "auto" | RollMode;
+type AbilityId = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma";
+const abilityLabels: Record<AbilityId, string> = { strength: "Сила", dexterity: "Ловкость", constitution: "Телосложение", intelligence: "Интеллект", wisdom: "Мудрость", charisma: "Харизма" };
+const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): RollMode => {
+  const conditions = new Set(token.conditions ?? []);
+  const advantage = kind === "attack" && conditions.has("invisible");
+  const disadvantage = kind === "attack"
+    ? ["blinded", "poisoned", "prone", "restrained"].some(condition => conditions.has(condition as ConditionId)) || (token.exhaustionLevel ?? 0) >= 3
+    : kind === "ability"
+      ? conditions.has("poisoned") || (token.exhaustionLevel ?? 0) >= 1
+      : (token.exhaustionLevel ?? 0) >= 3 || (conditions.has("restrained") && saveAbility === "dexterity");
+  if (advantage && disadvantage) return "normal";
+  if (advantage) return "advantage";
+  if (disadvantage) return "disadvantage";
+  return "normal";
+};
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
@@ -69,6 +87,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [round, setRound] = useState(1);
   const [activeTokenId, setActiveTokenId] = useState<string | null>(null);
   const [conditionToAdd, setConditionToAdd] = useState<ConditionId>("blinded");
+  const [rollKind, setRollKind] = useState<RollKind>("attack");
+  const [rollModifier, setRollModifier] = useState(0);
+  const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
+  const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
   const [message, setMessage] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [canEdit, setCanEdit] = useState(!remoteEnabled);
@@ -92,6 +114,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selected = tokens.find(token => token.id === selectedId);
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
+  const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
+  const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
+  const selectedRollBlocked = Boolean(selected && ((selected.exhaustionLevel ?? 0) >= 6 || (rollKind === "attack" && selectedBlockedCondition)));
+  const selectedAutoFailCondition = selected?.conditions?.find(condition => ["paralyzed", "stunned", "unconscious"].includes(condition));
+  const selectedSaveAutoFail = Boolean(selected && rollKind === "save" && (saveAbility === "strength" || saveAbility === "dexterity") && selectedAutoFailCondition);
+  const selectedRollModeLabel = selectedRollMode === "advantage" ? "Преимущество" : selectedRollMode === "disadvantage" ? "Помеха" : "Обычный бросок";
+  const selectedRollBlockReason = (selected?.exhaustionLevel ?? 0) >= 6 ? "Истощение 6: персонаж мёртв." : selectedBlockedCondition ? `Состояние «${conditionCatalog.find(item => item.id === selectedBlockedCondition)?.label ?? selectedBlockedCondition}» не позволяет атаковать.` : "";
+  const selectedSaveFailReason = selectedAutoFailCondition ? `Состояние «${conditionCatalog.find(item => item.id === selectedAutoFailCondition)?.label ?? selectedAutoFailCondition}» автоматически проваливает спасброски Силы и Ловкости.` : "";
   const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks, mapView });
   const recordEditorHistory = () => {
     if (historyGroupRef.current) return;
@@ -346,6 +376,44 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const value = Math.floor(Math.random() * 20) + 1;
     addLog(`Локальный бросок d20: ${value}.`, value === 20 ? "gold" : "muted");
   };
+  const rollSelectedCheck = async () => {
+    if (!selected || !canEdit || diceBusy) return;
+    if (selectedRollBlocked) {
+      addLog(`${selected.name}: атака невозможна. ${selectedRollBlockReason}`, "danger");
+      return;
+    }
+    const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : `Спасбросок: ${abilityLabels[saveAbility]}`;
+    const modifierText = rollModifier > 0 ? `+${rollModifier}` : `${rollModifier}`;
+    if (selectedSaveAutoFail) {
+      addLog(`${selected.name}: ${checkLabel} — автоматический провал. ${selectedSaveFailReason}`, "danger");
+      return;
+    }
+    if (remoteEnabled) {
+      setDiceBusy(true);
+      try {
+        const result = await apiRequest<{ rolls: number[]; keptRoll: number | null; total: number; mode: RollMode }>(
+          "/dice/roll",
+          { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: rollModifier, mode: selectedRollMode }) },
+        );
+        const kept = result.keptRoll ?? result.rolls[0];
+        const critical = rollKind === "attack" && kept === 20;
+        const naturalOne = rollKind === "attack" && kept === 1;
+        addLog(`${selected.name}: ${checkLabel} — ${result.rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${result.total}${critical ? " · критическое попадание" : naturalOne ? " · естественная 1 — промах" : ""}.`, critical ? "gold" : naturalOne ? "danger" : "muted");
+      } catch (error) {
+        setTableError(error instanceof Error ? error.message : "Не удалось выполнить проверку.");
+      } finally {
+        setDiceBusy(false);
+      }
+      return;
+    }
+    const rolls = selectedRollMode === "normal"
+      ? [Math.floor(Math.random() * 20) + 1]
+      : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
+    const kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
+    const total = kept + rollModifier;
+    addLog(`${selected.name}: ${checkLabel} — ${rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${total}${rollKind === "attack" && kept === 1 ? " · естественная 1 — промах" : ""}.`, rollKind === "attack" && kept === 20 ? "gold" : "muted");
+  };
+
   const nextTurn = () => {
     if (!canEdit || !initiative.length) return;
     const currentIndex = initiative.findIndex(token => token.id === activeToken?.id);
@@ -501,6 +569,25 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            <div className="combat-roll-panel">
+              <strong>Проверка D20</strong>
+              <div className="combat-roll-row">
+                <select value={rollKind} onChange={event => setRollKind(event.target.value as RollKind)} disabled={!canEdit}>
+                  <option value="attack">Атака</option><option value="ability">Проверка характеристики</option><option value="save">Спасбросок</option>
+                </select>
+                {rollKind === "save" && <select value={saveAbility} onChange={event => setSaveAbility(event.target.value as AbilityId)} disabled={!canEdit}>
+                  {(Object.keys(abilityLabels) as AbilityId[]).map(ability => <option key={ability} value={ability}>{abilityLabels[ability]}</option>)}
+                </select>}
+                <input type="number" value={rollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit} aria-label="Модификатор броска"/>
+              </div>
+              <select className="combat-roll-mode" value={rollModeOverride} onChange={event => setRollModeOverride(event.target.value as RollModeOverride)} disabled={!canEdit}>
+                <option value="auto">Автоматически по состояниям</option><option value="normal">Обычный бросок</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option>
+              </select>
+              <span className={selectedRollBlocked || selectedSaveAutoFail ? "combat-roll-warning" : "combat-roll-hint"}>
+                {selectedRollBlocked ? selectedRollBlockReason : selectedSaveAutoFail ? selectedSaveFailReason : `Режим: ${selectedRollModeLabel.toLowerCase()}.`}
+              </span>
+              <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedRollBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
+            </div>
             <div className="condition-panel">
               <strong>Состояния</strong>
               <div className="condition-chip-list">
