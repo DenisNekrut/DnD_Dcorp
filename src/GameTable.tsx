@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
-import RoomMapEditor, { type MapObject, type LayerVisibility, defaultLayerVisibility } from "./RoomMapEditor";
+import RoomMapEditor, { type MapObject, type LayerVisibility, type LayerLocks, defaultLayerVisibility, defaultLayerLocks } from "./RoomMapEditor";
 import "./styles/tabletop.css";
 import "./styles/tabletop-room.css";
 import "./styles/tabletop-map-editor.css";
@@ -11,7 +11,7 @@ import "./styles/tabletop-layers.css";
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
-type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; round: number; log: LogEntry[] };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 
@@ -25,6 +25,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [tokens, setTokens] = useState<Token[]>([]);
   const [objects, setObjects] = useState<MapObject[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
+  const [layerLocks, setLayerLocks] = useState<LayerLocks>({ ...defaultLayerLocks });
   const [campaignCharacters, setCampaignCharacters] = useState<CampaignCharacter[]>([]);
   const [rosterError, setRosterError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,12 +66,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setTokens(Array.isArray(state.tokens) ? state.tokens : []);
       setObjects(Array.isArray(state.objects) ? state.objects : []);
       setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
+      setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
       setTokens([]);
       setObjects([]);
       setLayerVisibility({ ...defaultLayerVisibility });
+      setLayerLocks({ ...defaultLayerLocks });
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -95,6 +98,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setTokens(Array.isArray(state.tokens) ? state.tokens : []);
             setObjects(Array.isArray(state.objects) ? state.objects : []);
             setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
+            setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
@@ -130,7 +134,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, objects, layerVisibility, round, log };
+    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -150,7 +154,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, objects, layerVisibility, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, layerVisibility, layerLocks, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
   useEffect(() => {
     if (!remoteEnabled || !campaignId) return;
@@ -278,7 +282,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </button>)}
             </div>
             {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
-            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={setLayerVisibility} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={setLayerVisibility} layerLocks={layerLocks} onLayerLocksChange={setLayerLocks} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
