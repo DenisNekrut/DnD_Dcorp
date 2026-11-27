@@ -43,34 +43,63 @@ function stringArray(value: unknown, field: string): string[] {
   return [...new Set(value as string[])];
 }
 
-export function normalizeCharacterData(input: Record<string, unknown>) {
-  const level = input.level === undefined ? 1 : Number(input.level);
-  const bonus = proficiencyBonus(level);
+function textField(input: Record<string, unknown>, field: string): string {
+  const value = input[field];
+  if (value === undefined) return '';
+  if (typeof value !== 'string') throw new BadRequestException(`${field} must be a string`);
+  return value;
+}
 
-  const rawScores = (input.abilityScores ?? {}) as Record<string, unknown>;
-  if (typeof rawScores !== 'object' || rawScores === null || Array.isArray(rawScores)) {
-    throw new BadRequestException('abilityScores must be an object');
+function numberField(
+  value: unknown,
+  field: string,
+  fallback: number,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number {
+  const number = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw new BadRequestException(`${field} must be an integer from ${minimum} to ${maximum}`);
   }
+  return number;
+}
+
+function objectField(value: unknown, field: string): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new BadRequestException(`${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+export function normalizeCharacterData(input: Record<string, unknown>) {
+  const level = numberField(input.level, 'level', 1, 1, 20);
+  const bonus = proficiencyBonus(level);
+  const rawScores = objectField(input.abilityScores, 'abilityScores');
 
   const abilityScores = Object.fromEntries(
-    ABILITIES.map((ability) => {
-      const score = rawScores[ability] === undefined ? 10 : Number(rawScores[ability]);
-      if (!Number.isInteger(score) || score < 1 || score > 20) {
-        throw new BadRequestException(`abilityScores.${ability} must be an integer from 1 to 20`);
-      }
-      return [ability, score];
-    }),
+    ABILITIES.map((ability) => [
+      ability,
+      numberField(rawScores[ability], `abilityScores.${ability}`, 10, 1, 20),
+    ]),
   ) as Record<Ability, number>;
 
   const skillProficiencies = stringArray(input.skillProficiencies, 'skillProficiencies');
+  const skillExpertise = stringArray(input.skillExpertise, 'skillExpertise');
   const savingThrowProficiencies = stringArray(input.savingThrowProficiencies, 'savingThrowProficiencies');
+
   for (const ability of savingThrowProficiencies) {
     if (!ABILITIES.includes(ability as Ability)) {
       throw new BadRequestException(`Unknown saving throw ability: ${ability}`);
     }
   }
-  for (const skill of skillProficiencies) {
+  for (const skill of [...skillProficiencies, ...skillExpertise]) {
     if (!(skill in SKILL_ABILITIES)) throw new BadRequestException(`Unknown skill: ${skill}`);
+  }
+  for (const skill of skillExpertise) {
+    if (!skillProficiencies.includes(skill)) {
+      throw new BadRequestException(`Expertise requires proficiency in ${skill}`);
+    }
   }
 
   const abilityModifiers = Object.fromEntries(
@@ -85,41 +114,95 @@ export function normalizeCharacterData(input: Record<string, unknown>) {
   const skillModifiers = Object.fromEntries(
     Object.entries(SKILL_ABILITIES).map(([skill, ability]) => [
       skill,
-      abilityModifiers[ability] + (skillProficiencies.includes(skill) ? bonus : 0),
+      abilityModifiers[ability] +
+        (skillExpertise.includes(skill) ? bonus * 2 : skillProficiencies.includes(skill) ? bonus : 0),
     ]),
   );
   const passivePerception = 10 + skillModifiers.perception;
 
+  const rawHp = objectField(input.hitPoints, 'hitPoints');
+  const hitPointMaximum = numberField(rawHp.maximum, 'hitPoints.maximum', 1, 1);
+  const hitPoints = {
+    maximum: hitPointMaximum,
+    current: numberField(rawHp.current, 'hitPoints.current', hitPointMaximum, 0),
+    temporary: numberField(rawHp.temporary, 'hitPoints.temporary', 0, 0),
+  };
+  if (hitPoints.current > hitPoints.maximum) {
+    throw new BadRequestException('Current hit points cannot exceed maximum hit points');
+  }
+
+  const rawDeathSaves = objectField(input.deathSaves, 'deathSaves');
+  const deathSaves = {
+    successes: numberField(rawDeathSaves.successes, 'deathSaves.successes', 0, 0, 3),
+    failures: numberField(rawDeathSaves.failures, 'deathSaves.failures', 0, 0, 3),
+  };
+  const rawCurrency = objectField(input.currency, 'currency');
+  const currency = Object.fromEntries(
+    ['cp', 'sp', 'ep', 'gp', 'pp'].map((coin) => [
+      coin,
+      numberField(rawCurrency[coin], `currency.${coin}`, 0, 0),
+    ]),
+  );
+
+  const rawHitDice = objectField(input.hitDice, 'hitDice');
+  const hitDice = {
+    total: numberField(rawHitDice.total, 'hitDice.total', level, 1, 20),
+    remaining: numberField(rawHitDice.remaining, 'hitDice.remaining', level, 0, 20),
+    die: typeof rawHitDice.die === 'string' ? rawHitDice.die : 'd8',
+  };
+  if (hitDice.remaining > hitDice.total) {
+    throw new BadRequestException('Remaining hit dice cannot exceed total hit dice');
+  }
+
+  const rawProficiencies = objectField(input.proficiencies, 'proficiencies');
+  const proficiencies = {
+    armor: stringArray(rawProficiencies.armor, 'proficiencies.armor'),
+    weapons: stringArray(rawProficiencies.weapons, 'proficiencies.weapons'),
+    tools: stringArray(rawProficiencies.tools, 'proficiencies.tools'),
+  };
+
+  if (input.inspiration !== undefined && typeof input.inspiration !== 'boolean') {
+    throw new BadRequestException('inspiration must be a boolean');
+  }
+
   return {
     ...input,
+    species: textField(input, 'species'),
+    characterClass: textField(input, 'characterClass'),
+    subclass: textField(input, 'subclass'),
+    background: textField(input, 'background'),
+    alignment: textField(input, 'alignment'),
     level,
-    experiencePoints: Number.isInteger(input.experiencePoints) && Number(input.experiencePoints) >= 0
-      ? Number(input.experiencePoints) : 0,
+    experiencePoints: numberField(input.experiencePoints, 'experiencePoints', 0, 0),
     abilityScores,
     abilityModifiers,
     proficiencyBonus: bonus,
     skillProficiencies,
+    skillExpertise,
     savingThrowProficiencies,
     savingThrowModifiers,
     skillModifiers,
     passivePerception,
-    hitPoints: {
-      maximum: 1,
-      current: 1,
-      temporary: 0,
-      ...((input.hitPoints && typeof input.hitPoints === 'object' && !Array.isArray(input.hitPoints))
-        ? input.hitPoints as Record<string, unknown> : {}),
-    },
-    deathSaves: {
-      successes: 0,
-      failures: 0,
-      ...((input.deathSaves && typeof input.deathSaves === 'object' && !Array.isArray(input.deathSaves))
-        ? input.deathSaves as Record<string, unknown> : {}),
-    },
+    armorClass: numberField(input.armorClass, 'armorClass', 10, 0),
+    initiative: abilityModifiers.dex,
+    speed: numberField(input.speed, 'speed', 30, 0),
+    hitPoints,
+    hitDice,
+    deathSaves,
+    proficiencies,
+    languages: stringArray(input.languages, 'languages'),
     equipment: stringArray(input.equipment, 'equipment'),
     features: stringArray(input.features, 'features'),
-    languages: stringArray(input.languages, 'languages'),
     conditions: stringArray(input.conditions, 'conditions'),
     spells: stringArray(input.spells, 'spells'),
+    attacks: stringArray(input.attacks, 'attacks'),
+    personalityTraits: textField(input, 'personalityTraits'),
+    ideals: textField(input, 'ideals'),
+    bonds: textField(input, 'bonds'),
+    flaws: textField(input, 'flaws'),
+    appearance: textField(input, 'appearance'),
+    backstory: textField(input, 'backstory'),
+    currency,
+    inspiration: input.inspiration === true,
   };
 }
