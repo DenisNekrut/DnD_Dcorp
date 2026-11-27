@@ -61,5 +61,9 @@ The reference catalog is versioned as `5e-2014`. These read-only endpoints suppl
 - `GET /api/rules/skills` — skill identifiers and governing abilities.
 - `GET /api/rules/equipment-categories`
 - `GET /api/rules/spell-levels`
+- `GET /api/rules/weapons` — weapon groups, damage dice and type, cost, weight, range, and weapon properties.
+- `GET /api/rules/armor` — armor category, AC formula, Dexterity cap, Strength requirement, stealth disadvantage, weight, and don/doff time.
+- `GET /api/rules/adventuring-gear` — initial set of common adventuring equipment.
+- `GET /api/rules/tools` — tool kits with cost, weight, and category.
 
-Catalog entries contain concise game data and identifiers rather than copied rulebook descriptions. The API is intended to expand these catalogs with separately maintained equipment, spell, feature, and subclass records.
+Catalog entries contain concise game data and identifiers rather than copied rulebook descriptions. Equipment is stored in a separate catalog module. Spell, feature, and subclass records will be added in subsequent increments.
