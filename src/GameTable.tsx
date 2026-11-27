@@ -735,6 +735,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog("Для атаки сначала добавь на карту цель.", "danger");
       return;
     }
+    if (rollKind === "attack" && (selected.conditions ?? []).includes("incapacitated")) {
+      addLog(selected.name + ": недееспособное существо не может атаковать.", "danger");
+      return;
+    }
     const weaponUsesAmmo = rollKind === "attack" && (selectedWeapon?.properties.includes("ammunition") ?? false);
     const weaponUsesLoading = rollKind === "attack" && (selectedWeapon?.properties.includes("loading") ?? false);
     const weaponAmmoCount = selectedWeapon ? selected.weaponAmmo?.[selectedWeapon.id] ?? 0 : 0;
@@ -812,6 +816,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       if (rollKind !== "attack") {
         addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + " = " + total + ".", "muted");
         return;
+      }
+
+      if (!selected.actionUsed) {
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true } : token));
+        addLog(selected.name + ": действие потрачено на действие «Атака». Дополнительные атаки в рамках того же действия остаются возможны.", "muted");
       }
 
       const target = attackTarget!;
