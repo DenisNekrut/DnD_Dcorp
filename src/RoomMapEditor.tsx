@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned } from "lucide-react";
+import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned, House } from "lucide-react";
 
 export type MapLayer = "terrain" | "structures" | "decorations";
 export type TableLayer = "background" | MapLayer | "figures";
@@ -9,9 +9,10 @@ export type LayerLocks = Record<TableLayer, boolean>;
 export const defaultLayerLocks: LayerLocks = { background: false, terrain: false, structures: false, decorations: false, figures: false };
 
 export type TerrainZoneType = "difficult" | "water" | "fire" | "fog" | "hazard";
+type DrawingMode = "zone" | "wall" | "room" | null;
 export type MapObject = {
   id: string;
-  kind: "wall" | "door" | "obstacle" | "decoration" | "zone";
+  kind: "wall" | "door" | "obstacle" | "decoration" | "zone" | "room";
   zoneType?: TerrainZoneType;
   x: number;
   y: number;
@@ -22,7 +23,7 @@ export type MapObject = {
 };
 
 const labels: Record<MapObject["kind"], string> = {
-  wall: "Стена", door: "Дверь", obstacle: "Препятствие", decoration: "Декорация", zone: "Область местности",
+  wall: "Стена", door: "Дверь", obstacle: "Препятствие", decoration: "Декорация", zone: "Область местности", room: "Комната",
 };
 
 export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayers, onVisibilityChange, layerLocks, onLayerLocksChange, onEditStart, onEditEnd, snapToGrid, gridCellSizePx }: {
@@ -41,24 +42,24 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [activeLayer, setActiveLayer] = useState<MapLayer>("structures");
-  const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
   const [zoneType, setZoneType] = useState<TerrainZoneType>("difficult");
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : "decorations");
+  const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" || item.kind === "room" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : "decorations");
   const visibleObjects = objects.filter(item => visibleLayers[layerOf(item)]);
   const selected = objects.find(item => item.id === selectedId);
   const layerNames: Record<TableLayer, string> = { background: "Подложка", terrain: "Местность", structures: "Конструкции", decorations: "Декорации", figures: "Фигуры" };
-  const icons = { wall: Fence, door: DoorOpen, obstacle: Mountain, decoration: Trees, zone: MapPinned };
+  const icons = { wall: Fence, door: DoorOpen, obstacle: Mountain, decoration: Trees, zone: MapPinned, room: House };
   const selectedLocked = selected ? layerLocks[layerOf(selected)] : false;
 
   const add = (kind: MapObject["kind"]) => {
     if (!canEdit || layerLocks[activeLayer]) return;
     const object: MapObject = {
       id: globalThis.crypto?.randomUUID?.() ?? `map-${Date.now()}`,
-      kind, layer: activeLayer, ...(kind === "zone" ? { zoneType } : {}), x: 50, y: 50, width: kind === "wall" ? 18 : kind === "zone" ? 20 : 10,
-      height: kind === "wall" ? 3 : kind === "door" ? 4 : kind === "zone" ? 16 : 9, rotation: 0,
+      kind, layer: activeLayer, ...(kind === "zone" ? { zoneType } : {}), x: 50, y: 50, width: kind === "wall" ? 18 : kind === "zone" ? 20 : kind === "room" ? 22 : 10,
+      height: kind === "wall" ? 3 : kind === "door" ? 4 : kind === "zone" ? 16 : kind === "room" ? 18 : 9, rotation: 0,
     };
     onChange([...objects, object]);
     setSelectedId(object.id);
@@ -81,21 +82,28 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
 
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    if (drawingId && drawingStartRef.current && canEdit && !layerLocks.terrain) {
+    if (drawingId && drawingStartRef.current && drawingMode && canEdit) {
+      const expectedLayer = drawingMode === "zone" ? "terrain" : "structures";
+      if (layerLocks[expectedLayer]) return;
       const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
       const rawEndX = event.clientX - rect.left;
       const rawEndY = event.clientY - rect.top;
       const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
       const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const start = drawingStartRef.current;
-      const width = Math.max(2, Math.abs(endX - start.x));
-      const height = Math.max(2, Math.abs(endY - start.y));
+      const dx = (endX - start.x) * rect.width / 100;
+      const dy = (endY - start.y) * rect.height / 100;
+      const isWall = drawingMode === "wall";
+      const width = isWall ? Math.max(2, Math.hypot(dx, dy) / rect.width * 100) : Math.max(2, Math.abs(endX - start.x));
+      const height = isWall ? Math.max(1.2, 4 / rect.height * 100) : Math.max(2, Math.abs(endY - start.y));
+      const rotation = isWall ? Math.atan2(dy, dx) * 180 / Math.PI : 0;
       onChange(objects.map(item => item.id === drawingId ? {
         ...item,
         x: (start.x + endX) / 2,
         y: (start.y + endY) / 2,
         width,
         height,
+        rotation,
       } : item));
       return;
     }
@@ -109,8 +117,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     onChange(objects.map(item => item.id === draggingId ? { ...item, x, y } : item));
   };
 
-  const beginDrawZone = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!drawingMode || !canEdit || activeLayer !== "terrain" || layerLocks.terrain || !visibleLayers.terrain || event.target !== event.currentTarget) return;
+  const beginDrawObject = (event: React.PointerEvent<HTMLDivElement>) => {
+    const expectedLayer = drawingMode === "zone" ? "terrain" : "structures";
+    if (!drawingMode || !canEdit || activeLayer !== expectedLayer || layerLocks[expectedLayer] || !visibleLayers[expectedLayer] || event.target !== event.currentTarget) return;
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
     const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
@@ -118,9 +127,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const rawY = event.clientY - rect.top;
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
+    const kind: MapObject["kind"] = drawingMode === "zone" ? "zone" : drawingMode === "wall" ? "wall" : "room";
     const object: MapObject = {
-      id: globalThis.crypto?.randomUUID?.() ?? `zone-${Date.now()}`,
-      kind: "zone", layer: "terrain", zoneType, x, y, width: 2, height: 2, rotation: 0,
+      id: globalThis.crypto?.randomUUID?.() ?? `draw-${Date.now()}`,
+      kind, layer: expectedLayer, ...(kind === "zone" ? { zoneType } : {}),
+      x, y, width: 2, height: kind === "wall" ? 1.2 : 2, rotation: 0,
     };
     onEditStart();
     drawingStartRef.current = { x, y };
@@ -141,7 +152,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     <div className="map-object-toolbar" aria-label="Инструменты карты">
       <span><Layers size={13}/> Слои и объекты</span>
       <label className="map-layer-select">Активный слой
-        <select value={activeLayer} onChange={event => { const next = event.target.value as MapLayer; setActiveLayer(next); if (next !== "terrain") setDrawingMode(false); }} disabled={!canEdit}>
+        <select value={activeLayer} onChange={event => { const next = event.target.value as MapLayer; setActiveLayer(next); setDrawingMode(null); }} disabled={!canEdit}>
           <option value="terrain">Местность</option><option value="structures">Конструкции</option><option value="decorations">Декорации</option>
         </select>
       </label>
@@ -154,7 +165,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
           <option value="difficult">Трудная местность</option><option value="water">Вода</option><option value="fire">Огонь</option><option value="fog">Туман</option><option value="hazard">Опасная зона</option>
         </select>
       </label>}
-      <button type="button" className={drawingMode ? "tool-active" : ""} disabled={!canEdit || activeLayer !== "terrain" || layerLocks.terrain || !visibleLayers.terrain} onClick={() => setDrawingMode(value => !value)}><MapPinned size={14}/> {drawingMode ? "Завершить рисование" : "Рисовать область"}</button>
+      {activeLayer === "terrain" && <button type="button" className={drawingMode === "zone" ? "tool-active" : ""} disabled={!canEdit || layerLocks.terrain || !visibleLayers.terrain} onClick={() => setDrawingMode(value => value === "zone" ? null : "zone")}><MapPinned size={14}/> {drawingMode === "zone" ? "Стоп: область" : "Рисовать область"}</button>}
+      {activeLayer === "structures" && <>
+        <button type="button" className={drawingMode === "wall" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => setDrawingMode(value => value === "wall" ? null : "wall")}><Fence size={14}/> {drawingMode === "wall" ? "Стоп: стена" : "Рисовать стену"}</button>
+        <button type="button" className={drawingMode === "room" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => setDrawingMode(value => value === "room" ? null : "room")}><House size={14}/> {drawingMode === "room" ? "Стоп: комната" : "Создать комнату"}</button>
+      </>}
       {selected && canEdit && visibleLayers[layerOf(selected)] && <>
         <button type="button" title="Повернуть на 15°" disabled={selectedLocked} onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}><RotateCw size={14}/></button>
         <button type="button" title="Удалить объект" disabled={selectedLocked} onClick={() => { if (selectedLocked) return; onChange(objects.filter(item => item.id !== selected.id)); setSelectedId(null); }}><Trash2 size={14}/></button>
@@ -171,15 +186,15 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       <button type="button" title="На один уровень вперёд" disabled={selectedLocked} onClick={() => reorderSelected(1)}>Вперёд</button>
       <button type="button" title="На один уровень назад" disabled={selectedLocked} onClick={() => reorderSelected(-1)}>Назад</button>
     </div>}
-    <div className={`map-object-layer ${drawingMode ? "drawing-zone-mode" : ""}`} onPointerDown={beginDrawZone} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
+    <div className={`map-object-layer ${drawingMode ? "drawing-object-mode" : ""}`} onPointerDown={beginDrawObject} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
-        return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${item.kind === "zone" ? `map-zone-${item.zoneType ?? "difficult"}` : ""} ${selectedId === item.id ? "map-object-selected" : ""}`}
+        return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${item.kind === "zone" ? `map-zone-${item.zoneType ?? "difficult"}` : ""} ${item.kind === "room" ? "map-object-room" : ""} ${selectedId === item.id ? "map-object-selected" : ""}`}
           style={{ left: `${item.x}%`, top: `${item.y}%`, width: `${item.width}%`, height: `${item.height}%`, zIndex: layerOf(item) === "terrain" ? 1 : layerOf(item) === "structures" ? 2 : 3, transform: `translate(-50%,-50%) rotate(${item.rotation}deg)` }}
           title={labels[item.kind]} aria-label={labels[item.kind]}
           onPointerDown={event => { setSelectedId(item.id); if (!canEdit || layerLocks[layerOf(item)]) return; event.preventDefault(); event.stopPropagation(); onEditStart(); setDraggingId(item.id); event.currentTarget.setPointerCapture(event.pointerId); }}
           onClick={() => setSelectedId(item.id)} disabled={!canEdit}>
-          {item.kind === "zone" ? <span className="map-zone-label">{item.zoneType === "water" ? "Вода" : item.zoneType === "fire" ? "Огонь" : item.zoneType === "fog" ? "Туман" : item.zoneType === "hazard" ? "Опасность" : "Трудная местность"}</span> : <Icon size={16}/>} 
+          {item.kind === "zone" ? <span className="map-zone-label">{item.zoneType === "water" ? "Вода" : item.zoneType === "fire" ? "Огонь" : item.zoneType === "fog" ? "Туман" : item.zoneType === "hazard" ? "Опасность" : "Трудная местность"}</span> : item.kind === "room" ? <span className="map-room-label">Комната</span> : <Icon size={16}/>} 
         </button>;
       })}
     </div>
