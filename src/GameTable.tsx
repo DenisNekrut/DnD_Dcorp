@@ -1358,10 +1358,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <option value="actionUsed">Действие</option><option value="bonusActionUsed">Бонусное действие</option><option value="reactionUsed">Реакция</option>
                 </select></label>
               </div>
-              {spellLevel > 0 && <div className="spell-slot-row">
-                <span>Ячейки {spellLevel}-го уровня: {(selected.spellSlots?.[spellLevel]?.max ?? 0) - (selected.spellSlots?.[spellLevel]?.used ?? 0)} / {selected.spellSlots?.[spellLevel]?.max ?? 0}</span>
-                <label>Всего<input type="number" min="0" max="20" value={selected.spellSlots?.[spellLevel]?.max ?? 0} onChange={event => updateSpellSlotMaximum(spellLevel, Number(event.target.value) || 0)} disabled={!canEdit || layerLocks.figures}/></label>
-              </div>}
+              <div className="spell-slot-overview">
+                <strong>Ячейки заклинаний</strong>
+                {Array.from({length:9},(_,index)=>index+1).map(level=>{
+                  const slot=selected.spellSlots?.[level] ?? {max:0,used:0};
+                  return <div className="spell-slot-row" key={level}>
+                    <span>{level}-й уровень: {Math.max(0,slot.max-slot.used)} / {slot.max} доступно</span>
+                    <label>Всего<input type="number" min="0" max="20" value={slot.max} onChange={event=>updateSpellSlotMaximum(level,Number(event.target.value)||0)} disabled={!canEdit || layerLocks.figures}/></label>
+                    <small>Потрачено: {slot.used}</small>
+                  </div>;
+                })}
+              </div>
               <label className="weapon-proficiency-toggle"><input type="checkbox" checked={spellConcentration} onChange={event => setSpellConcentration(event.target.checked)} disabled={!canEdit}/> Требуется концентрация</label>
               <button type="button" className="secondary-button" onClick={recoverSpellSlotsAfterLongRest} disabled={!canEdit || layerLocks.figures}>Завершить длительный отдых</button>
               <button type="button" onClick={castTrackedSpell} disabled={!canEdit || diceBusy || !spellName.trim() || (spellLevel > 0 && ((selected.spellSlots?.[spellLevel]?.max ?? 0) <= (selected.spellSlots?.[spellLevel]?.used ?? 0)))} >Наложить заклинание</button>
