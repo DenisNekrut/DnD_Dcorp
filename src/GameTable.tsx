@@ -141,7 +141,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [rollKind, setRollKind] = useState<RollKind>("attack");
   const [rollModifier, setRollModifier] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState<SkillId>("acrobatics");
-  const [attackAbility, setAttackAbility] = useState<AbilityId>("strength");
+  const [attackAbility, setAttackAbility] = useState<AbilityId>("dexterity");
   const [useWeaponProficiency, setUseWeaponProficiency] = useState(false);
   const [saveAbility, setSaveAbility] = useState<AbilityId>("strength");
   const [rollModeOverride, setRollModeOverride] = useState<RollModeOverride>("auto");
@@ -165,8 +165,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [hpAdjustment, setHpAdjustment] = useState(1);
   const [temporaryHpInput, setTemporaryHpInput] = useState(1);
   const [attackTargetId, setAttackTargetId] = useState("");
-  const [damageFormula, setDamageFormula] = useState("1d6+0");
-  const [damageType, setDamageType] = useState<DamageType>("slashing");
+  const [damageFormula, setDamageFormula] = useState("1d4");
+  const [damageType, setDamageType] = useState<DamageType>("piercing");
   const [weaponOptions, setWeaponOptions] = useState<WeaponOption[]>(fallbackWeapons);
   const [selectedWeaponId, setSelectedWeaponId] = useState("dagger");
   const [useVersatileDamage, setUseVersatileDamage] = useState(false);
@@ -179,6 +179,16 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const attackTargets = selected ? tokens.filter(token => token.id !== selected.id) : [];
   const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
   const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
+
+  useEffect(() => {
+    if (!selected || !selectedWeapon) {
+      setUseWeaponProficiency(false);
+      return;
+    }
+    const proficiencies = selected.weaponProficiencies ?? [];
+    const proficient = proficiencies.some(value => value === selectedWeapon.category || value === selectedWeapon.id || value === "all" || value === selectedWeapon.category + " weapons" || value === (selectedWeapon.category === "simple" ? "простое оружие" : "воинское оружие"));
+    setUseWeaponProficiency(proficient);
+  }, [selected?.id, selectedWeapon?.id, weaponOptions.length]);
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const attackerRollFlags = selected ? getAutoRollFlags(selected, rollKind, saveAbility) : { advantage: false, disadvantage: false };
