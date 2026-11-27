@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { apiRequest, isApiConfigured } from "./api";
 import GameTable from "./GameTable";
+import AdminPanel from "./AdminPanel";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
   ScrollText, X, LockKeyhole, Globe2, Copy, MoreHorizontal, WandSparkles
 } from "lucide-react";
 
-type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки";
+type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки" | "Администрирование";
 type Campaign = { id: string; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
 type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
@@ -44,10 +45,10 @@ const ancestrySubraces: Record<string, string[]> = {
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords }, { label: "Игровой стол", icon: Dice5 },
   { label: "Персонажи", icon: UserRound }, { label: "Библиотека", icon: BookOpen },
-  { label: "Настройки", icon: Settings }
+  { label: "Настройки", icon: Settings }, { label: "Администрирование", icon: Shield }
 ];
 
-type SessionUser = { id: string; email: string; username: string };
+type SessionUser = { id: string; email: string; username: string; platformRole: "USER" | "ADMIN" };
 type ApiCharacter = { id: string; name: string; data: Record<string, unknown> };
 type ApiCampaign = { id: string; name: string; description?: string | null; applicationsOpen?: boolean; memberships?: Array<{ status: string }>; _count?: { memberships?: number } };
 
@@ -232,7 +233,7 @@ function App() {
     <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
       <div className="brand"><div className="brand-mark"><Swords size={23}/></div><div><strong>DnD_Dcorp</strong><span>ПРИКЛЮЧЕНИЯ НАЧИНАЮТСЯ ЗДЕСЬ</span></div><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Закрыть меню"><X size={18}/></button></div>
       <div className="nav-caption">РАЗДЕЛЫ</div>
-      <nav className="main-nav" aria-label="Основная навигация">{navigation.map(({label,icon:Icon})=><button key={label} className={`nav-item ${active===label?"active":""}`} onClick={()=>{setActive(label);setMenuOpen(false);}}><Icon size={18}/><span>{label}</span>{active===label&&<span className="nav-indicator"/>}</button>)}</nav>
+      <nav className="main-nav" aria-label="Основная навигация">{navigation.filter(item=>item.label!=="Администрирование"||sessionUser.platformRole==="ADMIN").map(({label,icon:Icon})=><button key={label} className={`nav-item ${active===label?"active":""}`} onClick={()=>{setActive(label);setMenuOpen(false);}}><Icon size={18}/><span>{label}</span>{active===label&&<span className="nav-indicator"/>}</button>)}</nav>
       <div className="sidebar-bottom"><div className="sidebar-tip"><Sparkles size={17}/><p>Твоя история. Твои решения. Твой мир.</p></div><div className="profile-mini"><div className="avatar">{sessionUser.username.slice(0,1).toUpperCase()}</div><div><strong>{sessionUser.username}</strong><span>Аккаунт</span></div><ChevronDown size={16}/></div></div>
     </aside>
     {menuOpen&&<button className="scrim" aria-label="Закрыть меню" onClick={()=>setMenuOpen(false)}/>}
@@ -253,6 +254,7 @@ function App() {
           {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.gender} · {c.ancestry}{c.subrace ? ` (${c.subrace})` : ""} · {c.className}</p><p className="character-background">{c.background} · {c.alignment}</p><div className="ability-preview">{abilityFields.map(ability=><span key={ability.id}><b>{ability.name}</b>{c.abilityScores[ability.id]} <small>{Math.floor((c.abilityScores[ability.id]-10)/2)>=0?"+":""}{Math.floor((c.abilityScores[ability.id]-10)/2)}</small></span>)}</div><div className="skill-preview"><b>Владения навыками</b><span>{c.skillProficiencies.map(id=>skillCatalog.find(skill=>skill.id===id)?.name).join(", ")}</span></div><div className="derived-preview"><span><b>ХИТЫ</b>{c.derived.maxHp}</span><span><b>КД</b>{c.derived.armorClass}</span><span><b>ИНИЦИАТИВА</b>{c.derived.initiative>=0?"+":""}{c.derived.initiative}</span><span><b>СКОРОСТЬ</b>{c.derived.speed} фт.</span><span><b>ПАСС. ВОСПРИЯТИЕ</b>{c.derived.passivePerception}</span><span><b>КОСТЬ ХИТОВ</b>{c.derived.hitDie}</span></div><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
         </section>}
         {active==="Библиотека"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> СПРАВОЧНЫЕ МАТЕРИАЛЫ</div><h1>Библиотека</h1><p className="subtitle">Игровые справочники и материалы кампаний.</p></div></div><div className="library-grid">{[{title:"Персонажи",desc:"Классы, происхождения, предыстории и развитие.",icon:<UserRound/>},{title:"Существа",desc:"Противники, союзники и игровые характеристики.",icon:<Swords/>},{title:"Заклинания",desc:"Магические эффекты и правила их применения.",icon:<WandSparkles/>},{title:"Предметы",desc:"Снаряжение, оружие, доспехи и сокровища.",icon:<Shield/>}].map(x=><article className="library-card" key={x.title}><div className="quick-icon purple-icon">{x.icon}</div><h3>{x.title}</h3><p>{x.desc}</p><span className="coming-label">Раздел готовится</span></article>)}</div></section>}
+        {active==="Администрирование"&&sessionUser.platformRole==="ADMIN"&&<AdminPanel/>}
         {active==="Настройки"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> УПРАВЛЕНИЕ АККАУНТОМ</div><h1>Настройки</h1><p className="subtitle">Параметры профиля и приложения.</p></div></div><div className="settings-card"><div className="settings-avatar">П</div><div><h3>Демо-профиль</h3><p>Авторизация и профиль будут подключены вместе с серверной частью.</p><span className="status-pill">Локальный прототип</span></div></div></section>}
         <footer>DnD_Dcorp <span>•</span> Пространство для настольных приключений</footer>
       </div>
