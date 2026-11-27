@@ -34,18 +34,18 @@ model User {
 }
 
 model Campaign {
-  id              String               @id @default(cuid())
-  name            String
-  description     String?              @db.Text
-  ownerId         String
-  owner           User                 @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  inviteToken     String               @unique @default(cuid())
-  passwordHash    String?
-  applicationsOpen Boolean             @default(true)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  memberships     CampaignMembership[]
-  characters      Character[]          @relation("CampaignCharacters")
+  id               String               @id @default(cuid())
+  name             String
+  description      String?              @db.Text
+  ownerId          String
+  owner            User                 @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  inviteToken      String               @unique @default(cuid())
+  passwordHash     String?
+  applicationsOpen Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  memberships      CampaignMembership[]
+  characters       Character[]          @relation("CampaignCharacters")
 
   @@index([ownerId])
 }
@@ -66,17 +66,22 @@ model CampaignMembership {
 }
 
 model Character {
-  id              String    @id @default(cuid())
-  name            String
-  ownerId         String
-  campaignId      String?
-  isCampaignCopy  Boolean   @default(false)
-  data            Json
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  owner           User      @relation("CharacterOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  campaign        Campaign? @relation("CampaignCharacters", fields: [campaignId], references: [id], onDelete: Cascade)
+  id               String      @id @default(cuid())
+  name             String
+  ownerId          String
+  campaignId       String?
+  sourceCharacterId String?
+  isCampaignCopy   Boolean     @default(false)
+  data             Json
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  owner            User        @relation("CharacterOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  campaign         Campaign?   @relation("CampaignCharacters", fields: [campaignId], references: [id], onDelete: Cascade)
+  sourceCharacter  Character?  @relation("CharacterCopies", fields: [sourceCharacterId], references: [id], onDelete: SetNull)
+  campaignCopies   Character[] @relation("CharacterCopies")
 
+  @@unique([sourceCharacterId, campaignId])
   @@index([ownerId, isCampaignCopy])
   @@index([campaignId])
+  @@index([sourceCharacterId])
 }
