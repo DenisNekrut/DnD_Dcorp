@@ -27,7 +27,7 @@ const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
 ];
 const parseDamageFormula = (formula: string) => {
-  const match = formula.trim().replace(/\\s+/g, "").match(/^(\\d{1,2})d(4|6|8|10|12|20|100)([+-]\\d{1,3})?$/i);
+  const match = formula.trim().replace(/\s+/g, "").match(/^(\d{1,2})d(4|6|8|10|12|20|100)([+-]\d{1,3})?$/i);
   if (!match) return null;
   const count = Number(match[1]);
   const sides = Number(match[2]);
