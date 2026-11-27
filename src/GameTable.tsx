@@ -246,19 +246,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     setMapUploading(true);
     try {
       const uploaded = await apiRequest<MapAsset>(`/campaigns/${campaignId}/table/map`, { method: "POST", body: formData });
-      const previous = mapAsset;
       setMapAsset(uploaded);
       addLog("Изображение карты загружено в постоянное хранилище.", "gold");
-      if (previous) {
-        try {
-          await apiRequest<{ deleted: boolean }>(`/campaigns/${campaignId}/table/map`, {
-            method: "DELETE",
-            body: JSON.stringify({ key: previous.key }),
-          });
-        } catch {
-          setTableError("Новая карта загружена, но прежний файл не удалось удалить из хранилища.");
-        }
-      }
     } catch (error) {
       setTableError(error instanceof Error ? error.message : "Не удалось загрузить изображение карты.");
     } finally {
