@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -196,6 +196,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [useVersatileDamage, setUseVersatileDamage] = useState(false);
   const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
   const [attackResource, setAttackResource] = useState<"actionUsed" | "bonusActionUsed" | "reactionUsed">("actionUsed");
+  const [spellName, setSpellName] = useState("");
+  const [spellLevel, setSpellLevel] = useState(1);
+  const [spellResource, setSpellResource] = useState<"actionUsed" | "bonusActionUsed" | "reactionUsed">("actionUsed");
+  const [spellConcentration, setSpellConcentration] = useState(false);
   const dirtyRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const inFlightStateRef = useRef<TableState | null>(null);
@@ -677,6 +681,44 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const updated = success ? token : { ...token, concentrating: false };
     addLog(token.name + ": спасбросок Телосложения для концентрации — " + roll + (modifier >= 0 ? " + " : " - ") + Math.abs(modifier) + " = " + total + " против СЛ " + dc + " — " + (success ? "успех, концентрация сохранена." : "провал, концентрация прервана."), success ? "gold" : "danger");
     return updated;
+  };
+
+  const castTrackedSpell = () => {
+    if (!selected || !canEdit || layerLocks.figures || !spellName.trim()) return;
+    if ((selected.conditions ?? []).includes("incapacitated")) {
+      addLog(selected.name + ": недееспособное существо не может накладывать заклинания.", "danger");
+      return;
+    }
+    const resourceLabel = spellResource === "actionUsed" ? "действие" : spellResource === "bonusActionUsed" ? "бонусное действие" : "реакция";
+    if (selected[spellResource]) {
+      addLog(selected.name + ": " + resourceLabel + " уже использовано.", "danger");
+      return;
+    }
+    const slot = selected.spellSlots?.[spellLevel] ?? { max: 0, used: 0 };
+    if (spellLevel > 0 && (slot.max <= slot.used)) {
+      addLog(selected.name + ": нет доступных ячеек " + spellLevel + "-го уровня.", "danger");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? {
+      ...token,
+      [spellResource]: true,
+      ...(spellLevel > 0 ? { spellSlots: { ...(token.spellSlots ?? {}), [spellLevel]: { ...slot, used: slot.used + 1 } } } : {}),
+      ...(spellConcentration ? { concentrating: true } : {}),
+    } : token));
+    addLog(selected.name + " накладывает «" + spellName.trim() + "» (" + (spellLevel === 0 ? "заговор" : spellLevel + "-й уровень") + "). Потрачено: " + resourceLabel + (spellLevel > 0 ? " и ячейка " + spellLevel + "-го уровня" : "") + (spellConcentration ? "; начата концентрация" : "") + ".", "gold");
+    setSpellName("");
+  };
+
+  const updateSpellSlotMaximum = (level: number, maximum: number) => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const current = selected.spellSlots?.[level] ?? { max: 0, used: 0 };
+    const max = Math.max(0, Math.min(20, maximum));
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? {
+      ...token,
+      spellSlots: { ...(token.spellSlots ?? {}), [level]: { max, used: Math.min(current.used, max) } },
+    } : token));
   };
 
   const toggleConcentration = () => {
@@ -1268,6 +1310,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               }}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
               <small>Выбери несколько типов с Ctrl/⌘. Эти свойства учитываются при ручном и автоматическом нанесении урона.</small>
             </details>
+            <section className="spellcasting-panel">
+              <strong>Заклинания</strong>
+              <label>Название заклинания<input value={spellName} onChange={event => setSpellName(event.target.value)} placeholder="Например, Волшебная стрела" disabled={!canEdit || layerLocks.figures}/></label>
+              <div className="combat-roll-row">
+                <label>Уровень<select value={spellLevel} onChange={event => setSpellLevel(Number(event.target.value))} disabled={!canEdit}>
+                  <option value={0}>Заговор</option>
+                  {Array.from({length:9},(_,index)=>index+1).map(level=><option key={level} value={level}>{level}-й</option>)}
+                </select></label>
+                <label>Время накладывания<select value={spellResource} onChange={event => setSpellResource(event.target.value as typeof spellResource)} disabled={!canEdit}>
+                  <option value="actionUsed">Действие</option><option value="bonusActionUsed">Бонусное действие</option><option value="reactionUsed">Реакция</option>
+                </select></label>
+              </div>
+              {spellLevel > 0 && <div className="spell-slot-row">
+                <span>Ячейки {spellLevel}-го уровня: {(selected.spellSlots?.[spellLevel]?.max ?? 0) - (selected.spellSlots?.[spellLevel]?.used ?? 0)} / {selected.spellSlots?.[spellLevel]?.max ?? 0}</span>
+                <label>Всего<input type="number" min="0" max="20" value={selected.spellSlots?.[spellLevel]?.max ?? 0} onChange={event => updateSpellSlotMaximum(spellLevel, Number(event.target.value) || 0)} disabled={!canEdit || layerLocks.figures}/></label>
+              </div>}
+              <label className="weapon-proficiency-toggle"><input type="checkbox" checked={spellConcentration} onChange={event => setSpellConcentration(event.target.checked)} disabled={!canEdit}/> Требуется концентрация</label>
+              <button type="button" onClick={castTrackedSpell} disabled={!canEdit || diceBusy || !spellName.trim() || (spellLevel > 0 && ((selected.spellSlots?.[spellLevel]?.max ?? 0) <= (selected.spellSlots?.[spellLevel]?.used ?? 0)))} >Наложить заклинание</button>
+              <small>Учёт ячеек и боевого ресурса. Дальность, компоненты, цели, эффекты и доступность заклинания пока проверяются вручную.</small>
+            </section>
             <div className="condition-panel">
               <strong>Состояния</strong>
               <div className="condition-chip-list">
