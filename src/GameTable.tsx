@@ -130,7 +130,7 @@ const defaultMapView: MapView = { scale: 1, x: 0, y: 0 };
 const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true, gridCellSizePx: 38 };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
 const recoveryKey = (id: string) => `${localKey(id)}-pending-recovery`;
-type TableRecovery = { state: TableState; savedAt: number };
+type TableRecovery = { state: TableState; savedAt: number; supersedes?: TableState };
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
 export default function GameTable({ campaignName, campaignId, isGuest, onBack }: { campaignName: string; campaignId?: string; isGuest: boolean; onBack: () => void }) {
@@ -191,6 +191,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [attackType, setAttackType] = useState<"melee" | "ranged">("melee");
   const dirtyRef = useRef(false);
   const saveInFlightRef = useRef(false);
+  const inFlightStateRef = useRef<TableState | null>(null);
   const latestStateRef = useRef<TableState | null>(null);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
@@ -354,7 +355,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           if (rawRecovery) {
             const recovery = JSON.parse(rawRecovery) as TableRecovery;
             const serverTime = response.updatedAt ? new Date(response.updatedAt).getTime() : 0;
-            if (recovery?.state && Number.isFinite(recovery.savedAt) && recovery.savedAt > serverTime) {
+            const serverMatchesRecovery = JSON.stringify(response.state ?? {}) === JSON.stringify(recovery?.state ?? null);
+            const serverContainsOlderInFlightSave = Boolean(recovery?.supersedes && JSON.stringify(response.state ?? {}) === JSON.stringify(recovery.supersedes));
+            if (serverMatchesRecovery) {
+              window.localStorage.removeItem(recoveryKey(campaignId));
+            } else if (recovery?.state && Number.isFinite(recovery.savedAt) && (recovery.savedAt > serverTime || serverContainsOlderInFlightSave)) {
               applyRemoteState({ ...response, state: recovery.state });
               setTableError("Восстановлены последние локальные изменения комнаты. Сохраняем их на сервере…");
               restored = true;
@@ -397,7 +402,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!canEdit) return;
     dirtyRef.current = true;
     try {
-      window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now() } satisfies TableRecovery));
+      window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now(), supersedes: inFlightStateRef.current ?? undefined } satisfies TableRecovery));
     } catch { /* The server remains the primary store if local recovery storage is unavailable. */ }
     let cancelled = false;
     let timeout = 0;
@@ -409,6 +414,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         return;
       }
       saveInFlightRef.current = true;
+      inFlightStateRef.current = state;
       try {
         const response = await apiRequest<TableResponse>(`/campaigns/${campaignId}/table`, { method: "PUT", body: JSON.stringify({ state }) });
         updatedAtRef.current = response.updatedAt;
@@ -426,6 +432,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         timeout = window.setTimeout(save, 2000);
       } finally {
         saveInFlightRef.current = false;
+        if (inFlightStateRef.current === state) inFlightStateRef.current = null;
         if (JSON.stringify(latestStateRef.current) === JSON.stringify(state) && !timeout) dirtyRef.current = false;
       }
     };
@@ -447,7 +454,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         method: "PUT",
         body: JSON.stringify({ state }),
         keepalive: true,
-      }).catch(() => undefined).finally(() => { saveInFlightRef.current = false; });
+      }).catch(() => undefined).finally(() => { saveInFlightRef.current = false; inFlightStateRef.current = null; });
     };
     window.addEventListener("pagehide", saveOnPageHide);
     return () => window.removeEventListener("pagehide", saveOnPageHide);
