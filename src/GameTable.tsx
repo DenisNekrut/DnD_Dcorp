@@ -26,6 +26,16 @@ const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "religion", label: "Религия", ability: "intelligence" }, { id: "sleightOfHand", label: "Ловкость рук", ability: "dexterity" },
   { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
 ];
+const parseDamageFormula = (formula: string) => {
+  const match = formula.trim().replace(/\\s+/g, "").match(/^(\\d{1,2})d(4|6|8|10|12|20|100)([+-]\\d{1,3})?$/i);
+  if (!match) return null;
+  const count = Number(match[1]);
+  const sides = Number(match[2]);
+  const modifier = match[3] ? Number(match[3]) : 0;
+  if (count < 1 || count > 10 || modifier < -100 || modifier > 100) return null;
+  return { count, sides, modifier };
+};
+
 const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): RollMode => {
   const conditions = new Set(token.conditions ?? []);
   const advantage = kind === "attack" && conditions.has("invisible");
@@ -39,7 +49,7 @@ const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): 
   if (disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -119,12 +129,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [newTokenName, setNewTokenName] = useState("");
   const [newTokenKind, setNewTokenKind] = useState<Token["kind"]>("hero");
   const [newTokenHp, setNewTokenHp] = useState(10);
+  const [newTokenAc, setNewTokenAc] = useState(10);
   const [newTokenInitiative, setNewTokenInitiative] = useState(10);
+  const [attackTargetId, setAttackTargetId] = useState("");
+  const [damageFormula, setDamageFormula] = useState("1d6+0");
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.find(token => token.id === activeTokenId) ?? initiative[0];
   const selected = tokens.find(token => token.id === selectedId);
+  const attackTargets = selected ? tokens.filter(token => token.id !== selected.id) : [];
+  const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
   const availableConditions = selected ? conditionCatalog.filter(condition => !(selected.conditions ?? []).includes(condition.id)) : conditionCatalog;
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
@@ -301,7 +316,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -371,7 +386,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     event.preventDefault();
     if (!newTokenName.trim() || !canEdit || layerLocks.figures) return;
     const color = newTokenKind === "enemy" ? "red" : newTokenKind === "ally" ? "blue" : "gold";
-    const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative };
+    const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative, armorClass: newTokenAc };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     setSelectedId(token.id);
@@ -394,39 +409,87 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
     if (selectedRollBlocked) {
-      addLog(`${selected.name}: атака невозможна. ${selectedRollBlockReason}`, "danger");
+      addLog(selected.name + ": атака невозможна. " + selectedRollBlockReason, "danger");
       return;
     }
-    const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : rollKind === "skill" ? "Навык: " + selectedSkillData.label : `Спасбросок: ${abilityLabels[saveAbility]}`;
-    const modifierText = effectiveRollModifier > 0 ? `+${effectiveRollModifier}` : `${effectiveRollModifier}`;
+    if (rollKind === "attack" && !attackTarget) {
+      addLog("Для атаки сначала добавь на карту цель.", "danger");
+      return;
+    }
+    const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : rollKind === "skill" ? "Навык: " + selectedSkillData.label : "Спасбросок: " + abilityLabels[saveAbility];
+    const modifierText = effectiveRollModifier > 0 ? "+" + effectiveRollModifier : String(effectiveRollModifier);
     if (selectedSaveAutoFail) {
-      addLog(`${selected.name}: ${checkLabel} — автоматический провал. ${selectedSaveFailReason}`, "danger");
+      addLog(selected.name + ": " + checkLabel + " — автоматический провал. " + selectedSaveFailReason, "danger");
       return;
     }
-    if (remoteEnabled) {
-      setDiceBusy(true);
-      try {
+    setDiceBusy(true);
+    try {
+      let rolls: number[];
+      let kept: number;
+      let total: number;
+      if (remoteEnabled) {
         const result = await apiRequest<{ rolls: number[]; keptRoll: number | null; total: number; mode: RollMode }>(
           "/dice/roll",
           { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: effectiveRollModifier, mode: selectedRollMode }) },
         );
-        const kept = result.keptRoll ?? result.rolls[0];
-        const critical = rollKind === "attack" && kept === 20;
-        const naturalOne = rollKind === "attack" && kept === 1;
-        addLog(`${selected.name}: ${checkLabel} — ${result.rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${result.total}${critical ? " · критическое попадание" : naturalOne ? " · естественная 1 — промах" : ""}.`, critical ? "gold" : naturalOne ? "danger" : "muted");
-      } catch (error) {
-        setTableError(error instanceof Error ? error.message : "Не удалось выполнить проверку.");
-      } finally {
-        setDiceBusy(false);
+        rolls = result.rolls;
+        kept = result.keptRoll ?? rolls[0];
+        total = result.total;
+      } else {
+        rolls = selectedRollMode === "normal"
+          ? [Math.floor(Math.random() * 20) + 1]
+          : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
+        kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
+        total = kept + effectiveRollModifier;
       }
-      return;
+
+      if (rollKind !== "attack") {
+        addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + ".", "muted");
+        return;
+      }
+
+      const target = attackTarget!;
+      const targetAc = Math.max(0, Number(target.armorClass ?? 10));
+      const critical = kept === 20;
+      const naturalOne = kept === 1;
+      const hit = critical || (!naturalOne && total >= targetAc);
+      addLog(
+        selected.name + " атакует " + target.name + ": " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
+        hit ? "gold" : "danger",
+      );
+      if (!hit) return;
+
+      const parsed = parseDamageFormula(damageFormula);
+      if (!parsed) {
+        addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
+        return;
+      }
+      const damageCount = parsed.count * (critical ? 2 : 1);
+      let damageRolls: number[];
+      let damageTotal: number;
+      if (remoteEnabled) {
+        const damage = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+          method: "POST",
+          body: JSON.stringify({ count: damageCount, sides: parsed.sides, modifier: parsed.modifier, mode: "normal" }),
+        });
+        damageRolls = damage.rolls;
+        damageTotal = damage.total;
+      } else {
+        damageRolls = Array.from({ length: damageCount }, () => Math.floor(Math.random() * parsed.sides) + 1);
+        damageTotal = damageRolls.reduce((sum, value) => sum + value, 0) + parsed.modifier;
+      }
+      const appliedDamage = Math.max(0, damageTotal);
+      recordEditorHistory();
+      setTokens(items => items.map(token => token.id === target.id ? { ...token, hp: Math.max(0, token.hp - appliedDamage) } : token));
+      addLog(
+        "Урон " + target.name + ": " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (critical ? " (критический урон: кости удвоены)" : "") + ". Осталось хитов: " + Math.max(0, target.hp - appliedDamage) + "/" + target.maxHp + ".",
+        "danger",
+      );
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось выполнить бросок.");
+    } finally {
+      setDiceBusy(false);
     }
-    const rolls = selectedRollMode === "normal"
-      ? [Math.floor(Math.random() * 20) + 1]
-      : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
-    const kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
-    const total = kept + effectiveRollModifier;
-    addLog(`${selected.name}: ${checkLabel} — ${rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${total}${rollKind === "attack" && kept === 1 ? " · естественная 1 — промах" : ""}.`, rollKind === "attack" && kept === 20 ? "gold" : "muted");
   };
 
   const nextTurn = () => {
@@ -598,6 +661,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select>}
                 <input type="number" value={effectiveRollModifier} min={-100} max={100} onChange={event => setRollModifier(Math.max(-100, Math.min(100, Number(event.target.value) || 0)))} disabled={!canEdit || rollKind === "skill"} aria-label="Модификатор броска" title={rollKind === "skill" ? "Модификатор автоматически взят из листа персонажа" : "Дополнительный модификатор броска"}/>
               </div>
+              {rollKind === "attack" && <div className="combat-attack-options">
+                <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
+                  {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
+                </select></label>
+                <label>Урон<input value={damageFormula} onChange={event => setDamageFormula(event.target.value)} placeholder="1d8+3" disabled={!canEdit} aria-label="Формула урона"/></label>
+              </div>}
               <select className="combat-roll-mode" value={rollModeOverride} onChange={event => setRollModeOverride(event.target.value as RollModeOverride)} disabled={!canEdit}>
                 <option value="auto">Автоматически по состояниям</option><option value="normal">Обычный бросок</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option>
               </select>
@@ -637,7 +706,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить NPC или противника</strong></div></div>
             <form className="add-token-form" onSubmit={addToken}>
               <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit || layerLocks.figures}/></label>
-              <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label></div>
+              <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label><label>КД<input type="number" min="0" max="40" value={newTokenAc} onChange={event => setNewTokenAc(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit || layerLocks.figures}/></label></div>
               <button className="button button-secondary full-width" type="submit" disabled={!canEdit || layerLocks.figures}><Plus size={15}/> Добавить на карту</button>
             </form>
           </section>
