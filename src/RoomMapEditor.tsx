@@ -82,8 +82,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (drawingId && drawingStartRef.current && canEdit && !layerLocks.terrain) {
-      const endX = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100));
-      const endY = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100));
+      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+      const rawEndX = event.clientX - rect.left;
+      const rawEndY = event.clientY - rect.top;
+      const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
+      const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const start = drawingStartRef.current;
       const width = Math.max(2, Math.abs(endX - start.x));
       const height = Math.max(2, Math.abs(endY - start.y));
@@ -110,8 +113,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     if (!drawingMode || !canEdit || activeLayer !== "terrain" || layerLocks.terrain || !visibleLayers.terrain || event.target !== event.currentTarget) return;
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100));
-    const y = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100));
+    const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+    const rawX = event.clientX - rect.left;
+    const rawY = event.clientY - rect.top;
+    const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
+    const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     const object: MapObject = {
       id: globalThis.crypto?.randomUUID?.() ?? `zone-${Date.now()}`,
       kind: "zone", layer: "terrain", zoneType, x, y, width: 2, height: 2, rotation: 0,
