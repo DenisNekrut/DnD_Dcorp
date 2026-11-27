@@ -54,3 +54,31 @@
  .sheet-hp-fields{grid-template-columns:1fr 1fr}
  .sheet-hp-fields .button{grid-column:1/-1;width:100%}
 }
+
+.sheet-details-panel{display:grid;gap:10px}
+.sheet-details-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sheet-details-heading h3{margin-bottom:4px}
+.sheet-details-heading .sheet-muted{margin:0;line-height:1.45}
+.sheet-edit-toggle{flex:0 0 auto;min-height:31px;padding:6px 10px;font-size:9px}
+.sheet-details-editor{display:grid;gap:12px}
+.sheet-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.sheet-editor-grid label,.sheet-currency-editor label{display:grid;gap:5px;color:#cdb992;font-size:9px}
+.sheet-editor-textarea,.sheet-editor-grid textarea{width:100%;min-width:0;min-height:54px;padding:8px;border:1px solid rgba(204,163,99,.3);border-radius:5px;color:#f0dfbf;background:#18120d;font:inherit;font-size:10px;line-height:1.45;resize:vertical}
+.sheet-editor-grid textarea:focus,.sheet-currency-editor input:focus{outline:0;border-color:#d6b273;box-shadow:0 0 0 2px rgba(214,178,115,.12)}
+.sheet-editor-subheading{padding-top:4px;color:#f0d7a7;font-family:Georgia,serif;font-size:13px;font-weight:700}
+.sheet-currency-editor,.sheet-currency-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
+.sheet-currency-editor input{width:100%;min-width:0;padding:7px 5px;border:1px solid rgba(204,163,99,.3);border-radius:5px;color:#f0dfbf;background:#18120d;font-size:11px;text-align:center}
+.sheet-inspiration-toggle{display:flex;align-items:center;gap:8px;color:#d9c39d;font-size:10px}
+.sheet-inspiration-toggle input{accent-color:#cda765}
+.sheet-editor-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:5px;border-top:1px solid rgba(204,163,99,.16)}
+.sheet-editor-actions .button{min-height:33px;padding:7px 11px;font-size:10px}
+.sheet-currency-list span{display:grid;gap:4px;justify-items:center;padding:8px 4px;border:1px solid rgba(204,163,99,.18);border-radius:5px;color:#f0d7a7;font-size:12px}
+.sheet-currency-list b{color:#bda77e;font-size:9px}
+.sheet-currency-panel h3{margin-bottom:7px}
+@media(max-width:620px){
+ .sheet-details-heading{align-items:flex-start}
+ .sheet-editor-grid{grid-template-columns:1fr}
+ .sheet-currency-editor,.sheet-currency-list{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+ .sheet-editor-actions{display:grid;grid-template-columns:1fr 1fr}
+ .sheet-editor-actions .button{width:100%}
+}
