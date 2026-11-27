@@ -1,90 +1,88 @@
 import { useState } from "react";
 import {
-  BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard,
-  Menu, Plus, Search, Settings, Shield, Sparkles, Swords,
-  Users, UserRound, Bell, ScrollText, X
+  BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
+  Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
+  ScrollText, X, LockKeyhole, Globe2, Copy, MoreHorizontal, WandSparkles
 } from "lucide-react";
 
 type Section = "Главная" | "Кампании" | "Персонажи" | "Библиотека" | "Настройки";
+type Campaign = { id: number; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
+type Character = { id: number; name: string; ancestry: string; className: string; level: number };
 
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
-  { label: "Главная", icon: LayoutDashboard },
-  { label: "Кампании", icon: Swords },
-  { label: "Персонажи", icon: UserRound },
-  { label: "Библиотека", icon: BookOpen },
+  { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords },
+  { label: "Персонажи", icon: UserRound }, { label: "Библиотека", icon: BookOpen },
   { label: "Настройки", icon: Settings }
 ];
 
 function App() {
   const [active, setActive] = useState<Section>("Главная");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [campaignModal, setCampaignModal] = useState(false);
+  const [characterModal, setCharacterModal] = useState(false);
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignDescription, setCampaignDescription] = useState("");
+  const [campaignAccess, setCampaignAccess] = useState<"Открытая" | "По приглашению">("По приглашению");
+  const [characterName, setCharacterName] = useState("");
+  const [characterAncestry, setCharacterAncestry] = useState("");
+  const [characterClass, setCharacterClass] = useState("");
+  const [query, setQuery] = useState("");
 
-  return (
-    <div className="app-shell">
-      <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
-        <div className="brand">
-          <div className="brand-mark"><Swords size={23} /></div>
-          <div><strong>DnD_Dcorp</strong><span>ПРИКЛЮЧЕНИЯ НАЧИНАЮТСЯ ЗДЕСЬ</span></div>
-          <button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Закрыть меню"><X size={18}/></button>
-        </div>
-        <div className="nav-caption">РАЗДЕЛЫ</div>
-        <nav className="main-nav" aria-label="Основная навигация">
-          {navigation.map(({ label, icon: Icon }) => (
-            <button key={label} className={`nav-item ${active === label ? "active" : ""}`} onClick={() => { setActive(label); setMenuOpen(false); }}>
-              <Icon size={18} /><span>{label}</span>{active === label && <span className="nav-indicator" />}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="sidebar-tip"><Sparkles size={17}/><p>Твоя история. Твои решения. Твой мир.</p></div>
-          <div className="profile-mini"><div className="avatar">П</div><div><strong>Путешественник</strong><span>Личный кабинет</span></div><ChevronDown size={16}/></div>
-        </div>
-      </aside>
+  const createCampaign = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!campaignName.trim()) return;
+    setCampaigns(items => [...items, { id: Date.now(), name: campaignName.trim(), description: campaignDescription.trim(), access: campaignAccess, players: 1 }]);
+    setCampaignName(""); setCampaignDescription(""); setCampaignModal(false);
+  };
+  const createCharacter = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!characterName.trim() || !characterClass.trim()) return;
+    setCharacters(items => [...items, { id: Date.now(), name: characterName.trim(), ancestry: characterAncestry.trim() || "Не указано", className: characterClass.trim(), level: 1 }]);
+    setCharacterName(""); setCharacterAncestry(""); setCharacterClass(""); setCharacterModal(false);
+  };
 
-      {menuOpen && <button className="scrim" aria-label="Закрыть меню" onClick={() => setMenuOpen(false)} />}
-      <main className="main-area">
-        <header className="topbar">
-          <button className="icon-button menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Открыть меню"><Menu size={20}/></button>
-          <div className="breadcrumbs"><span>DnD_Dcorp</span><span className="crumb-separator">/</span><strong>{active}</strong></div>
-          <div className="top-actions">
-            <button className="icon-button search-button" aria-label="Поиск"><Search size={18}/></button>
-            <button className="icon-button notification-button" aria-label="Уведомления"><Bell size={18}/><i/></button>
-            <div className="top-avatar">П</div>
-          </div>
-        </header>
-
-        <div className="content">
-          <section className="welcome-row">
-            <div><div className="eyebrow"><span/> ВАШЕ ПРИКЛЮЧЕНИЕ ПРОДОЛЖАЕТСЯ</div><h1>{active === "Главная" ? "Добро пожаловать" : active}</h1><p className="subtitle">Собирай отряд, создавай героев и отправляйся навстречу неизвестному.</p></div>
-            <button className="button button-primary" onClick={() => setActive("Кампании")}><Plus size={17}/> Создать кампанию</button>
-          </section>
-
-          <section className="hero-panel">
-            <div className="hero-content">
-              <div className="hero-kicker"><Shield size={15}/> ПРОСТРАНСТВО ДЛЯ ТВОИХ ИСТОРИЙ</div>
-              <h2>Каждое великое<br/><em>приключение</em> начинается здесь.</h2>
-              <p>Создай собственный мир, собери друзей и расскажи историю, которую запомнят.</p>
-              <button className="button button-gold" onClick={() => setActive("Кампании")}>Открыть кампании <Compass size={16}/></button>
-            </div>
-            <div className="hero-art" aria-hidden="true"><div className="rune rune-one">✦</div><div className="rune rune-two">✧</div><div className="orb"><Dice5 size={74} strokeWidth={1}/></div><div className="orbit orbit-one"/><div className="orbit orbit-two"/></div>
-          </section>
-
-          <div className="section-heading"><div><h2>Быстрый доступ</h2><p>Всё необходимое для следующего шага</p></div><button className="text-button" onClick={() => setActive("Кампании")}>Все разделы <span>→</span></button></div>
-          <section className="quick-grid">
-            <button className="quick-card" onClick={() => setActive("Кампании")}><div className="quick-icon gold-icon"><Swords size={21}/></div><div><strong>Мои кампании</strong><span>Управление приключениями</span></div><span className="card-arrow">↗</span></button>
-            <button className="quick-card" onClick={() => setActive("Персонажи")}><div className="quick-icon blue-icon"><Users size={21}/></div><div><strong>Мои персонажи</strong><span>Герои и листы персонажей</span></div><span className="card-arrow">↗</span></button>
-            <button className="quick-card" onClick={() => setActive("Библиотека")}><div className="quick-icon purple-icon"><BookOpen size={21}/></div><div><strong>Библиотека</strong><span>Правила и игровые материалы</span></div><span className="card-arrow">↗</span></button>
-          </section>
-
-          <div className="lower-grid">
-            <section className="empty-panel"><div className="panel-title"><div><h3>Последние кампании</h3><p>Твои недавние приключения</p></div><ScrollText size={19}/></div><div className="empty-state"><div className="empty-emblem"><Swords size={25}/></div><strong>Здесь появятся твои кампании</strong><span>Создай первую кампанию или присоединись к приключению друзей.</span><button className="button button-secondary" onClick={() => setActive("Кампании")}><Plus size={16}/> Начать</button></div></section>
-            <section className="empty-panel activity-panel"><div className="panel-title"><div><h3>Путевой журнал</h3><p>Важные события и уведомления</p></div><Bell size={18}/></div><div className="journal-empty"><div className="journal-line"/><span>Пока нет новых событий</span></div><div className="tip-box"><Sparkles size={17}/><span>Совет: создай персонажа заранее, чтобы быстрее присоединиться к игре.</span></div></section>
-          </div>
-          <footer>DnD_Dcorp <span>•</span> Пространство для настольных приключений</footer>
-        </div>
-      </main>
-    </div>
-  );
+  return <div className="app-shell">
+    <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
+      <div className="brand"><div className="brand-mark"><Swords size={23}/></div><div><strong>DnD_Dcorp</strong><span>ПРИКЛЮЧЕНИЯ НАЧИНАЮТСЯ ЗДЕСЬ</span></div><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Закрыть меню"><X size={18}/></button></div>
+      <div className="nav-caption">РАЗДЕЛЫ</div>
+      <nav className="main-nav" aria-label="Основная навигация">{navigation.map(({label,icon:Icon})=><button key={label} className={`nav-item ${active===label?"active":""}`} onClick={()=>{setActive(label);setMenuOpen(false);}}><Icon size={18}/><span>{label}</span>{active===label&&<span className="nav-indicator"/>}</button>)}</nav>
+      <div className="sidebar-bottom"><div className="sidebar-tip"><Sparkles size={17}/><p>Твоя история. Твои решения. Твой мир.</p></div><div className="profile-mini"><div className="avatar">П</div><div><strong>Путешественник</strong><span>Демо-профиль</span></div><ChevronDown size={16}/></div></div>
+    </aside>
+    {menuOpen&&<button className="scrim" aria-label="Закрыть меню" onClick={()=>setMenuOpen(false)}/>}
+    <main className="main-area">
+      <header className="topbar"><button className="icon-button menu-toggle" onClick={()=>setMenuOpen(true)} aria-label="Открыть меню"><Menu size={20}/></button><div className="breadcrumbs"><span>DnD_Dcorp</span><span className="crumb-separator">/</span><strong>{active}</strong></div><div className="top-actions"><button className="icon-button search-button" aria-label="Поиск"><Search size={18}/></button><button className="icon-button notification-button" aria-label="Уведомления"><Bell size={18}/><i/></button><div className="top-avatar">П</div></div></header>
+      <div className="content">
+        {active==="Главная"&&<Dashboard campaigns={campaigns} characters={characters} onCampaign={()=>setActive("Кампании")} onCharacters={()=>setActive("Персонажи")} onCreate={()=>setCampaignModal(true)}/>}
+        {active==="Кампании"&&<section className="page-section">
+          <div className="page-heading"><div><div className="eyebrow"><span/> СОВМЕСТНЫЕ ПРИКЛЮЧЕНИЯ</div><h1>Кампании</h1><p className="subtitle">Создавай игровые миры или присоединяйся к приключениям.</p></div><button className="button button-primary" onClick={()=>setCampaignModal(true)}><Plus size={17}/> Создать кампанию</button></div>
+          <div className="toolbar"><div className="search-field"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск среди моих кампаний"/></div><span className="muted-count">{campaigns.length} кампаний</span></div>
+          {campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).length===0?<EmptyState icon={<Swords size={26}/>} title="Пока нет кампаний" description="Создай первую кампанию. Здесь появятся твои игровые миры и приглашения." action="Создать кампанию" onAction={()=>setCampaignModal(true)}/>:<div className="entity-grid">{campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).map(c=><article className="entity-card" key={c.id}><div className="entity-card-top"><div className="quick-icon gold-icon"><Swords size={22}/></div><span className="status-pill">{c.access==="Открытая"?<Globe2 size={13}/>:<LockKeyhole size={13}/>} {c.access}</span><button className="icon-button compact" aria-label="Дополнительные действия"><MoreHorizontal size={18}/></button></div><h3>{c.name}</h3><p>{c.description||"Описание кампании пока не добавлено."}</p><div className="entity-meta"><span><Users size={14}/> {c.players} участник</span><span>Система: 5e</span></div><button className="button button-secondary full-width" disabled>Открыть игровой стол <Compass size={15}/></button><small className="prototype-note">Подключение и игровой стол появятся на следующих этапах</small></article>)}</div>}
+          <div className="join-panel"><div className="join-icon"><Copy size={19}/></div><div><strong>Есть приглашение?</strong><span>Вставь пригласительную ссылку или код, чтобы отправить заявку на вступление.</span></div><button className="button button-secondary" disabled>Ввести приглашение</button></div>
+        </section>}
+        {active==="Персонажи"&&<section className="page-section">
+          <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
+          <div className="notice-strip"><Shield size={17}/><span>Личные карточки независимы от персонажей в игровых кампаниях. Правила создания и расчёты будут реализованы по стандарту 5e.</span></div>
+          {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.ancestry} · {c.className}</p><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
+        </section>}
+        {active==="Библиотека"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> СПРАВОЧНЫЕ МАТЕРИАЛЫ</div><h1>Библиотека</h1><p className="subtitle">Игровые справочники и материалы кампаний.</p></div></div><div className="library-grid">{[{title:"Персонажи",desc:"Классы, происхождения, предыстории и развитие.",icon:<UserRound/>},{title:"Существа",desc:"Противники, союзники и игровые характеристики.",icon:<Swords/>},{title:"Заклинания",desc:"Магические эффекты и правила их применения.",icon:<WandSparkles/>},{title:"Предметы",desc:"Снаряжение, оружие, доспехи и сокровища.",icon:<Shield/>}].map(x=><article className="library-card" key={x.title}><div className="quick-icon purple-icon">{x.icon}</div><h3>{x.title}</h3><p>{x.desc}</p><span className="coming-label">Раздел готовится</span></article>)}</div></section>}
+        {active==="Настройки"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> УПРАВЛЕНИЕ АККАУНТОМ</div><h1>Настройки</h1><p className="subtitle">Параметры профиля и приложения.</p></div></div><div className="settings-card"><div className="settings-avatar">П</div><div><h3>Демо-профиль</h3><p>Авторизация и профиль будут подключены вместе с серверной частью.</p><span className="status-pill">Локальный прототип</span></div></div></section>}
+        <footer>DnD_Dcorp <span>•</span> Пространство для настольных приключений</footer>
+      </div>
+    </main>
+    {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><label>Доступ<select value={campaignAccess} onChange={e=>setCampaignAccess(e.target.value as "Открытая"|"По приглашению")}><option>По приглашению</option><option>Открытая</option></select></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div><small className="prototype-note">Демо: кампания пока сохраняется только в памяти страницы. Аккаунты и серверное сохранение будут добавлены позже.</small></form></Modal>}
+    {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Происхождение<input value={characterAncestry} onChange={e=>setCharacterAncestry(e.target.value)} placeholder="Укажи происхождение"/></label><label>Класс<input required value={characterClass} onChange={e=>setCharacterClass(e.target.value)} placeholder="Например, воин"/></label><div className="notice-strip"><Dice5 size={17}/><span>Это предварительная карточка. Полное создание персонажа с проверками правил 5e будет реализовано в редакторе.</span></div><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCharacterModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div></form></Modal>}
+  </div>;
 }
 
+function Dashboard({campaigns,characters,onCampaign,onCharacters,onCreate}:{campaigns:Campaign[];characters:Character[];onCampaign:()=>void;onCharacters:()=>void;onCreate:()=>void}) {
+  return <><section className="welcome-row"><div><div className="eyebrow"><span/> ВАШЕ ПРИКЛЮЧЕНИЕ ПРОДОЛЖАЕТСЯ</div><h1>Добро пожаловать</h1><p className="subtitle">Собирай отряд, создавай героев и отправляйся навстречу неизвестному.</p></div><button className="button button-primary" onClick={onCreate}><Plus size={17}/> Создать кампанию</button></section>
+    <section className="hero-panel"><div className="hero-content"><div className="hero-kicker"><Shield size={15}/> ПРОСТРАНСТВО ДЛЯ ТВОИХ ИСТОРИЙ</div><h2>Каждое великое<br/><em>приключение</em> начинается здесь.</h2><p>Создай собственный мир, собери друзей и расскажи историю, которую запомнят.</p><button className="button button-gold" onClick={onCampaign}>Открыть кампании <Compass size={16}/></button></div><div className="hero-art" aria-hidden="true"><div className="rune rune-one">✦</div><div className="rune rune-two">✧</div><div className="orb"><Dice5 size={74} strokeWidth={1}/></div><div className="orbit orbit-one"/><div className="orbit orbit-two"/></div></section>
+    <div className="section-heading"><div><h2>Быстрый доступ</h2><p>Всё необходимое для следующего шага</p></div><button className="text-button" onClick={onCampaign}>Все разделы <span>→</span></button></div>
+    <section className="quick-grid"><button className="quick-card" onClick={onCampaign}><div className="quick-icon gold-icon"><Swords size={21}/></div><div><strong>Мои кампании</strong><span>{campaigns.length} создано</span></div><span className="card-arrow">↗</span></button><button className="quick-card" onClick={onCharacters}><div className="quick-icon blue-icon"><Users size={21}/></div><div><strong>Мои персонажи</strong><span>{characters.length} в коллекции</span></div><span className="card-arrow">↗</span></button><button className="quick-card" onClick={onCampaign}><div className="quick-icon purple-icon"><BookOpen size={21}/></div><div><strong>Игровая библиотека</strong><span>Справочные материалы</span></div><span className="card-arrow">↗</span></button></section>
+    <div className="lower-grid"><section className="empty-panel"><div className="panel-title"><div><h3>Последние кампании</h3><p>Твои недавние приключения</p></div><ScrollText size={19}/></div>{campaigns.length===0?<div className="empty-state"><div className="empty-emblem"><Swords size={25}/></div><strong>Здесь появятся твои кампании</strong><span>Создай первую кампанию или присоединись к приключению друзей.</span><button className="button button-secondary" onClick={onCreate}><Plus size={16}/> Начать</button></div>:<div className="mini-list">{campaigns.slice(-3).reverse().map(c=><div key={c.id}><Swords size={16}/><span>{c.name}</span><small>{c.access}</small></div>)}</div>}</section><section className="empty-panel activity-panel"><div className="panel-title"><div><h3>Путевой журнал</h3><p>Важные события и уведомления</p></div><Bell size={18}/></div><div className="journal-empty"><div className="journal-line"/><span>Пока нет новых событий</span></div><div className="tip-box"><Sparkles size={17}/><span>Создай персонажа заранее, чтобы быстрее присоединиться к игре.</span></div></section></div></>;
+}
+function EmptyState({icon,title,description,action,onAction}:{icon:React.ReactNode;title:string;description:string;action:string;onAction:()=>void}){return <div className="large-empty"><div className="empty-emblem">{icon}</div><h3>{title}</h3><p>{description}</p><button className="button button-primary" onClick={onAction}><Plus size={16}/>{action}</button></div>}
+function Modal({title,children,onClose}:{title:string;children:React.ReactNode;onClose:()=>void}){return <div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section className="modal-card" role="dialog" aria-modal="true" aria-label={title}><div className="modal-heading"><h2>{title}</h2><button className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={18}/></button></div>{children}</section></div>}
 export default App;
