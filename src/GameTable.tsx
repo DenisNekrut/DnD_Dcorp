@@ -383,6 +383,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       return;
     }
     const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : `Спасбросок: ${abilityLabels[saveAbility]}`;
+    const modifierText = rollModifier > 0 ? `+${rollModifier}` : `${rollModifier}`;
     if (selectedSaveAutoFail) {
       addLog(`${selected.name}: ${checkLabel} — автоматический провал. ${selectedSaveFailReason}`, "danger");
       return;
@@ -397,7 +398,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         const kept = result.keptRoll ?? result.rolls[0];
         const critical = rollKind === "attack" && kept === 20;
         const naturalOne = rollKind === "attack" && kept === 1;
-        addLog(`${selected.name}: ${checkLabel} — ${result.rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}) + ${rollModifier} = ${result.total}${critical ? " · критическое попадание" : naturalOne ? " · естественная 1" : ""}.`, critical ? "gold" : naturalOne ? "danger" : "muted");
+        addLog(`${selected.name}: ${checkLabel} — ${result.rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${result.total}${critical ? " · критическое попадание" : naturalOne ? " · естественная 1 — промах" : ""}.`, critical ? "gold" : naturalOne ? "danger" : "muted");
       } catch (error) {
         setTableError(error instanceof Error ? error.message : "Не удалось выполнить проверку.");
       } finally {
@@ -410,7 +411,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
     const kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
     const total = kept + rollModifier;
-    addLog(`${selected.name}: ${checkLabel} — ${rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}) + ${rollModifier} = ${total}.`, rollKind === "attack" && kept === 20 ? "gold" : "muted");
+    addLog(`${selected.name}: ${checkLabel} — ${rolls.join(" / ")} (${selectedRollModeLabel.toLowerCase()}, выбрано ${kept}) ${modifierText} = ${total}${rollKind === "attack" && kept === 1 ? " · естественная 1 — промах" : ""}.`, rollKind === "attack" && kept === 20 ? "gold" : "muted");
   };
 
   const nextTurn = () => {
