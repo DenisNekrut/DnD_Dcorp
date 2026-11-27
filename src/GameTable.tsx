@@ -59,10 +59,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setMapTheme(state.room.mapTheme);
       setGrid(state.room.grid);
       setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+      setObjects(Array.isArray(state.objects) ? state.objects : []);
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
       setTokens([]);
+      setObjects([]);
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -85,6 +87,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setMapTheme(state.room.mapTheme);
             setGrid(state.room.grid);
             setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+            setObjects(Array.isArray(state.objects) ? state.objects : []);
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
@@ -251,7 +254,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="token-actions"><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token))}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token))}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
           </section>}
           <section className="table-panel">
-            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить участника</strong></div></div>
+            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
+            {rosterError && <p className="room-empty-note">{rosterError}</p>}
+            {campaignCharacters.length ? <div className="campaign-roster">{campaignCharacters.map(character => <div className="campaign-roster-row" key={character.id}><span>{character.name}</span><button type="button" disabled={!canEdit || tokens.some(token => token.name === character.name)} onClick={() => addCampaignCharacter(character)}>{tokens.some(token => token.name === character.name) ? "На карте" : "Добавить"}</button></div>)}</div> : <p className="room-empty-note">{remoteEnabled ? "В кампанию пока не добавлены персонажи. Добавь персонажей в разделе кампании." : "Список персонажей кампании доступен после подключения API."}</p>}
+          </section>
+          <section className="table-panel">
+            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить NPC или противника</strong></div></div>
             <form className="add-token-form" onSubmit={addToken}>
               <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit}/></label>
               <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit}/></label></div>
