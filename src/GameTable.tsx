@@ -15,6 +15,14 @@ type RollModeOverride = "auto" | RollMode;
 type AbilityId = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma";
 const abilityLabels: Record<AbilityId, string> = { strength: "Сила", dexterity: "Ловкость", constitution: "Телосложение", intelligence: "Интеллект", wisdom: "Мудрость", charisma: "Харизма" };
 type SkillId = "acrobatics" | "animalHandling" | "arcana" | "athletics" | "deception" | "history" | "insight" | "intimidation" | "investigation" | "medicine" | "nature" | "perception" | "performance" | "persuasion" | "religion" | "sleightOfHand" | "stealth" | "survival";
+type DamageType = "acid" | "bludgeoning" | "cold" | "fire" | "force" | "lightning" | "necrotic" | "piercing" | "poison" | "psychic" | "radiant" | "slashing" | "thunder";
+const damageTypeOptions: { id: DamageType; label: string }[] = [
+  { id: "acid", label: "Кислота" }, { id: "bludgeoning", label: "Дробящий" }, { id: "cold", label: "Холод" },
+  { id: "fire", label: "Огонь" }, { id: "force", label: "Силовое поле" }, { id: "lightning", label: "Электричество" },
+  { id: "necrotic", label: "Некротический" }, { id: "piercing", label: "Колющий" }, { id: "poison", label: "Яд" },
+  { id: "psychic", label: "Психический" }, { id: "radiant", label: "Излучение" }, { id: "slashing", label: "Рубящий" },
+  { id: "thunder", label: "Звук" },
+];
 const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "acrobatics", label: "Акробатика", ability: "dexterity" }, { id: "animalHandling", label: "Уход за животными", ability: "wisdom" },
   { id: "arcana", label: "Магия", ability: "intelligence" }, { id: "athletics", label: "Атлетика", ability: "strength" },
@@ -49,7 +57,7 @@ const getAutoRollMode = (token: Token, kind: RollKind, saveAbility: AbilityId): 
   if (disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -135,6 +143,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [temporaryHpInput, setTemporaryHpInput] = useState(1);
   const [attackTargetId, setAttackTargetId] = useState("");
   const [damageFormula, setDamageFormula] = useState("1d6+0");
+  const [damageType, setDamageType] = useState<DamageType>("slashing");
   const dirtyRef = useRef(false);
   const updatedAtRef = useRef<string | null>(null);
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
@@ -318,7 +327,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const data = character.data ?? {};
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -408,6 +417,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const value = Math.floor(Math.random() * 20) + 1;
     addLog(`Локальный бросок d20: ${value}.`, value === 20 ? "gold" : "muted");
   };
+  const adjustDamageForTraits = (token: Token, amount: number, type: DamageType) => {
+    const resistant = (token.damageResistances ?? []).includes(type);
+    const vulnerable = (token.damageVulnerabilities ?? []).includes(type);
+    const immune = (token.damageImmunities ?? []).includes(type);
+    if (immune) return { amount: 0, note: "иммунитет" };
+    if (resistant && vulnerable) return { amount, note: "сопротивление и уязвимость взаимно отменяются" };
+    if (resistant) return { amount: Math.floor(amount / 2), note: "сопротивление: половина урона" };
+    if (vulnerable) return { amount: amount * 2, note: "уязвимость: двойной урон" };
+    return { amount, note: "" };
+  };
+
   const applyDamageToToken = (token: Token, amount: number, critical = false): Token => {
     const damage = Math.max(0, Math.floor(amount));
     if (damage === 0) return token;
@@ -435,9 +455,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const applyManualDamage = () => {
     if (!selected || !canEdit || layerLocks.figures) return;
     recordEditorHistory();
-    const updated = applyDamageToToken(selected, hpAdjustment);
+    const adjusted = adjustDamageForTraits(selected, hpAdjustment, damageType);
+    const updated = applyDamageToToken(selected, adjusted.amount);
     setTokens(items => items.map(token => token.id === selected.id ? updated : token));
-    addLog("Урон " + selected.name + ": " + hpAdjustment + ". Хиты: " + updated.hp + "/" + updated.maxHp + ".", "danger");
+    addLog("Урон " + selected.name + ": " + hpAdjustment + " " + damageType + (adjusted.note ? " (" + adjusted.note + ")" : "") + ". Хиты: " + updated.hp + "/" + updated.maxHp + ".", "danger");
   };
 
   const applyHealing = () => {
@@ -576,12 +597,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         damageTotal = damageRolls.reduce((sum, value) => sum + value, 0) + parsed.modifier;
       }
       damageTotal = Math.max(0, damageTotal);
-      const appliedDamage = damageTotal;
+      const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
+      const appliedDamage = adjustedDamage.amount;
       recordEditorHistory();
       const updatedTarget = applyDamageToToken(target, appliedDamage, critical);
       setTokens(items => items.map(token => token.id === target.id ? updatedTarget : token));
       addLog(
-        "Урон " + target.name + ": " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (critical ? " (критический урон: кости удвоены)" : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? " (критический урон: кости удвоены)" : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -748,6 +770,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}{(selected.temporaryHp ?? 0) > 0 ? ` · +${selected.temporaryHp} врем.` : ""}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
             <div className="hp-management">
               <label>Количество<input type="number" min="1" max="999" value={hpAdjustment} onChange={event => setHpAdjustment(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
+              <label>Тип урона<select value={damageType} onChange={event => setDamageType(event.target.value as DamageType)} disabled={!canEdit || layerLocks.figures}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
               <button type="button" onClick={applyManualDamage} disabled={!canEdit || layerLocks.figures}>Урон</button>
               <button type="button" onClick={applyHealing} disabled={!canEdit || layerLocks.figures || (selected.deathSaves?.failures ?? 0) >= 3}>Лечение</button>
               <label>Временные хиты<input type="number" min="1" max="999" value={temporaryHpInput} onChange={event => setTemporaryHpInput(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
@@ -786,6 +809,25 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </span>
               <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedRollBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
             </div>
+            <details className="damage-traits-panel">
+              <summary>Сопротивления, уязвимости и иммунитеты</summary>
+              <label>Сопротивления<select multiple size={3} value={selected.damageResistances ?? []} disabled={!canEdit || layerLocks.figures} onChange={event => {
+                const values = Array.from(event.currentTarget.selectedOptions, option => option.value as DamageType);
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, damageResistances: values } : token));
+              }}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
+              <label>Уязвимости<select multiple size={3} value={selected.damageVulnerabilities ?? []} disabled={!canEdit || layerLocks.figures} onChange={event => {
+                const values = Array.from(event.currentTarget.selectedOptions, option => option.value as DamageType);
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, damageVulnerabilities: values } : token));
+              }}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
+              <label>Иммунитеты<select multiple size={3} value={selected.damageImmunities ?? []} disabled={!canEdit || layerLocks.figures} onChange={event => {
+                const values = Array.from(event.currentTarget.selectedOptions, option => option.value as DamageType);
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, damageImmunities: values } : token));
+              }}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
+              <small>Выбери несколько типов с Ctrl/⌘. Эти свойства учитываются при ручном и автоматическом нанесении урона.</small>
+            </details>
             <div className="condition-panel">
               <strong>Состояния</strong>
               <div className="condition-chip-list">
