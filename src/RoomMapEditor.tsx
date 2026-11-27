@@ -314,7 +314,15 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       <button type="button" title="На один уровень вперёд" disabled={selectedLocked} onClick={() => reorderSelected(1)}>Вперёд</button>
       <button type="button" title="На один уровень назад" disabled={selectedLocked} onClick={() => reorderSelected(-1)}>Назад</button>
     </div>}
-    <div className={`map-object-layer ${drawingMode ? "drawing-object-mode" : ""} ${measurementMode ? "measuring-mode" : ""}`} style={{ transform: `scale(${zoom / 100})`, transformOrigin: "center" }} onPointerDown={event => measurementMode ? beginMeasure(event) : beginDrawObject(event)} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
+    <div className={`map-object-layer ${drawingMode ? "drawing-object-mode" : ""} ${measurementMode ? "measuring-mode" : ""}`} style={{
+      inset: "auto",
+      left: `${50 - 5000 / Math.max(1, zoom)}%`,
+      top: `${50 - 5000 / Math.max(1, zoom)}%`,
+      width: `${10000 / Math.max(1, zoom)}%`,
+      height: `${10000 / Math.max(1, zoom)}%`,
+      transform: `scale(${zoom / 100})`,
+      transformOrigin: "center",
+    }} onPointerDown={event => measurementMode ? beginMeasure(event) : beginDrawObject(event)} onPointerMove={move} onPointerUp={finishPointer} onPointerLeave={finishPointer}>
       {visibleObjects.map(item => {
         const Icon = icons[item.kind];
         return <button type="button" key={item.id} className={`map-object map-object-${item.kind} ${item.kind === "zone" ? `map-zone-${item.zoneType ?? "difficult"}` : ""} ${item.kind === "room" ? "map-object-room" : ""} ${selectedId === item.id ? "map-object-selected" : ""}`}
