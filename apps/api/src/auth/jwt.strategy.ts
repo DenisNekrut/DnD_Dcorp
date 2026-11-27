@@ -7,6 +7,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  username: string;
   platformRole: 'USER' | 'ADMIN';
 }
 
@@ -25,12 +26,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: { sub: string; email: string }): Promise<AuthenticatedUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, platformRole: true, bannedAt: true, bannedUntil: true },
+      select: { id: true, email: true, username: true, platformRole: true, bannedAt: true, bannedUntil: true },
     });
     if (!user) throw new UnauthorizedException('Account no longer exists');
     if (user.bannedAt && (!user.bannedUntil || user.bannedUntil > new Date())) {
       throw new UnauthorizedException('This account is suspended. Contact portal support if you believe this is a mistake.');
     }
-    return { id: user.id, email: user.email, platformRole: user.platformRole };
+    return { id: user.id, email: user.email, username: user.username, platformRole: user.platformRole };
   }
 }
