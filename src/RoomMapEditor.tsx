@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned, House, Ruler, Circle } from "lucide-react";
+import { DoorOpen, Fence, Mountain, Trees, Trash2, RotateCw, Eye, EyeOff, Layers, Lock, Unlock, MapPinned, House, Ruler, Circle, Square, Triangle, Minus } from "lucide-react";
 
 export type MapLayer = "terrain" | "structures" | "decorations";
 export type TableLayer = "background" | MapLayer | "figures";
@@ -11,6 +11,8 @@ export const defaultLayerLocks: LayerLocks = { background: false, terrain: false
 export type TerrainZoneType = "difficult" | "water" | "fire" | "fog" | "hazard";
 type DrawingMode = "zone" | "wall" | "room" | null;
 type Measurement = { x: number; y: number; width: number; angle: number; feet: number; cells: number };
+type MeasurementMode = "distance" | "radius" | "cube" | "cone" | "line" | null;
+type AreaPreview = { shape: "radius" | "cube" | "cone" | "line"; x: number; y: number; width: number; height: number; angle: number; feet: number; widthFeet?: number };
 export type MapObject = {
   id: string;
   kind: "wall" | "door" | "obstacle" | "decoration" | "zone" | "room";
@@ -47,11 +49,12 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [zoneType, setZoneType] = useState<TerrainZoneType>("difficult");
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [measurementMode, setMeasurementMode] = useState<"distance" | "radius" | null>(null);
+  const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
-  const [radiusFeet, setRadiusFeet] = useState(15);
-  const [radiusPreview, setRadiusPreview] = useState<{ x: number; y: number; width: number; height: number; feet: number } | null>(null);
+  const [areaSizeFeet, setAreaSizeFeet] = useState(15);
+  const [lineWidthFeet, setLineWidthFeet] = useState(5);
+  const [areaPreview, setAreaPreview] = useState<AreaPreview | null>(null);
   const measurementStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const layerOf = (item: MapObject): MapLayer => item.layer ?? (item.kind === "wall" || item.kind === "door" || item.kind === "room" ? "structures" : item.kind === "obstacle" || item.kind === "zone" ? "terrain" : "decorations");
@@ -106,6 +109,30 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         angle: Math.atan2(dy, dx) * 180 / Math.PI,
         cells,
         feet: Math.round(cells * 5),
+      });
+      return;
+    }
+    if ((measurementMode === "cone" || measurementMode === "line") && isMeasuring && measurementStartRef.current) {
+      const start = measurementStartRef.current;
+      const rawEndX = event.clientX - rect.left;
+      const rawEndY = event.clientY - rect.top;
+      const cellSize = Math.max(12, Math.min(120, gridCellSizePx || 38));
+      const endX = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndX / cellSize) * cellSize : rawEndX) / rect.width * 100));
+      const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
+      const dx = (endX - start.x) * rect.width / 100;
+      const dy = (endY - start.y) * rect.height / 100;
+      const lengthPx = areaSizeFeet / 5 * cellSize;
+      const isCone = measurementMode === "cone";
+      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthFeet / 5 * cellSize;
+      setAreaPreview({
+        shape: measurementMode,
+        x: start.x,
+        y: start.y,
+        width: lengthPx / rect.width * 100,
+        height: heightPx / rect.height * 100,
+        angle: Math.atan2(dy, dx) * 180 / Math.PI,
+        feet: areaSizeFeet,
+        ...(isCone ? {} : { widthFeet: lineWidthFeet }),
       });
       return;
     }
@@ -177,9 +204,36 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const rawY = event.clientY - rect.top;
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
-    if (measurementMode === "radius") {
-      const radiusPx = radiusFeet / 5 * cellSize;
-      setRadiusPreview({ x, y, width: radiusPx * 2 / rect.width * 100, height: radiusPx * 2 / rect.height * 100, feet: radiusFeet });
+    if (measurementMode === "radius" || measurementMode === "cube") {
+      const dimensionPx = areaSizeFeet / 5 * cellSize * (measurementMode === "radius" ? 2 : 1);
+      setAreaPreview({
+        shape: measurementMode,
+        x,
+        y,
+        width: dimensionPx / rect.width * 100,
+        height: dimensionPx / rect.height * 100,
+        angle: 0,
+        feet: areaSizeFeet,
+      });
+      return;
+    }
+    if (measurementMode === "cone" || measurementMode === "line") {
+      measurementStartRef.current = { x, y };
+      const lengthPx = areaSizeFeet / 5 * cellSize;
+      const isCone = measurementMode === "cone";
+      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthFeet / 5 * cellSize;
+      setAreaPreview({
+        shape: measurementMode,
+        x,
+        y,
+        width: lengthPx / rect.width * 100,
+        height: heightPx / rect.height * 100,
+        angle: 0,
+        feet: areaSizeFeet,
+        ...(isCone ? {} : { widthFeet: lineWidthFeet }),
+      });
+      setIsMeasuring(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
     measurementStartRef.current = { x, y };
@@ -188,11 +242,11 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const setMeasureTool = (mode: "distance" | "radius" | null) => {
+  const setMeasureTool = (mode: MeasurementMode) => {
     setMeasurementMode(mode);
     setDrawingMode(null);
     setMeasurement(null);
-    setRadiusPreview(null);
+    setAreaPreview(null);
     setIsMeasuring(false);
     measurementStartRef.current = null;
   };
@@ -229,12 +283,20 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         <button type="button" className={drawingMode === "room" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "room" ? null : "room"); }}><House size={14}/> {drawingMode === "room" ? "Стоп: комната" : "Создать комнату"}</button>
       </>}
       <button type="button" className={measurementMode === "distance" ? "tool-active" : ""} title="Измерить расстояние по сетке: 1 клетка = 5 футов; диагональ считается за 5 футов" onClick={() => setMeasureTool(measurementMode === "distance" ? null : "distance")}><Ruler size={14}/> Линейка</button>
-      <label className="radius-size-select">Радиус
-        <select value={radiusFeet} onChange={event => { setRadiusFeet(Number(event.target.value)); setRadiusPreview(null); }} aria-label="Радиус области в футах">
+      <label className="radius-size-select">Размер
+        <select value={areaSizeFeet} onChange={event => { setAreaSizeFeet(Number(event.target.value)); setAreaPreview(null); }} aria-label="Размер шаблона в футах">
           {[5, 10, 15, 20, 30, 40, 60].map(value => <option key={value} value={value}>{value} ft</option>)}
         </select>
       </label>
-      <button type="button" className={measurementMode === "radius" ? "tool-active" : ""} title="Показать круг заданного радиуса на карте" onClick={() => setMeasureTool(measurementMode === "radius" ? null : "radius")}><Circle size={14}/> Область</button>
+      <button type="button" className={measurementMode === "radius" ? "tool-active" : ""} title="Круглая область/сфера с выбранным радиусом" onClick={() => setMeasureTool(measurementMode === "radius" ? null : "radius")}><Circle size={14}/> Круг</button>
+      <button type="button" className={measurementMode === "cube" ? "tool-active" : ""} title="Куб с выбранной длиной стороны" onClick={() => setMeasureTool(measurementMode === "cube" ? null : "cube")}><Square size={14}/> Куб</button>
+      <button type="button" className={measurementMode === "cone" ? "tool-active" : ""} title="Конус 60°: нажми и протяни в направлении эффекта" onClick={() => setMeasureTool(measurementMode === "cone" ? null : "cone")}><Triangle size={14}/> Конус</button>
+      <label className="radius-size-select">Ширина
+        <select value={lineWidthFeet} onChange={event => { setLineWidthFeet(Number(event.target.value)); setAreaPreview(null); }} aria-label="Ширина линейной области в футах">
+          {[5, 10, 15].map(value => <option key={value} value={value}>{value} ft</option>)}
+        </select>
+      </label>
+      <button type="button" className={measurementMode === "line" ? "tool-active" : ""} title="Линейная область: нажми и протяни в направлении эффекта" onClick={() => setMeasureTool(measurementMode === "line" ? null : "line")}><Minus size={14}/> Линия</button>
       {selected && canEdit && visibleLayers[layerOf(selected)] && <>
         <button type="button" title="Повернуть на 15°" disabled={selectedLocked} onClick={() => updateSelected({ rotation: (selected.rotation + 15) % 360 })}><RotateCw size={14}/></button>
         <button type="button" title="Удалить объект" disabled={selectedLocked} onClick={() => { if (selectedLocked) return; onChange(objects.filter(item => item.id !== selected.id)); setSelectedId(null); }}><Trash2 size={14}/></button>
@@ -262,7 +324,12 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
           {item.kind === "zone" ? <span className="map-zone-label">{item.zoneType === "water" ? "Вода" : item.zoneType === "fire" ? "Огонь" : item.zoneType === "fog" ? "Туман" : item.zoneType === "hazard" ? "Опасность" : "Трудная местность"}</span> : item.kind === "room" ? <span className="map-room-label">Комната</span> : <Icon size={16}/>} 
         </button>;
       })}
-      {radiusPreview && <div className="map-radius-preview" style={{ left: `${radiusPreview.x}%`, top: `${radiusPreview.y}%`, width: `${radiusPreview.width}%`, height: `${radiusPreview.height}%` }}><span>Радиус {radiusPreview.feet} фут.</span></div>}
+      {areaPreview && <div className={`map-area-preview map-area-${areaPreview.shape}`} style={{
+        left: `${areaPreview.x}%`, top: `${areaPreview.y}%`,
+        width: `${areaPreview.width}%`, height: `${areaPreview.height}%`,
+        transform: areaPreview.shape === "cone" || areaPreview.shape === "line" ? `rotate(${areaPreview.angle}deg)` : "translate(-50%,-50%)",
+        transformOrigin: areaPreview.shape === "cone" || areaPreview.shape === "line" ? "left center" : "center",
+      }}><span>{areaPreview.shape === "radius" ? `Радиус ${areaPreview.feet} фут.` : areaPreview.shape === "cube" ? `Куб ${areaPreview.feet} фут.` : areaPreview.shape === "cone" ? `Конус ${areaPreview.feet} фут.` : `Линия ${areaPreview.feet} × ${areaPreview.widthFeet} фут.`}</span></div>}
       {measurement && <div className="map-ruler-line" style={{ left: `${measurement.x}%`, top: `${measurement.y}%`, width: `${measurement.width}%`, transform: `rotate(${measurement.angle}deg)` }}>
         <span>{measurement.feet} ft · {Number(measurement.cells.toFixed(1))} клетки</span>
       </div>}
