@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
+import RoomMapEditor, { type MapObject } from "./RoomMapEditor";
 import "./styles/tabletop.css";
 import "./styles/tabletop-room.css";
+import "./styles/tabletop-map-editor.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
-type TableState = { room: RoomSettings; tokens: Token[]; round: number; log: LogEntry[] };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; round: number; log: LogEntry[] };
+type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 
 const emptyRoom: RoomSettings = { configured: false, name: "", description: "", mapTheme: "sand", grid: true };
@@ -18,6 +21,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const remoteEnabled = Boolean(campaignId && !isGuest && isApiConfigured());
   const [room, setRoom] = useState<RoomSettings>({ ...emptyRoom });
   const [tokens, setTokens] = useState<Token[]>([]);
+  const [objects, setObjects] = useState<MapObject[]>([]);
+  const [campaignCharacters, setCampaignCharacters] = useState<CampaignCharacter[]>([]);
+  const [rosterError, setRosterError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
@@ -54,10 +60,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setMapTheme(state.room.mapTheme);
       setGrid(state.room.grid);
       setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+      setObjects(Array.isArray(state.objects) ? state.objects : []);
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
       setTokens([]);
+      setObjects([]);
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -80,6 +88,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setMapTheme(state.room.mapTheme);
             setGrid(state.room.grid);
             setTokens(Array.isArray(state.tokens) ? state.tokens : []);
+            setObjects(Array.isArray(state.objects) ? state.objects : []);
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
@@ -115,7 +124,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, round, log };
+    const state: TableState = { room, tokens, objects, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -135,7 +144,25 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+
+  useEffect(() => {
+    if (!remoteEnabled || !campaignId) return;
+    let active = true;
+    apiRequest<CampaignCharacter[]>(`/characters/campaigns/${campaignId}`)
+      .then(items => { if (active) { setCampaignCharacters(items); setRosterError(""); } })
+      .catch(error => { if (active) setRosterError(error instanceof Error ? error.message : "Не удалось загрузить персонажей кампании."); });
+    return () => { active = false; };
+  }, [campaignId, remoteEnabled]);
+
+  const addCampaignCharacter = (character: CampaignCharacter) => {
+    const data = character.data ?? {};
+    const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
+    const initiativeValue = Number(data.initiative ?? 0);
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };
+    setTokens(items => [...items, token]);
+    addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
+  };
 
   const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
     setLog(items => [...items.slice(-99), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
@@ -229,7 +256,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </button>)}
             </div>
             {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
-            <div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
@@ -246,7 +273,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="token-actions"><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token))}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token))}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
           </section>}
           <section className="table-panel">
-            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить участника</strong></div></div>
+            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
+            {rosterError && <p className="room-empty-note">{rosterError}</p>}
+            {campaignCharacters.length ? <div className="campaign-roster">{campaignCharacters.map(character => <div className="campaign-roster-row" key={character.id}><span>{character.name}</span><button type="button" disabled={!canEdit || tokens.some(token => token.name === character.name)} onClick={() => addCampaignCharacter(character)}>{tokens.some(token => token.name === character.name) ? "На карте" : "Добавить"}</button></div>)}</div> : <p className="room-empty-note">{remoteEnabled ? "В кампанию пока не добавлены персонажи. Добавь персонажей в разделе кампании." : "Список персонажей кампании доступен после подключения API."}</p>}
+          </section>
+          <section className="table-panel">
+            <div className="table-panel-title"><div><UserPlus size={16}/><strong>Добавить NPC или противника</strong></div></div>
             <form className="add-token-form" onSubmit={addToken}>
               <label>Имя фигуры<input value={newTokenName} onChange={event => setNewTokenName(event.target.value)} placeholder="Имя персонажа или существа" required disabled={!canEdit}/></label>
               <div className="add-token-fields"><label>Тип<select value={newTokenKind} onChange={event => setNewTokenKind(event.target.value as Token["kind"])} disabled={!canEdit}><option value="hero">Герой</option><option value="ally">Союзник</option><option value="enemy">Противник</option></select></label><label>Хиты<input type="number" min="1" max="999" value={newTokenHp} onChange={event => setNewTokenHp(Number(event.target.value))} disabled={!canEdit}/></label><label>Инициатива<input type="number" min="-10" max="40" value={newTokenInitiative} onChange={event => setNewTokenInitiative(Number(event.target.value))} disabled={!canEdit}/></label></div>
