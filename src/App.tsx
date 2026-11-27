@@ -7,7 +7,11 @@ import {
 
 type Section = "Главная" | "Кампании" | "Персонажи" | "Библиотека" | "Настройки";
 type Campaign = { id: number; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
-type Character = { id: number; name: string; ancestry: string; className: string; level: number };
+type Character = { id: number; name: string; gender: string; ancestry: string; className: string; level: number };
+
+const characterGenders = ["Мужской", "Женский", "Другое", "Не указывать"];
+const characterAncestries = ["Драконорождённый", "Дварф", "Эльф", "Гном", "Полуэльф", "Полуорк", "Полурослик", "Человек", "Тифлинг"];
+const characterClasses = ["Варвар", "Бард", "Жрец", "Друид", "Воин", "Монах", "Паладин", "Следопыт", "Плут", "Чародей", "Колдун", "Волшебник"];
 
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords },
@@ -26,6 +30,7 @@ function App() {
   const [campaignDescription, setCampaignDescription] = useState("");
   const [campaignAccess, setCampaignAccess] = useState<"Открытая" | "По приглашению">("По приглашению");
   const [characterName, setCharacterName] = useState("");
+  const [characterGender, setCharacterGender] = useState("");
   const [characterAncestry, setCharacterAncestry] = useState("");
   const [characterClass, setCharacterClass] = useState("");
   const [query, setQuery] = useState("");
@@ -38,9 +43,10 @@ function App() {
   };
   const createCharacter = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!characterName.trim() || !characterClass.trim()) return;
-    setCharacters(items => [...items, { id: Date.now(), name: characterName.trim(), ancestry: characterAncestry.trim() || "Не указано", className: characterClass.trim(), level: 1 }]);
-    setCharacterName(""); setCharacterAncestry(""); setCharacterClass(""); setCharacterModal(false);
+    if (!characterName.trim() || !characterGender || !characterAncestry || !characterClass) return;
+    if (!characterGenders.includes(characterGender) || !characterAncestries.includes(characterAncestry) || !characterClasses.includes(characterClass)) return;
+    setCharacters(items => [...items, { id: Date.now(), name: characterName.trim(), gender: characterGender, ancestry: characterAncestry, className: characterClass, level: 1 }]);
+    setCharacterName(""); setCharacterGender(""); setCharacterAncestry(""); setCharacterClass(""); setCharacterModal(false);
   };
 
   return <div className="app-shell">
@@ -64,7 +70,7 @@ function App() {
         {active==="Персонажи"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
           <div className="notice-strip"><Shield size={17}/><span>Личные карточки независимы от персонажей в игровых кампаниях. Правила создания и расчёты будут реализованы по стандарту 5e.</span></div>
-          {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.ancestry} · {c.className}</p><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
+          {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.gender} · {c.ancestry} · {c.className}</p><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
         </section>}
         {active==="Библиотека"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> СПРАВОЧНЫЕ МАТЕРИАЛЫ</div><h1>Библиотека</h1><p className="subtitle">Игровые справочники и материалы кампаний.</p></div></div><div className="library-grid">{[{title:"Персонажи",desc:"Классы, происхождения, предыстории и развитие.",icon:<UserRound/>},{title:"Существа",desc:"Противники, союзники и игровые характеристики.",icon:<Swords/>},{title:"Заклинания",desc:"Магические эффекты и правила их применения.",icon:<WandSparkles/>},{title:"Предметы",desc:"Снаряжение, оружие, доспехи и сокровища.",icon:<Shield/>}].map(x=><article className="library-card" key={x.title}><div className="quick-icon purple-icon">{x.icon}</div><h3>{x.title}</h3><p>{x.desc}</p><span className="coming-label">Раздел готовится</span></article>)}</div></section>}
         {active==="Настройки"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> УПРАВЛЕНИЕ АККАУНТОМ</div><h1>Настройки</h1><p className="subtitle">Параметры профиля и приложения.</p></div></div><div className="settings-card"><div className="settings-avatar">П</div><div><h3>Демо-профиль</h3><p>Авторизация и профиль будут подключены вместе с серверной частью.</p><span className="status-pill">Локальный прототип</span></div></div></section>}
@@ -72,7 +78,7 @@ function App() {
       </div>
     </main>
     {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><label>Доступ<select value={campaignAccess} onChange={e=>setCampaignAccess(e.target.value as "Открытая"|"По приглашению")}><option>По приглашению</option><option>Открытая</option></select></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div><small className="prototype-note">Демо: кампания пока сохраняется только в памяти страницы. Аккаунты и серверное сохранение будут добавлены позже.</small></form></Modal>}
-    {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Происхождение<input value={characterAncestry} onChange={e=>setCharacterAncestry(e.target.value)} placeholder="Укажи происхождение"/></label><label>Класс<input required value={characterClass} onChange={e=>setCharacterClass(e.target.value)} placeholder="Например, воин"/></label><div className="notice-strip"><Dice5 size={17}/><span>Это предварительная карточка. Полное создание персонажа с проверками правил 5e будет реализовано в редакторе.</span></div><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCharacterModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div></form></Modal>}
+    {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Пол<select required value={characterGender} onChange={e=>setCharacterGender(e.target.value)}><option value="" disabled>Выбери вариант</option>{characterGenders.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Раса<select required value={characterAncestry} onChange={e=>setCharacterAncestry(e.target.value)}><option value="" disabled>Выбери расу</option>{characterAncestries.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Класс персонажа<select required value={characterClass} onChange={e=>setCharacterClass(e.target.value)}><option value="" disabled>Выбери класс</option>{characterClasses.map(option=><option key={option} value={option}>{option}</option>)}</select></label><div className="notice-strip"><Dice5 size={17}/><span>Это предварительная карточка. Полное создание персонажа с проверками правил 5e будет реализовано в редакторе.</span></div><div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCharacterModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div></form></Modal>}
   </div>;
 }
 
