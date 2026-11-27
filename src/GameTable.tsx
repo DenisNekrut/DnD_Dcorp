@@ -22,7 +22,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const remoteEnabled = Boolean(campaignId && !isGuest && isApiConfigured());
   const [room, setRoom] = useState<RoomSettings>({ ...emptyRoom });
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [objects, setObjects] = useState<MapObject[]>([]);\n  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
+  const [objects, setObjects] = useState<MapObject[]>([]);
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
   const [campaignCharacters, setCampaignCharacters] = useState<CampaignCharacter[]>([]);
   const [rosterError, setRosterError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -62,11 +63,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setGrid(state.room.grid);
       setTokens(Array.isArray(state.tokens) ? state.tokens : []);
       setObjects(Array.isArray(state.objects) ? state.objects : []);
+      setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
       setTokens([]);
       setObjects([]);
+      setLayerVisibility({ ...defaultLayerVisibility });
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -90,6 +93,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setGrid(state.room.grid);
             setTokens(Array.isArray(state.tokens) ? state.tokens : []);
             setObjects(Array.isArray(state.objects) ? state.objects : []);
+            setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
