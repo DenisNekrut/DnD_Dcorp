@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { CharactersModule } from './characters/characters.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RulesModule } from './rules/rules.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     CampaignsModule,
     CharactersModule,
+    RulesModule,
   ],
 })
 export class AppModule {}
