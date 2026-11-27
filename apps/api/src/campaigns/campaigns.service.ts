@@ -145,6 +145,16 @@ export class CampaignsService {
     });
   }
 
+  async getInvite(userId: string, campaignId: string) {
+    await this.assertManager(userId, campaignId);
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { inviteToken: true },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+    return { inviteToken: campaign.inviteToken };
+  }
+
   async members(userId: string, campaignId: string) {
     await this.assertManager(userId, campaignId);
     const campaign = await this.prisma.campaign.findUnique({
