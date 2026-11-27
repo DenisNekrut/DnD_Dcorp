@@ -5,6 +5,7 @@ import RoomMapEditor, { type MapObject } from "./RoomMapEditor";
 import "./styles/tabletop.css";
 import "./styles/tabletop-room.css";
 import "./styles/tabletop-map-editor.css";
+import "./styles/tabletop-publication.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
