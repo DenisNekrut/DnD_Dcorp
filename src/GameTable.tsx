@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet } from "lucide-react";
+import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet, Undo2, Redo2 } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
 import RoomMapEditor, { type MapObject, type LayerVisibility, type LayerLocks, defaultLayerVisibility, defaultLayerLocks } from "./RoomMapEditor";
 import "./styles/tabletop.css";
@@ -14,6 +14,9 @@ type RoomSettings = { configured: boolean; published: boolean; name: string; des
 type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
+type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks };
+type EditorHistory = { past: EditorSnapshot[]; future: EditorSnapshot[] };
+const cloneEditorSnapshot = (snapshot: EditorSnapshot): EditorSnapshot => JSON.parse(JSON.stringify(snapshot)) as EditorSnapshot;
 
 const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true, gridCellSizePx: 38 };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
@@ -26,6 +29,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [objects, setObjects] = useState<MapObject[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
   const [layerLocks, setLayerLocks] = useState<LayerLocks>({ ...defaultLayerLocks });
+  const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
+  const historyGroupRef = useRef(false);
+  const historyGroupStartRef = useRef<EditorSnapshot | null>(null);
   const [campaignCharacters, setCampaignCharacters] = useState<CampaignCharacter[]>([]);
   const [rosterError, setRosterError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -53,6 +59,44 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.length ? initiative[(round - 1) % initiative.length] : undefined;
   const selected = tokens.find(token => token.id === selectedId);
+  const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks });
+  const recordEditorHistory = () => {
+    if (historyGroupRef.current) return;
+    const snapshot = getEditorSnapshot();
+    setEditorHistory(current => ({ past: [...current.past.slice(-49), snapshot], future: [] }));
+  };
+  const beginHistoryGroup = () => {
+    if (historyGroupRef.current) return;
+    historyGroupRef.current = true;
+    historyGroupStartRef.current = getEditorSnapshot();
+  };
+  const finishHistoryGroup = () => {
+    if (!historyGroupRef.current) return;
+    historyGroupRef.current = false;
+    const before = historyGroupStartRef.current;
+    const after = getEditorSnapshot();
+    historyGroupStartRef.current = null;
+    if (before && JSON.stringify(before) !== JSON.stringify(after)) {
+      setEditorHistory(current => ({ past: [...current.past.slice(-49), before], future: [] }));
+    }
+  };
+  const updateObjects = (next: MapObject[]) => { recordEditorHistory(); setObjects(next); };
+  const updateLayerVisibility = (next: LayerVisibility) => { recordEditorHistory(); setLayerVisibility(next); };
+  const updateLayerLocks = (next: LayerLocks) => { recordEditorHistory(); setLayerLocks(next); };
+  const undoEditor = () => {
+    const target = editorHistory.past[editorHistory.past.length - 1];
+    if (!target || !canEdit) return;
+    const current = getEditorSnapshot();
+    setEditorHistory({ past: editorHistory.past.slice(0, -1), future: [...editorHistory.future, current].slice(-50) });
+    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks);
+  };
+  const redoEditor = () => {
+    const target = editorHistory.future[editorHistory.future.length - 1];
+    if (!target || !canEdit) return;
+    const current = getEditorSnapshot();
+    setEditorHistory({ past: [...editorHistory.past, current].slice(-50), future: editorHistory.future.slice(0, -1) });
+    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks);
+  };
 
   const applyRemoteState = (response: TableResponse) => {
     const state = response.state ?? {};
@@ -170,6 +214,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;
     const initiativeValue = Number(data.initiative ?? 0);
     const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };
+    recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
   };
@@ -195,6 +240,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!newTokenName.trim() || !canEdit) return;
     const color = newTokenKind === "enemy" ? "red" : newTokenKind === "ally" ? "blue" : "gold";
     const token: Token = { id: newId(), name: newTokenName.trim(), kind: newTokenKind, x: 25 + Math.random() * 50, y: 25 + Math.random() * 50, hp: newTokenHp, maxHp: newTokenHp, color, initiative: newTokenInitiative };
+    recordEditorHistory();
     setTokens(items => [...items, token]);
     setSelectedId(token.id);
     addLog(`На карту добавлен участник: ${token.name}.`);
@@ -270,19 +316,19 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         <div className="tabletop-center">
           <div className="table-toolbar">
             <div className="table-tool-group">
-              <button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
+              <button title="Отменить последнее действие" aria-label="Отменить последнее действие" disabled={!canEdit || editorHistory.past.length === 0} onClick={undoEditor}><Undo2 size={16}/></button><button title="Повторить действие" aria-label="Повторить действие" disabled={!canEdit || editorHistory.future.length === 0} onClick={redoEditor}><Redo2 size={16}/></button><button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button><label className="grid-cell-toolbar">Клетка <input aria-label="Размер клетки сетки в пикселях" type="number" min="12" max="120" step="1" value={room.gridCellSizePx ?? 38} onChange={event => setRoom(value => ({ ...value, gridCellSizePx: Math.max(12, Math.min(120, Number(event.target.value) || 38)) }))} disabled={!canEdit}/><span>px</span></label>
               <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button><span>{zoom}%</span><button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => setDraggingId(null)} onPointerLeave={() => setDraggingId(null)}>
+          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
             <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
-              {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
+              {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
                 <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
               </button>)}
             </div>
             {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
-            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={setLayerVisibility} layerLocks={layerLocks} onLayerLocksChange={setLayerLocks} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+            <RoomMapEditor objects={objects} onChange={updateObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={updateLayerVisibility} layerLocks={layerLocks} onLayerLocksChange={updateLayerLocks} onEditStart={beginHistoryGroup} onEditEnd={finishHistoryGroup} snapToGrid={room.grid && room.snapToGrid} gridCellSizePx={room.gridCellSizePx ?? 38}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
@@ -296,7 +342,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             <div className="table-panel-title"><div><Shield size={16}/><strong>Выбранная фигура</strong></div></div>
             <div className="selected-token-title"><span className={`initiative-avatar token-${selected.color}`}>{selected.kind === "enemy" ? "!" : "♟"}</span><div><strong>{selected.name}</strong><small>{selected.kind === "enemy" ? "Противник" : "Союзник"}</small></div></div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
-            <div className="token-actions"><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token))}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token))}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
+            <div className="token-actions"><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.max(0, token.hp - 1) } : token)); }}><Minus size={14}/> Урон</button><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.map(token => token.id === selected.id ? { ...token, hp: Math.min(token.maxHp, token.hp + 1) } : token)); }}><Plus size={14}/> Лечение</button><button disabled={!canEdit} onClick={() => { recordEditorHistory(); setTokens(items => items.filter(token => token.id !== selected.id)); setSelectedId(null); addLog(`${selected.name} удалён с карты.`); }}>Убрать</button></div>
           </section>}
           <section className="table-panel">
             <div className="table-panel-title"><div><UserPlus size={16}/><strong>Персонажи кампании</strong></div><span>{campaignCharacters.length}</span></div>
