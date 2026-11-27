@@ -41,3 +41,12 @@
  .campaign-member-identity strong{font-size:10px}
  .campaign-member-remove,.campaign-request-actions button{width:30px;height:30px;flex-basis:30px}
 }
+
+
+.campaign-card-actions{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:stretch}
+.campaign-card-actions .button{width:100%;min-width:0;justify-content:center;gap:6px;padding-inline:10px;font-size:10px}
+.campaign-card-actions .button svg{flex:0 0 auto}
+@media(max-width:520px){
+ .campaign-card-actions{grid-template-columns:1fr}
+ .campaign-card-actions .button{min-height:40px;font-size:11px}
+}
