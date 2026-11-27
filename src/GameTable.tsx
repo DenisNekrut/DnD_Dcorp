@@ -442,11 +442,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         window.localStorage.setItem(recoveryKey(campaignId), JSON.stringify({ state, savedAt: Date.now() } satisfies TableRecovery));
       } catch { /* Keepalive save is still attempted when local storage is unavailable. */ }
       if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
       void apiRequest<TableResponse>(`/campaigns/${campaignId}/table`, {
         method: "PUT",
         body: JSON.stringify({ state }),
         keepalive: true,
-      }).catch(() => undefined);
+      }).catch(() => undefined).finally(() => { saveInFlightRef.current = false; });
     };
     window.addEventListener("pagehide", saveOnPageHide);
     return () => window.removeEventListener("pagehide", saveOnPageHide);
