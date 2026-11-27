@@ -78,7 +78,7 @@ function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
-  const [apiReady, setApiReady] = useState(isApiConfigured());
+  const apiReady = isApiConfigured();
   const [active, setActive] = useState<Section>("Главная");
   const [menuOpen, setMenuOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
