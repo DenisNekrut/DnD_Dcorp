@@ -38,15 +38,15 @@ export const CLASSES = [
 ] as const;
 
 export const SPECIES = [
-  { id: 'dragonborn', name: 'Драконорождённый', baseSpeed: 30, size: 'Medium', languages: ['common', 'draconic'] },
-  { id: 'dwarf', name: 'Дварф', baseSpeed: 25, size: 'Medium', languages: ['common', 'dwarvish'] },
-  { id: 'elf', name: 'Эльф', baseSpeed: 30, size: 'Medium', languages: ['common', 'elvish'] },
-  { id: 'gnome', name: 'Гном', baseSpeed: 25, size: 'Small', languages: ['common', 'gnomish'] },
-  { id: 'half-elf', name: 'Полуэльф', baseSpeed: 30, size: 'Medium', languages: ['common', 'elvish', 'choice'] },
-  { id: 'half-orc', name: 'Полуорк', baseSpeed: 30, size: 'Medium', languages: ['common', 'orc'] },
-  { id: 'halfling', name: 'Полурослик', baseSpeed: 25, size: 'Small', languages: ['common', 'halfling'] },
-  { id: 'human', name: 'Человек', baseSpeed: 30, size: 'Medium', languages: ['common', 'choice'] },
-  { id: 'tiefling', name: 'Тифлинг', baseSpeed: 30, size: 'Medium', languages: ['common', 'infernal'] },
+  { id: 'dragonborn', name: 'Драконорождённый', baseSpeed: 30, size: 'Medium', abilityBonuses: { str: 2, cha: 1 }, languages: ['common', 'draconic'] },
+  { id: 'dwarf', name: 'Дварф', baseSpeed: 25, size: 'Medium', abilityBonuses: { con: 2 }, languages: ['common', 'dwarvish'], subraces: [{ id: 'hill', name: 'Холмовой', abilityBonuses: { wis: 1 } }, { id: 'mountain', name: 'Горный', abilityBonuses: { str: 2 } }] },
+  { id: 'elf', name: 'Эльф', baseSpeed: 30, size: 'Medium', abilityBonuses: { dex: 2 }, languages: ['common', 'elvish'], subraces: [{ id: 'high', name: 'Высший', abilityBonuses: { int: 1 } }, { id: 'wood', name: 'Лесной', abilityBonuses: { wis: 1 } }, { id: 'drow', name: 'Тёмный', abilityBonuses: { cha: 1 } }] },
+  { id: 'gnome', name: 'Гном', baseSpeed: 25, size: 'Small', abilityBonuses: { int: 2 }, languages: ['common', 'gnomish'], subraces: [{ id: 'forest', name: 'Лесной', abilityBonuses: { dex: 1 } }, { id: 'rock', name: 'Скальный', abilityBonuses: { con: 1 } }] },
+  { id: 'half-elf', name: 'Полуэльф', baseSpeed: 30, size: 'Medium', abilityBonuses: { cha: 2 }, flexibleAbilityBonuses: { count: 2, amount: 1, exclude: ['cha'] }, languages: ['common', 'elvish', 'choice'] },
+  { id: 'half-orc', name: 'Полуорк', baseSpeed: 30, size: 'Medium', abilityBonuses: { str: 2, con: 1 }, languages: ['common', 'orc'] },
+  { id: 'halfling', name: 'Полурослик', baseSpeed: 25, size: 'Small', abilityBonuses: { dex: 2 }, languages: ['common', 'halfling'], subraces: [{ id: 'lightfoot', name: 'Легконогий', abilityBonuses: { cha: 1 } }, { id: 'stout', name: 'Коренастый', abilityBonuses: { con: 1 } }] },
+  { id: 'human', name: 'Человек', baseSpeed: 30, size: 'Medium', abilityBonuses: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 }, variant: { id: 'variant', flexibleAbilityBonuses: { count: 2, amount: 1 }, extraSkill: 1, feat: 1 }, languages: ['common', 'choice'] },
+  { id: 'tiefling', name: 'Тифлинг', baseSpeed: 30, size: 'Medium', abilityBonuses: { cha: 2, int: 1 }, languages: ['common', 'infernal'] },
 ] as const;
 
 export const BACKGROUNDS = [
