@@ -91,7 +91,6 @@ function App() {
   const [characterModal, setCharacterModal] = useState(false);
   const [campaignName, setCampaignName] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
-  const [campaignAccess, setCampaignAccess] = useState<"Открытая" | "По приглашению">("По приглашению");
   const [characterName, setCharacterName] = useState("");
   const [characterError, setCharacterError] = useState("");
   const [characterGender, setCharacterGender] = useState("");
