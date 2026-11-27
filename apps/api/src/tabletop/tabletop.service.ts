@@ -31,15 +31,36 @@ export class TabletopService {
     const storedState = saved?.state as Record<string, unknown> | undefined;
     const storedRoom = storedState?.room as Record<string, unknown> | undefined;
     const isPublished = storedRoom?.published === true;
-    const visibleState = canEdit || isPublished
+    const visibleState = canEdit
       ? saved?.state ?? EMPTY_TABLE_STATE
-      : {
-          room: { configured: false, published: false },
-          tokens: [],
-          objects: [],
-          round: 1,
-          log: [],
-        };
+      : isPublished
+        ? {
+            ...storedState,
+            tokens: storedState?.layerVisibility && (storedState.layerVisibility as Record<string, unknown>).figures === false
+              ? []
+              : Array.isArray(storedState?.tokens) ? storedState.tokens : [],
+            objects: (Array.isArray(storedState?.objects) ? storedState.objects : []).filter((value) => {
+              if (!value || typeof value !== 'object') return false;
+              const item = value as Record<string, unknown>;
+              const layer = typeof item.layer === 'string'
+                ? item.layer
+                : item.kind === 'wall' || item.kind === 'door'
+                  ? 'structures'
+                  : item.kind === 'obstacle' ? 'terrain' : 'decorations';
+              const visibility = (storedState?.layerVisibility as Record<string, unknown> | undefined) ?? {};
+              return visibility[layer] !== false;
+            }),
+            mapAsset: (storedState?.layerVisibility as Record<string, unknown> | undefined)?.background === false
+              ? null
+              : storedState?.mapAsset ?? null,
+          }
+        : {
+            room: { configured: false, published: false },
+            tokens: [],
+            objects: [],
+            round: 1,
+            log: [],
+          };
     return {
       campaignId,
       state: visibleState,
