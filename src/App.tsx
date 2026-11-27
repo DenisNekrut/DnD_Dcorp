@@ -160,6 +160,10 @@ function App() {
   const [halfElfBonusOne, setHalfElfBonusOne] = useState("str");
   const [halfElfBonusTwo, setHalfElfBonusTwo] = useState("dex");
   const [query, setQuery] = useState("");
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.search).get("invite") ?? "");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [joinNotice, setJoinNotice] = useState("");
 
   useEffect(() => {
     if (!isApiConfigured()) { setAuthLoading(false); return; }
@@ -223,6 +227,49 @@ function App() {
     }
     try { await apiRequest("/auth/logout", { method: "POST" }); }
     finally { setSessionUser(null); setCharacters([]); setCampaigns([]); setAuthError(""); }
+  };
+
+  const submitCampaignInvite = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setJoinError("");
+    setJoinNotice("");
+    if (isGuest || !sessionUser || !apiReady) {
+      setJoinError("Для вступления в общую кампанию войди в аккаунт. Гостевой режим хранит данные только в этом браузере.");
+      return;
+    }
+    const rawInput = inviteCode.trim();
+    if (!rawInput) {
+      setJoinError("Введи код или вставь ссылку приглашения.");
+      return;
+    }
+
+    let inviteToken = rawInput;
+    try {
+      const parsed = new URL(rawInput, window.location.origin);
+      inviteToken = parsed.searchParams.get("invite") ?? parsed.pathname.split("/").filter(Boolean).at(-1) ?? rawInput;
+    } catch { /* Treat the input as a raw invitation code. */ }
+
+    if (!inviteToken || inviteToken.length > 128) {
+      setJoinError("Ссылка или код приглашения выглядит некорректно.");
+      return;
+    }
+
+    setJoinBusy(true);
+    try {
+      await apiRequest<{ id: string; campaignId: string; status: string }>(
+        `/campaigns/join/${encodeURIComponent(inviteToken)}`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setInviteCode("");
+      setJoinNotice("Заявка отправлена. Мастер кампании должен одобрить вступление, после этого кампания появится в твоём списке.");
+      if (new URLSearchParams(window.location.search).has("invite")) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+      }
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : "Не удалось отправить заявку на вступление.");
+    } finally {
+      setJoinBusy(false);
+    }
   };
 
   const createCampaign = async (event: React.FormEvent) => {
@@ -424,7 +471,14 @@ function App() {
           <div className="page-heading"><div><div className="eyebrow"><span/> СОВМЕСТНЫЕ ПРИКЛЮЧЕНИЯ</div><h1>Кампании</h1><p className="subtitle">Создавай игровые миры или присоединяйся к приключениям.</p></div><button className="button button-primary" onClick={()=>setCampaignModal(true)}><Plus size={17}/> Создать кампанию</button></div>
           <div className="toolbar"><div className="search-field"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск среди моих кампаний"/></div><span className="muted-count">{campaigns.length} кампаний</span></div>
           {campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).length===0?<EmptyState icon={<Swords size={26}/>} title="Пока нет кампаний" description="Создай первую кампанию. Здесь появятся твои игровые миры и приглашения." action="Создать кампанию" onAction={()=>setCampaignModal(true)}/>:<div className="entity-grid">{campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).map(c=><article className="entity-card" key={c.id}><div className="entity-card-top"><div className="quick-icon gold-icon"><Swords size={22}/></div><span className="status-pill">{c.access==="Открытая"?<Globe2 size={13}/>:<LockKeyhole size={13}/>} {c.access}</span></div><h3>{c.name}</h3><p>{c.description||"Описание кампании пока не добавлено."}</p><div className="entity-meta"><span><Users size={14}/> {c.players} участник</span><span>Система: 5e</span></div><div className="campaign-card-actions">{c.canManage&&<button className="button button-secondary" onClick={()=>setMembersCampaign(c)}><Users size={15}/> Участники</button>}<button className="button button-secondary" onClick={() => { setSelectedCampaign(c); setActive("Игровой стол"); }}>Открыть игровой стол <Compass size={15}/></button></div><small className="prototype-note">Открывает интерактивную сцену кампании</small></article>)}</div>}
-          <div className="join-panel"><div className="join-icon"><Copy size={19}/></div><div><strong>Есть приглашение?</strong><span>Вставь пригласительную ссылку или код, чтобы отправить заявку на вступление.</span></div><button className="button button-secondary" disabled>Ввести приглашение</button></div>
+          <form className="join-panel join-form" onSubmit={submitCampaignInvite}>
+            <div className="join-icon"><Copy size={19}/></div>
+            <div className="join-details"><strong>Есть приглашение?</strong><span>Вставь код или полную ссылку. Мастер получит заявку и сможет принять тебя в кампанию.</span></div>
+            <div className="join-invite-controls"><input aria-label="Код или ссылка приглашения" value={inviteCode} onChange={event=>setInviteCode(event.target.value)} placeholder="Код или ссылка приглашения" disabled={joinBusy || isGuest} maxLength={512}/><button className="button button-secondary" type="submit" disabled={joinBusy || isGuest || !inviteCode.trim()}>{joinBusy ? "Отправляем…" : "Отправить заявку"}</button></div>
+          </form>
+          {isGuest && <p className="join-feedback">Для вступления в общую кампанию сначала войди в аккаунт.</p>}
+          {joinError && <p className="join-feedback join-feedback-error" role="alert">{joinError}</p>}
+          {joinNotice && <p className="join-feedback join-feedback-success" role="status">{joinNotice}</p>}
         </section>}
         {active==="Игровой стол"&&<GameTable campaignName={selectedCampaign?.name ?? "Демонстрационная сцена"} campaignId={selectedCampaign?.id} isGuest={isGuest} onBack={()=>setActive("Кампании")}/>}
         {active==="Персонажи"&&<section className="page-section">
