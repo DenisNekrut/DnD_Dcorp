@@ -8,7 +8,7 @@ import "./styles/character-sheet.css";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
-  ScrollText, X, LockKeyhole, Globe2, Copy, MoreHorizontal, WandSparkles
+  ScrollText, X, LockKeyhole, Globe2, Copy, WandSparkles
 } from "lucide-react";
 
 type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки" | "Администрирование";
