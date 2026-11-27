@@ -41,6 +41,21 @@ const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "religion", label: "Религия", ability: "intelligence" }, { id: "sleightOfHand", label: "Ловкость рук", ability: "dexterity" },
   { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
 ];
+const getGridDistanceFeet = (
+  first: { x: number; y: number },
+  second: { x: number; y: number },
+  bounds: DOMRect | undefined,
+  cellSizePx: number,
+): number | null => {
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0 || cellSizePx <= 0) return null;
+  const horizontal = Math.round(Math.abs(first.x - second.x) / 100 * bounds.width / cellSizePx);
+  const vertical = Math.round(Math.abs(first.y - second.y) / 100 * bounds.height / cellSizePx);
+  const diagonal = Math.min(horizontal, vertical);
+  const straight = Math.max(horizontal, vertical) - diagonal;
+  const diagonalFeet = Math.floor(diagonal / 2) * 15 + (diagonal % 2) * 5;
+  return (straight * 5) + diagonalFeet;
+};
+
 const parseDamageFormula = (formula: string) => {
   const normalized = formula.trim().replace(/\s+/g, "");
   if (/^\d{1,3}$/.test(normalized)) return { count: 0, sides: 0, modifier: 0, flatDamage: Number(normalized) };
@@ -127,6 +142,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [mapView, setMapView] = useState<MapView>({ ...defaultMapView });
   const [mapUploading, setMapUploading] = useState(false);
   const mapFileInputRef = useRef<HTMLInputElement>(null);
+  const battleMapRef = useRef<HTMLDivElement>(null);
   const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
   const historyGroupRef = useRef(false);
   const historyGroupStartRef = useRef<EditorSnapshot | null>(null);
@@ -612,6 +628,33 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog("Для атаки сначала добавь на карту цель.", "danger");
       return;
     }
+    let finalRollMode = selectedRollMode;
+    if (rollKind === "attack" && attackTarget) {
+      const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+      if (distanceFeet !== null) {
+        if (attackType === "melee") {
+          const reach = selectedWeapon?.properties.includes("reach") ? 10 : 5;
+          if (distanceFeet > reach) {
+            addLog("Цель вне досягаемости: " + distanceFeet + " фт. Максимум для этой атаки: " + reach + " фт.", "danger");
+            return;
+          }
+        } else {
+          const normalRange = selectedWeapon?.rangeFt?.normal ?? 30;
+          const longRange = selectedWeapon?.rangeFt?.long ?? normalRange;
+          if (distanceFeet > longRange) {
+            addLog("Цель вне максимальной дальности: " + distanceFeet + " фт. Максимум: " + longRange + " фт.", "danger");
+            return;
+          }
+          const rangeDisadvantage = distanceFeet > normalRange || distanceFeet <= 5;
+          if (rollModeOverride === "auto") {
+            finalRollMode = resolveRollMode({
+              advantage: attackerRollFlags.advantage || targetRollFlags.advantage,
+              disadvantage: attackerRollFlags.disadvantage || targetRollFlags.disadvantage || rangeDisadvantage,
+            });
+          }
+        }
+      }
+    }
     const checkLabel = rollKind === "attack" ? "Атака" : rollKind === "ability" ? "Проверка характеристики" : rollKind === "skill" ? "Навык: " + selectedSkillData.label : "Спасбросок: " + abilityLabels[saveAbility];
     const modifierText = effectiveRollModifier > 0 ? "+" + effectiveRollModifier : String(effectiveRollModifier);
     if (selectedSaveAutoFail) {
@@ -626,21 +669,21 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       if (remoteEnabled) {
         const result = await apiRequest<{ rolls: number[]; keptRoll: number | null; total: number; mode: RollMode }>(
           "/dice/roll",
-          { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: effectiveRollModifier, mode: selectedRollMode }) },
+          { method: "POST", body: JSON.stringify({ count: 1, sides: 20, modifier: effectiveRollModifier, mode: finalRollMode }) },
         );
         rolls = result.rolls;
         kept = result.keptRoll ?? rolls[0];
         total = result.total;
       } else {
-        rolls = selectedRollMode === "normal"
+        rolls = finalRollMode === "normal"
           ? [Math.floor(Math.random() * 20) + 1]
           : [Math.floor(Math.random() * 20) + 1, Math.floor(Math.random() * 20) + 1];
-        kept = selectedRollMode === "advantage" ? Math.max(...rolls) : selectedRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
+        kept = finalRollMode === "advantage" ? Math.max(...rolls) : finalRollMode === "disadvantage" ? Math.min(...rolls) : rolls[0];
         total = kept + effectiveRollModifier;
       }
 
       if (rollKind !== "attack") {
-        addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + ".", "muted");
+        addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + " = " + total + ".", "muted");
         return;
       }
 
@@ -650,7 +693,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const naturalOne = kept === 1;
       const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
-        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
+        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
       );
       if (!hit) return;
@@ -817,7 +860,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset && layerVisibility.background ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--scaled-grid-cell-size": `${(room.gridCellSizePx ?? 38) * zoom / 100}px`, "--map-zoom": zoom / 100, "--map-image-scale": mapView.scale, "--map-offset-x": `${mapView.x}%`, "--map-offset-y": `${mapView.y}%` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
+          <div ref={battleMapRef} className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset && layerVisibility.background ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--scaled-grid-cell-size": `${(room.gridCellSizePx ?? 38) * zoom / 100}px`, "--map-zoom": zoom / 100, "--map-image-scale": mapView.scale, "--map-offset-x": `${mapView.x}%`, "--map-offset-y": `${mapView.y}%` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
             {mapAsset && layerVisibility.background && <img className="uploaded-map-image" src={mapAsset.url} alt="Загруженная карта игровой комнаты"/>}
             {mapAsset && layerVisibility.background && canEdit && !layerLocks.background && <div className="map-image-controls" onPointerDown={event => event.stopPropagation()}>
               <strong>Подгонка подложки</strong>
@@ -888,7 +931,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select></label>
                 {selectedWeapon?.versatileDamage && <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useVersatileDamage} onChange={event => toggleVersatileDamage(event.target.checked)} disabled={!canEdit}/> Двумя руками ({selectedWeapon.versatileDamage})</label>}
                 <label>Вид атаки<select value={attackType} onChange={event => setAttackType(event.target.value as "melee" | "ranged")} disabled={!canEdit}>
-                  <option value="melee">Ближний бой (до 5 футов)</option><option value="ranged">Дальний бой</option>
+                  <option value="melee" disabled={selectedWeapon?.kind === "ranged"}>Ближний бой</option><option value="ranged" disabled={selectedWeapon?.kind === "melee" && !selectedWeapon?.properties.includes("thrown")}>Дальний бой</option>
                 </select></label>
                 <label>Характеристика<select value={attackAbility} onChange={event => setAttackAbility(event.target.value as AbilityId)} disabled={!canEdit || !selectedWeapon?.properties.includes("finesse")}>
                   {selectedWeapon?.properties.includes("finesse")
