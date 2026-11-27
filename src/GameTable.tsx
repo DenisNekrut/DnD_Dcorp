@@ -645,7 +645,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
 
   const resolveConcentrationSave = async (token: Token, damageTaken: number): Promise<Token> => {
-    if (!token.concentrating || damageTaken <= 0 || token.hp <= 0) return token;
+    if (!token.concentrating || damageTaken <= 0) return token;
+    if (token.hp <= 0) {
+      addLog(token.name + ": концентрация прервана из-за потери сознания.", "danger");
+      return { ...token, concentrating: false };
+    }
     const dc = Math.max(10, Math.floor(damageTaken / 2));
     const modifier = Number(token.abilityModifiers?.constitution ?? 0);
     let roll: number;
@@ -659,7 +663,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       roll = Math.floor(Math.random() * 20) + 1;
     }
     const total = roll + modifier;
-    const success = roll !== 1 && (roll === 20 || total >= dc);
+    const success = total >= dc;
     const updated = success ? token : { ...token, concentrating: false };
     addLog(token.name + ": спасбросок Телосложения для концентрации — " + roll + (modifier >= 0 ? " + " : " - ") + Math.abs(modifier) + " = " + total + " против СЛ " + dc + " — " + (success ? "успех, концентрация сохранена." : "провал, концентрация прервана."), success ? "gold" : "danger");
     return updated;
