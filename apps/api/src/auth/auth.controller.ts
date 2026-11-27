@@ -38,7 +38,9 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@Req() request: AuthRequest) {
+  async me(@Req() request: AuthRequest, @Res({ passthrough: true }) response: Response) {
+    const token = await this.auth.createSessionToken(request.user.id, request.user.email);
+    this.setSessionCookie(response, token);
     return { user: request.user };
   }
 
