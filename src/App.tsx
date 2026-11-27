@@ -3,6 +3,7 @@ import { apiRequest, isApiConfigured } from "./api";
 import GameTable from "./GameTable";
 import AdminPanel from "./AdminPanel";
 import "./styles/guest.css";
+import "./styles/character-sheet.css";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
@@ -11,7 +12,7 @@ import {
 
 type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки" | "Администрирование";
 type Campaign = { id: string; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
-type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
+type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; rawData?: Record<string, unknown>; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
 const characterGenders = ["Мужской", "Женский", "Другое", "Не указывать"];
 const characterAncestries = ["Драконорождённый", "Дварф", "Эльф", "Гном", "Полуэльф", "Полуорк", "Полурослик", "Человек", "Тифлинг"];
@@ -32,6 +33,20 @@ const subraceBonuses: Record<string,Record<string,number>> = {
   "Полурослик:Легконогий":{cha:1},"Полурослик:Коренастый":{con:1}
 };
 const classHitDice: Record<string,number> = {"Варвар":12,"Бард":8,"Жрец":8,"Друид":8,"Воин":10,"Монах":8,"Паладин":10,"Следопыт":10,"Плут":8,"Чародей":6,"Колдун":8,"Волшебник":6};
+const classSavingThrows: Record<string,string[]> = {
+  "Варвар":["str","con"], "Бард":["dex","cha"], "Жрец":["wis","cha"], "Друид":["int","wis"],
+  "Воин":["str","con"], "Монах":["str","dex"], "Паладин":["wis","cha"], "Следопыт":["str","dex"],
+  "Плут":["dex","int"], "Чародей":["con","cha"], "Колдун":["wis","cha"], "Волшебник":["int","wis"],
+};
+const skillAbilities: Record<string,string> = {
+  acrobatics:"dex", animalHandling:"wis", arcana:"int", athletics:"str", deception:"cha",
+  history:"int", insight:"wis", intimidation:"cha", investigation:"int", medicine:"wis",
+  nature:"int", perception:"wis", performance:"cha", persuasion:"cha", religion:"int",
+  sleightOfHand:"dex", stealth:"dex", survival:"wis",
+};
+const proficiencyBonusForLevel = (level:number) => 2 + Math.floor((Math.max(1,Math.min(20,level))-1)/4);
+const signedBonus = (value:number) => value >= 0 ? `+${value}` : String(value);
+const toStringArray = (value:unknown):string[] => Array.isArray(value) ? value.filter((item):item is string => typeof item === "string") : [];
 const skillCatalog = [{id:"acrobatics",name:"Акробатика"},{id:"animalHandling",name:"Уход за животными"},{id:"arcana",name:"Магия"},{id:"athletics",name:"Атлетика"},{id:"deception",name:"Обман"},{id:"history",name:"История"},{id:"insight",name:"Проницательность"},{id:"intimidation",name:"Запугивание"},{id:"investigation",name:"Расследование"},{id:"medicine",name:"Медицина"},{id:"nature",name:"Природа"},{id:"perception",name:"Восприятие"},{id:"performance",name:"Выступление"},{id:"persuasion",name:"Убеждение"},{id:"religion",name:"Религия"},{id:"sleightOfHand",name:"Ловкость рук"},{id:"stealth",name:"Скрытность"},{id:"survival",name:"Выживание"}];
 const classSkillRules: Record<string,{count:number; options:string[]}> = {
   "Варвар":{count:2,options:["animalHandling","athletics","intimidation","nature","perception","survival"]},"Бард":{count:3,options:skillCatalog.map(skill=>skill.id)},"Жрец":{count:2,options:["history","insight","medicine","persuasion","religion"]},"Друид":{count:2,options:["animalHandling","arcana","insight","medicine","nature","perception","religion","survival"]},"Воин":{count:2,options:["acrobatics","animalHandling","athletics","history","insight","intimidation","perception","survival"]},"Монах":{count:2,options:["acrobatics","athletics","history","insight","religion","stealth"]},"Паладин":{count:2,options:["athletics","insight","intimidation","medicine","persuasion","religion"]},"Следопыт":{count:3,options:["animalHandling","athletics","insight","investigation","nature","perception","stealth","survival"]},"Плут":{count:4,options:["acrobatics","athletics","deception","insight","intimidation","investigation","perception","performance","persuasion","sleightOfHand","stealth"]},"Чародей":{count:2,options:["arcana","deception","insight","intimidation","persuasion","religion"]},"Колдун":{count:2,options:["arcana","deception","history","intimidation","investigation","nature","religion"]},"Волшебник":{count:2,options:["arcana","history","insight","investigation","medicine","religion"]}
@@ -74,6 +89,7 @@ function mapApiCharacter(item: ApiCharacter): Character {
     className: String(data.characterClass ?? ""), background: String(data.background ?? ""),
     alignment: String(data.alignment ?? ""), level: Number(data.level ?? 1),
     abilityScores: scores, skillProficiencies: Array.isArray(data.skillProficiencies) ? data.skillProficiencies as string[] : [],
+    rawData: data,
     derived: {
       maxHp: Number(hp.maximum ?? 1), armorClass: Number(data.armorClass ?? 10),
       initiative: Number(data.initiative ?? 0), speed: Number(data.speed ?? 30),
@@ -98,6 +114,11 @@ function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [sheetCurrentHp, setSheetCurrentHp] = useState("");
+  const [sheetTemporaryHp, setSheetTemporaryHp] = useState("0");
+  const [sheetSaveBusy, setSheetSaveBusy] = useState(false);
+  const [sheetError, setSheetError] = useState("");
   const [campaignModal, setCampaignModal] = useState(false);
   const [campaignError, setCampaignError] = useState("");
   const [campaignBusy, setCampaignBusy] = useState(false);
@@ -207,6 +228,56 @@ function App() {
       setCampaignError(error instanceof Error ? error.message : "Не удалось создать кампанию. Попробуй ещё раз.");
     } finally { setCampaignBusy(false); }
   };
+  const openCharacterSheet = (character: Character) => {
+    const hitPoints = (character.rawData?.hitPoints ?? {}) as { current?: number; temporary?: number };
+    setSheetCurrentHp(String(hitPoints.current ?? character.derived.maxHp));
+    setSheetTemporaryHp(String(hitPoints.temporary ?? 0));
+    setSheetError("");
+    setSelectedCharacter(character);
+  };
+
+  const saveCharacterHitPoints = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedCharacter) return;
+    const current = Number(sheetCurrentHp);
+    const temporary = Number(sheetTemporaryHp);
+    const previousHitPoints = (selectedCharacter.rawData?.hitPoints ?? {}) as Record<string, unknown>;
+    const maximum = Number(previousHitPoints.maximum ?? selectedCharacter.derived.maxHp);
+    if (!Number.isInteger(current) || current < 0 || current > maximum) {
+      setSheetError(`Текущие хиты должны быть целым числом от 0 до ${maximum}.`);
+      return;
+    }
+    if (!Number.isInteger(temporary) || temporary < 0) {
+      setSheetError("Временные хиты должны быть целым неотрицательным числом.");
+      return;
+    }
+    const nextData = {
+      ...(selectedCharacter.rawData ?? {}),
+      hitPoints: { ...previousHitPoints, maximum, current, temporary },
+    };
+    setSheetSaveBusy(true);
+    setSheetError("");
+    try {
+      if (isGuest) {
+        const updated = { ...selectedCharacter, rawData: nextData };
+        setCharacters(items => items.map(item => item.id === updated.id ? updated : item));
+        setSelectedCharacter(updated);
+      } else {
+        const saved = await apiRequest<ApiCharacter>(`/characters/personal/${selectedCharacter.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ data: { hitPoints: { maximum, current, temporary } } }),
+        });
+        const updated = mapApiCharacter(saved);
+        setCharacters(items => items.map(item => item.id === updated.id ? updated : item));
+        setSelectedCharacter(updated);
+      }
+    } catch (error) {
+      setSheetError(error instanceof Error ? error.message : "Не удалось сохранить хиты персонажа.");
+    } finally {
+      setSheetSaveBusy(false);
+    }
+  };
+
   const createCharacter = async (event: React.FormEvent) => {
     event.preventDefault();
     setCharacterError("");
@@ -239,6 +310,12 @@ function App() {
           ancestry: characterAncestry, subrace: characterSubrace, className: characterClass,
           background: characterBackground, alignment: characterAlignment, level: 1,
           abilityScores: finalScores, skillProficiencies: characterSkills,
+          rawData: {
+            level: 1, abilityScores: finalScores, skillProficiencies: characterSkills,
+            savingThrowProficiencies: classSavingThrows[characterClass] ?? [],
+            hitPoints: { maximum: maximumHp, current: maximumHp, temporary: 0 },
+            hitDice: { total: 1, remaining: 1, die: `d${hitDie}` },
+          },
           derived: { maxHp: maximumHp, armorClass: 10 + dexMod, initiative: dexMod, speed, passivePerception, hitDie: `к${hitDie}` },
         };
         setCharacters(items => [localCharacter, ...items]);
@@ -251,7 +328,7 @@ function App() {
             gender: characterGender, ancestry: characterAncestry, species: characterAncestry,
             subrace: characterSubrace, characterClass, background: characterBackground,
             alignment: characterAlignment, level: 1, abilityScores: finalScores,
-            skillProficiencies: characterSkills, savingThrowProficiencies: [],
+            skillProficiencies: characterSkills, savingThrowProficiencies: classSavingThrows[characterClass] ?? [],
             armorClass: 10 + dexMod, speed, hitPoints: { maximum: maximumHp, current: maximumHp, temporary: 0 },
             hitDice: { total: 1, remaining: 1, die: `d${hitDie}` },
           },
@@ -301,7 +378,7 @@ function App() {
         {active==="Персонажи"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
           <div className="notice-strip"><Shield size={17}/><span>{isGuest ? "Гостевые карточки сохраняются локально в этом браузере и пока не связаны с аккаунтом." : "Личные карточки сохраняются в аккаунте и не зависят от копий персонажей в кампаниях."}</span></div>{authError && <p className="validation-note" role="alert">{authError}</p>}
-          {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.gender} · {c.ancestry}{c.subrace ? ` (${c.subrace})` : ""} · {c.className}</p><p className="character-background">{c.background} · {c.alignment}</p><div className="ability-preview">{abilityFields.map(ability=><span key={ability.id}><b>{ability.name}</b>{c.abilityScores[ability.id]} <small>{Math.floor((c.abilityScores[ability.id]-10)/2)>=0?"+":""}{Math.floor((c.abilityScores[ability.id]-10)/2)}</small></span>)}</div><div className="skill-preview"><b>Владения навыками</b><span>{c.skillProficiencies.map(id=>skillCatalog.find(skill=>skill.id===id)?.name).join(", ")}</span></div><div className="derived-preview"><span><b>ХИТЫ</b>{c.derived.maxHp}</span><span><b>КД</b>{c.derived.armorClass}</span><span><b>ИНИЦИАТИВА</b>{c.derived.initiative>=0?"+":""}{c.derived.initiative}</span><span><b>СКОРОСТЬ</b>{c.derived.speed} фт.</span><span><b>ПАСС. ВОСПРИЯТИЕ</b>{c.derived.passivePerception}</span><span><b>КОСТЬ ХИТОВ</b>{c.derived.hitDie}</span></div><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" disabled>Открыть лист персонажа</button><small className="prototype-note">Редактор листа будет реализован следующим этапом</small></div></article>)}</div>}
+          {characters.length===0?<EmptyState icon={<UserRound size={26}/>} title="Твоя коллекция пока пуста" description="Создай первого героя. Позже здесь появится полный лист персонажа с характеристиками, навыками, снаряжением и способностями." action="Создать персонажа" onAction={()=>setCharacterModal(true)}/>:<div className="character-grid">{characters.map(c=><article className="character-card" key={c.id}><div className="character-art"><div className="character-sigil"><UserRound size={35}/></div><span>УРОВЕНЬ {c.level}</span></div><div className="character-info"><h3>{c.name}</h3><p>{c.gender} · {c.ancestry}{c.subrace ? ` (${c.subrace})` : ""} · {c.className}</p><p className="character-background">{c.background} · {c.alignment}</p><div className="ability-preview">{abilityFields.map(ability=><span key={ability.id}><b>{ability.name}</b>{c.abilityScores[ability.id]} <small>{Math.floor((c.abilityScores[ability.id]-10)/2)>=0?"+":""}{Math.floor((c.abilityScores[ability.id]-10)/2)}</small></span>)}</div><div className="skill-preview"><b>Владения навыками</b><span>{c.skillProficiencies.map(id=>skillCatalog.find(skill=>skill.id===id)?.name).join(", ")}</span></div><div className="derived-preview"><span><b>ХИТЫ</b>{c.derived.maxHp}</span><span><b>КД</b>{c.derived.armorClass}</span><span><b>ИНИЦИАТИВА</b>{c.derived.initiative>=0?"+":""}{c.derived.initiative}</span><span><b>СКОРОСТЬ</b>{c.derived.speed} фт.</span><span><b>ПАСС. ВОСПРИЯТИЕ</b>{c.derived.passivePerception}</span><span><b>КОСТЬ ХИТОВ</b>{c.derived.hitDie}</span></div><div className="stat-preview"><span><b>КЛАСС</b>{c.className}</span><span><b>УРОВЕНЬ</b>{c.level}</span><span><b>СОСТОЯНИЕ</b>Личный</span></div><button className="button button-secondary full-width" onClick={() => openCharacterSheet(c)}>Открыть лист персонажа</button></div></article>)}</div>}
         </section>}
         {active==="Библиотека"&&<section className="page-section"><div className="page-heading"><div><div className="eyebrow"><span/> СПРАВОЧНЫЕ МАТЕРИАЛЫ</div><h1>Библиотека</h1><p className="subtitle">Игровые справочники и материалы кампаний.</p></div></div><div className="library-grid">{[{title:"Персонажи",desc:"Классы, происхождения, предыстории и развитие.",icon:<UserRound/>},{title:"Существа",desc:"Противники, союзники и игровые характеристики.",icon:<Swords/>},{title:"Заклинания",desc:"Магические эффекты и правила их применения.",icon:<WandSparkles/>},{title:"Предметы",desc:"Снаряжение, оружие, доспехи и сокровища.",icon:<Shield/>}].map(x=><article className="library-card" key={x.title}><div className="quick-icon purple-icon">{x.icon}</div><h3>{x.title}</h3><p>{x.desc}</p><span className="coming-label">Раздел готовится</span></article>)}</div></section>}
         {active==="Администрирование"&&sessionUser.platformRole==="ADMIN"&&!isGuest&&<AdminPanel/>}
@@ -310,10 +387,66 @@ function App() {
       </div>
     </main>
     {campaignModal&&<Modal title="Новая кампания" onClose={()=>setCampaignModal(false)}><form className="modal-form" onSubmit={createCampaign}><label>Название кампании<input autoFocus required value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Например, Тайны старого королевства"/></label><label>Краткое описание<textarea value={campaignDescription} onChange={e=>setCampaignDescription(e.target.value)} placeholder="О чём будет это приключение?"/></label><p className="notice-strip">{isGuest ? "Кампания будет сохранена локально в этом браузере. При подключении аккаунта она автоматически на сервер не переносится." : "Кампания будет сохранена на сервере и появится в твоём списке. Настройки приватности и пароль добавим в управлении кампанией."}</p>{campaignError&&<p className="validation-note" role="alert">{campaignError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCampaignModal(false)}>Отмена</button><button className="button button-primary" type="submit" disabled={campaignBusy}>{campaignBusy?"Сохранение…":<><Plus size={16}/> Создать</>}</button></div></form></Modal>}
+    {selectedCharacter && <Modal title={`Лист персонажа — ${selectedCharacter.name}`} onClose={() => setSelectedCharacter(null)}><CharacterSheet character={selectedCharacter} currentHp={sheetCurrentHp} temporaryHp={sheetTemporaryHp} onCurrentHpChange={setSheetCurrentHp} onTemporaryHpChange={setSheetTemporaryHp} onSave={saveCharacterHitPoints} saving={sheetSaveBusy} error={sheetError}/></Modal>}
     {characterModal&&<Modal title="Новый персонаж" onClose={()=>setCharacterModal(false)}><form className="modal-form" onSubmit={createCharacter}><label>Имя персонажа<input autoFocus required value={characterName} onChange={e=>setCharacterName(e.target.value)} placeholder="Имя героя"/></label><label>Пол<select required value={characterGender} onChange={e=>setCharacterGender(e.target.value)}><option value="" disabled>Выбери вариант</option>{characterGenders.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Раса<select required value={characterAncestry} onChange={e=>{setCharacterAncestry(e.target.value);setCharacterSubrace("");}}><option value="" disabled>Выбери расу</option>{characterAncestries.map(option=><option key={option} value={option}>{option}</option>)}</select></label>{(ancestrySubraces[characterAncestry] ?? []).length > 0 && <label>Подраса<select required value={characterSubrace} onChange={e=>setCharacterSubrace(e.target.value)}><option value="" disabled>Выбери подрасу</option>{(ancestrySubraces[characterAncestry] ?? []).map(option=><option key={option} value={option}>{option}</option>)}</select></label>}
     {characterAncestry==="Полуэльф"&&<div className="builder-section"><div><strong>Гибкое увеличение характеристик</strong><span>Полуэльф получает +1 к двум разным характеристикам, кроме Харизмы.</span></div><div className="ability-assignment"><label>Первое увеличение<select value={halfElfBonusOne} onChange={e=>setHalfElfBonusOne(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusTwo).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Второе увеличение<select value={halfElfBonusTwo} onChange={e=>setHalfElfBonusTwo(e.target.value)}>{abilityFields.filter(a=>a.id!=="cha"&&a.id!==halfElfBonusOne).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div></div>}<label>Класс персонажа<select required value={characterClass} onChange={e=>{setCharacterClass(e.target.value);setCharacterSkills([]);}}><option value="" disabled>Выбери класс</option>{characterClasses.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Предыстория<select required value={characterBackground} onChange={e=>setCharacterBackground(e.target.value)}><option value="" disabled>Выбери предысторию</option>{characterBackgrounds.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Мировоззрение<select required value={characterAlignment} onChange={e=>setCharacterAlignment(e.target.value)}><option value="" disabled>Выбери мировоззрение</option>{characterAlignments.map(option=><option key={option} value={option}>{option}</option>)}</select></label><div className="builder-section"><div><strong>Характеристики</strong><span>Стандартный набор 5e: 15, 14, 13, 12, 10, 8. Распредели каждое значение один раз.</span></div><div className="ability-assignment">{abilityFields.map(ability=><label key={ability.id}>{ability.name}<select value={characterAbilityScores[ability.id]} onChange={e=>setCharacterAbilityScores(current=>({...current,[ability.id]:Number(e.target.value)}))}>{standardArray.map(score=><option key={score} value={score}>{score} ({Math.floor((score-10)/2)>=0?"+":""}{Math.floor((score-10)/2)})</option>)}</select></label>)}</div>{new Set(Object.values(characterAbilityScores)).size!==6&&<small className="validation-note">Каждое значение стандартного набора должно использоваться ровно один раз.</small>}</div>
     {characterClass&&<div className="builder-section"><div><strong>Владения навыками</strong><span>Выбери {classSkillRules[characterClass]?.count??2} навыка из списка класса.</span></div><div className="skill-choice-grid">{(classSkillRules[characterClass]?.options??[]).map(id=>{const skill=skillCatalog.find(item=>item.id===id)!;const checked=characterSkills.includes(id);return <label className="skill-choice" key={id}><input type="checkbox" checked={checked} disabled={!checked&&characterSkills.length>=(classSkillRules[characterClass]?.count??2)} onChange={e=>setCharacterSkills(current=>e.target.checked?[...current,id]:current.filter(value=>value!==id))}/>{skill.name}</label>})}</div><small className="validation-note">Выбрано: {characterSkills.length} из {classSkillRules[characterClass]?.count??2}</small></div>}
     <div className="notice-strip"><Dice5 size={17}/><span>Спасброски класса будут отмечены автоматически. Бонус мастерства на 1-м уровне: +2. Остальные расчёты и снаряжение будут добавлены в листе персонажа.</span></div>{characterError&&<p className="validation-note" role="alert">{characterError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={()=>setCharacterModal(false)}>Отмена</button><button className="button button-primary" type="submit"><Plus size={16}/> Создать</button></div></form></Modal>}
+  </div>;
+}
+
+function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTemporaryHpChange,onSave,saving,error}:{character:Character;currentHp:string;temporaryHp:string;onCurrentHpChange:(value:string)=>void;onTemporaryHpChange:(value:string)=>void;onSave:(event:React.FormEvent)=>void;saving:boolean;error:string}) {
+  const data = character.rawData ?? {};
+  const scores = character.abilityScores;
+  const bonus = Number(data.proficiencyBonus ?? proficiencyBonusForLevel(character.level));
+  const skillProficiencies = new Set(toStringArray(data.skillProficiencies ?? character.skillProficiencies));
+  const skillExpertise = new Set(toStringArray(data.skillExpertise));
+  const saveProficiencies = new Set(toStringArray(data.savingThrowProficiencies));
+  const modifier = (ability:string) => Math.floor(((scores[ability] ?? 10) - 10) / 2);
+  const skillBonus = (skillId:string) => modifier(skillAbilities[skillId] ?? "wis") + (skillExpertise.has(skillId) ? bonus * 2 : skillProficiencies.has(skillId) ? bonus : 0);
+  const hitPoints = (data.hitPoints ?? {}) as { maximum?: number; current?: number; temporary?: number };
+  const maxHp = Number(hitPoints.maximum ?? character.derived.maxHp);
+  const hitDice = (data.hitDice ?? {}) as { total?: number; remaining?: number; die?: string };
+  const deathSaves = (data.deathSaves ?? {}) as { successes?: number; failures?: number };
+  const listSection = (title:string, value:unknown) => {
+    const values = toStringArray(value);
+    return <section className="sheet-panel"><h3>{title}</h3>{values.length ? <ul className="sheet-text-list">{values.map((item,index)=><li key={`${title}-${index}`}>{item}</li>)}</ul> : <p className="sheet-muted">Пока не заполнено</p>}</section>;
+  };
+  const biographyLabels = {personalityTraits:"Черты характера",ideals:"Идеалы",bonds:"Привязанности",flaws:"Слабости",appearance:"Внешность",backstory:"Предыстория"};
+  const biographyKeys = Object.keys(biographyLabels) as Array<keyof typeof biographyLabels>;
+  return <div className="character-sheet">
+    <div className="sheet-identity"><div><span className="sheet-kicker">ПЕРСОНАЖ · УРОВЕНЬ {character.level}</span><h2>{character.name}</h2><p>{[character.ancestry, character.subrace, character.className, character.background].filter(Boolean).join(" · ")}</p></div><div className="sheet-bonus"><span>Бонус мастерства</span><strong>{signedBonus(bonus)}</strong></div></div>
+    <div className="sheet-combat-strip">
+      <div><span>Класс доспеха</span><strong>{character.derived.armorClass}</strong></div>
+      <div><span>Инициатива</span><strong>{signedBonus(character.derived.initiative)}</strong></div>
+      <div><span>Скорость</span><strong>{character.derived.speed} фт.</strong></div>
+      <div><span>Пассивное восприятие</span><strong>{Number(data.passivePerception ?? character.derived.passivePerception)}</strong></div>
+    </div>
+    <form className="sheet-hp-form" onSubmit={onSave}>
+      <div className="sheet-hp-heading"><div><span className="sheet-kicker">СОСТОЯНИЕ</span><h3>Хиты</h3></div><span className="sheet-hp-total">{maxHp} максимум</span></div>
+      <div className="sheet-hp-fields">
+        <label>Текущие хиты<input type="number" min="0" max={maxHp} step="1" required value={currentHp} onChange={event=>onCurrentHpChange(event.target.value)}/></label>
+        <label>Временные хиты<input type="number" min="0" step="1" required value={temporaryHp} onChange={event=>onTemporaryHpChange(event.target.value)}/></label>
+        <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Сохраняем…" : "Сохранить хиты"}</button>
+      </div>
+      {error && <p className="validation-note" role="alert">{error}</p>}
+      <p className="sheet-muted">Кость хитов: {hitDice.remaining ?? 1} из {hitDice.total ?? 1} {String(hitDice.die ?? character.derived.hitDie).replace(/^d/,"к")}</p>
+    </form>
+    <section className="sheet-panel"><h3>Характеристики</h3><div className="sheet-abilities">{abilityFields.map(ability=><div className="sheet-ability" key={ability.id}><span>{ability.name}</span><strong>{scores[ability.id] ?? 10}</strong><small>{signedBonus(modifier(ability.id))}</small></div>)}</div></section>
+    <div className="sheet-two-columns">
+      <section className="sheet-panel"><h3>Спасброски</h3><div className="sheet-roll-list">{abilityFields.map(ability=><div key={ability.id}><span className={saveProficiencies.has(ability.id) ? "is-proficient" : ""}>{saveProficiencies.has(ability.id) ? "●" : "○"}</span><b>{ability.name}</b><strong>{signedBonus(modifier(ability.id) + (saveProficiencies.has(ability.id) ? bonus : 0))}</strong></div>)}</div></section>
+      <section className="sheet-panel"><h3>Навыки</h3><div className="sheet-roll-list">{skillCatalog.map(skill=><div key={skill.id}><span className={skillExpertise.has(skill.id) ? "is-expert" : skillProficiencies.has(skill.id) ? "is-proficient" : ""}>{skillExpertise.has(skill.id) ? "◆" : skillProficiencies.has(skill.id) ? "●" : "○"}</span><b>{skill.name}</b><small>{abilityFields.find(a=>a.id===skillAbilities[skill.id])?.name.slice(0,3) ?? "Муд"}</small><strong>{signedBonus(skillBonus(skill.id))}</strong></div>)}</div></section>
+    </div>
+    <div className="sheet-two-columns">
+      {listSection("Снаряжение", data.equipment)}
+      {listSection("Особенности и способности", data.features)}
+      {listSection("Атаки", data.attacks)}
+      {listSection("Заклинания", data.spells)}
+      {listSection("Состояния", data.conditions)}
+      {listSection("Языки", data.languages)}
+    </div>
+    <section className="sheet-panel"><h3>Спасение от смерти</h3><div className="sheet-death-saves"><span>Успехи: {deathSaves.successes ?? 0}/3</span><span>Провалы: {deathSaves.failures ?? 0}/3</span><span>Вдохновение: {data.inspiration === true ? "Есть" : "Нет"}</span></div></section>
+    {biographyKeys.some(key=>typeof data[key]==="string" && String(data[key]).trim()) && <section className="sheet-panel"><h3>Описание персонажа</h3><div className="sheet-biography">{biographyKeys.map(key=>typeof data[key]==="string" && String(data[key]).trim() ? <p key={key}><b>{biographyLabels[key]}:</b> {String(data[key])}</p> : null)}</div></section>}
   </div>;
 }
 
