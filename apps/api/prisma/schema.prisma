@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PlatformRole {
+  USER
+  ADMIN
+}
+
 enum CampaignRole {
   GAME_MASTER
   ASSISTANT
@@ -26,6 +31,12 @@ model User {
   email        String               @unique
   username     String               @unique
   passwordHash String
+  platformRole PlatformRole @default(USER)
+  bannedAt DateTime?
+  banReason String? @db.Text
+  bannedUntil DateTime?
+  adminActions AdminAction[] @relation("AdminActor")
+  moderationEvents AdminAction[] @relation("ModeratedUser")
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   campaigns    Campaign[]           @relation("CampaignOwner")
@@ -97,4 +108,20 @@ model CampaignTableState {
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([updatedAt])
+}
+
+
+model AdminAction {
+  id           String   @id @default(cuid())
+  actorId      String
+  targetUserId String?
+  action       String
+  reason       String?  @db.Text
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  actor        User     @relation("AdminActor", fields: [actorId], references: [id], onDelete: Restrict)
+  targetUser   User?    @relation("ModeratedUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([targetUserId, createdAt])
 }
