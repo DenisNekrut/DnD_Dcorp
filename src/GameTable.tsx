@@ -12,12 +12,14 @@ type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: num
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean; gridCellSizePx?: number };
 type MapAsset = { key: string; url: string; contentType: string; size: number };
-type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; round: number; log: LogEntry[] };
+type MapView = { scale: number; x: number; y: number };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; layerLocks?: LayerLocks; mapAsset?: MapAsset | null; mapView?: MapView; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
-type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks };
+type EditorSnapshot = { tokens: Token[]; objects: MapObject[]; layerVisibility: LayerVisibility; layerLocks: LayerLocks; mapView: MapView };
 type EditorHistory = { past: EditorSnapshot[]; future: EditorSnapshot[] };
 const cloneEditorSnapshot = (snapshot: EditorSnapshot): EditorSnapshot => JSON.parse(JSON.stringify(snapshot)) as EditorSnapshot;
+const defaultMapView: MapView = { scale: 1, x: 0, y: 0 };
 
 const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true, gridCellSizePx: 38 };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
@@ -31,6 +33,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ ...defaultLayerVisibility });
   const [layerLocks, setLayerLocks] = useState<LayerLocks>({ ...defaultLayerLocks });
   const [mapAsset, setMapAsset] = useState<MapAsset | null>(null);
+  const [mapView, setMapView] = useState<MapView>({ ...defaultMapView });
   const [mapUploading, setMapUploading] = useState(false);
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const [editorHistory, setEditorHistory] = useState<EditorHistory>({ past: [], future: [] });
@@ -63,7 +66,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const initiative = useMemo(() => [...tokens].sort((a, b) => b.initiative - a.initiative), [tokens]);
   const activeToken = initiative.length ? initiative[(round - 1) % initiative.length] : undefined;
   const selected = tokens.find(token => token.id === selectedId);
-  const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks });
+  const getEditorSnapshot = (): EditorSnapshot => cloneEditorSnapshot({ tokens, objects, layerVisibility, layerLocks, mapView });
   const recordEditorHistory = () => {
     if (historyGroupRef.current) return;
     const snapshot = getEditorSnapshot();
@@ -87,12 +90,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const updateObjects = (next: MapObject[]) => { recordEditorHistory(); setObjects(next); };
   const updateLayerVisibility = (next: LayerVisibility) => { recordEditorHistory(); setLayerVisibility(next); };
   const updateLayerLocks = (next: LayerLocks) => { recordEditorHistory(); setLayerLocks(next); };
+  const updateMapView = (patch: Partial<MapView>) => { recordEditorHistory(); setMapView(value => ({ ...value, ...patch })); };
   const undoEditor = () => {
     const target = editorHistory.past[editorHistory.past.length - 1];
     if (!target || !canEdit) return;
     const current = getEditorSnapshot();
     setEditorHistory({ past: editorHistory.past.slice(0, -1), future: [...editorHistory.future, current].slice(-50) });
-    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks);
+    setTokens(target.tokens); setObjects(target.objects); setLayerVisibility(target.layerVisibility); setLayerLocks(target.layerLocks); setMapView(target.mapView);
   };
   const redoEditor = () => {
     const target = editorHistory.future[editorHistory.future.length - 1];
@@ -116,6 +120,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
       setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
       setMapAsset(state.mapAsset ?? null);
+      setMapView(state.mapView ?? { ...defaultMapView });
       setLog(Array.isArray(state.log) ? state.log : []);
     } else {
       setRoom({ ...emptyRoom });
@@ -124,6 +129,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setLayerVisibility({ ...defaultLayerVisibility });
       setLayerLocks({ ...defaultLayerLocks });
       setMapAsset(null);
+      setMapView({ ...defaultMapView });
       setLog([]);
     }
     if (typeof state.round === "number") setRound(state.round);
@@ -150,6 +156,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             setLayerVisibility(state.layerVisibility ?? { ...defaultLayerVisibility });
             setLayerLocks(state.layerLocks ?? { ...defaultLayerLocks });
             setMapAsset(state.mapAsset ?? null);
+            setMapView(state.mapView ?? { ...defaultMapView });
             setLog(Array.isArray(state.log) ? state.log : []);
             if (typeof state.round === "number") setRound(state.round);
           }
@@ -185,7 +192,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, round, log };
+    const state: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -205,7 +212,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
   useEffect(() => {
     if (!remoteEnabled || !campaignId) return;
@@ -247,6 +254,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     try {
       const uploaded = await apiRequest<MapAsset>(`/campaigns/${campaignId}/table/map`, { method: "POST", body: formData });
       setMapAsset(uploaded);
+      setMapView({ ...defaultMapView });
       addLog("Изображение карты загружено в постоянное хранилище.", "gold");
     } catch (error) {
       setTableError(error instanceof Error ? error.message : "Не удалось загрузить изображение карты.");
@@ -256,6 +264,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
   const removeMapAsset = async () => {
     if (!mapAsset || !campaignId || !remoteEnabled || !canEdit) return;
+    if (!window.confirm("Удалить загруженную подложку карты?")) return;
     setMapUploading(true);
     try {
       await apiRequest<{ deleted: boolean }>(`/campaigns/${campaignId}/table/map`, {
@@ -263,6 +272,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         body: JSON.stringify({ key: mapAsset.key }),
       });
       setMapAsset(null);
+      setMapView({ ...defaultMapView });
       addLog("Подложка карты удалена.", "gold");
     } catch (error) {
       setTableError(error instanceof Error ? error.message : "Не удалось удалить изображение карты.");
@@ -369,8 +379,21 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
           </div>
-          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--map-zoom": zoom / 100 } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
+          <div className={`battle-map map-${room.mapTheme} ${room.grid ? "with-grid" : ""} ${mapAsset ? "has-uploaded-map" : ""}`} style={{ "--grid-cell-size": `${room.gridCellSizePx ?? 38}px`, "--map-zoom": zoom / 100, "--map-image-scale": mapView.scale, "--map-offset-x": `${mapView.x}%`, "--map-offset-y": `${mapView.y}%` } as React.CSSProperties} onPointerMove={moveToken} onPointerUp={() => { setDraggingId(null); finishHistoryGroup(); }} onPointerLeave={() => { setDraggingId(null); finishHistoryGroup(); }}>
             {mapAsset && <img className="uploaded-map-image" src={mapAsset.url} alt="Загруженная карта игровой комнаты"/>}
+            {mapAsset && canEdit && <div className="map-image-controls" onPointerDown={event => event.stopPropagation()}>
+              <strong>Подгонка подложки</strong>
+              <label>Масштаб <output>{Math.round(mapView.scale * 100)}%</output>
+                <input type="range" min="50" max="200" step="5" value={Math.round(mapView.scale * 100)} onPointerDown={beginHistoryGroup} onPointerUp={finishHistoryGroup} onChange={event => updateMapView({ scale: Number(event.target.value) / 100 })}/>
+              </label>
+              <label>Смещение X <output>{mapView.x}%</output>
+                <input type="range" min="-50" max="50" step="1" value={mapView.x} onPointerDown={beginHistoryGroup} onPointerUp={finishHistoryGroup} onChange={event => updateMapView({ x: Number(event.target.value) })}/>
+              </label>
+              <label>Смещение Y <output>{mapView.y}%</output>
+                <input type="range" min="-50" max="50" step="1" value={mapView.y} onPointerDown={beginHistoryGroup} onPointerUp={finishHistoryGroup} onChange={event => updateMapView({ y: Number(event.target.value) })}/>
+              </label>
+              <button type="button" onClick={() => updateMapView({ ...defaultMapView })}>Сбросить положение</button>
+            </div>}
             <div className="map-scale" style={{ transform: `scale(${zoom / 100})` }}>
               {tokens.map(token => <button key={token.id} className={`map-token token-${token.color} ${selectedId === token.id ? "token-selected" : ""} ${activeToken?.id === token.id ? "token-active" : ""}`} style={{ left: `${token.x}%`, top: `${token.y}%`, cursor: canEdit ? "grab" : "default" }} onPointerDown={event => { if (!canEdit) { setSelectedId(token.id); return; } event.preventDefault(); setSelectedId(token.id); beginHistoryGroup(); setDraggingId(token.id); event.currentTarget.setPointerCapture(event.pointerId); }} onClick={() => setSelectedId(token.id)} title={token.name}>
                 <span className="token-glyph">{token.kind === "enemy" ? "!" : token.kind === "ally" ? "✦" : "♟"}</span><span className="token-label">{token.name}</span><span className="token-health"><i style={{ width: `${(token.hp / token.maxHp) * 100}%` }}/></span>
