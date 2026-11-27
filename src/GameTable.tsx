@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>> };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -527,7 +527,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     const rawSpells = data.spells ?? spellcastingData.spells;
     const knownSpells = Array.isArray(rawSpells) ? rawSpells.map(spell => typeof spell === "string" ? spell : spell && typeof spell === "object" ? String((spell as { name?: unknown; title?: unknown }).name ?? (spell as { title?: unknown }).title ?? "") : "").filter(Boolean) : [];
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
+    const rawHitDice = data.hitDice as { die?: unknown; sides?: unknown; total?: unknown; remaining?: unknown; used?: unknown } | undefined;
+    const importedDieText = String(rawHitDice?.die ?? data.hitDie ?? "d8");
+    const importedDieSides = Number(rawHitDice?.sides ?? importedDieText.match(/d(4|6|8|10|12|20)/i)?.[1] ?? 8);
+    const importedHitDiceTotal = Math.max(0, Math.min(20, Number(rawHitDice?.total ?? data.level ?? 1)));
+    const importedHitDiceUsed = Math.max(0, Math.min(importedHitDiceTotal, Number(rawHitDice?.used ?? (rawHitDice?.remaining !== undefined ? importedHitDiceTotal - Number(rawHitDice.remaining) : 0))));
+    const hitDice = { dieSides: [4,6,8,10,12,20].includes(importedDieSides) ? importedDieSides : 8, total: importedHitDiceTotal, used: importedHitDiceUsed };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -794,6 +800,56 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const updated = { ...selected, hp: healedHp, ...(healedHp > 0 ? { deathSaves: { successes: 0, failures: 0 } } : {}) };
     setTokens(items => items.map(token => token.id === selected.id ? updated : token));
     addLog("Лечение " + selected.name + ": +" + (healedHp - selected.hp) + ". Хиты: " + healedHp + "/" + selected.maxHp + ".", "gold");
+  };
+
+  const spendHitDieDuringShortRest = async () => {
+    if (!selected || selected.kind !== "hero" || !canEdit || layerLocks.figures || diceBusy) return;
+    const hitDice = selected.hitDice ?? { dieSides: 8, total: 0, used: 0 };
+    if (hitDice.used >= hitDice.total) {
+      addLog(selected.name + ": не осталось доступных костей хитов.", "danger");
+      return;
+    }
+    if (selected.hp >= selected.maxHp) {
+      addLog(selected.name + ": хиты уже полностью восстановлены.", "muted");
+      return;
+    }
+    setDiceBusy(true);
+    try {
+      let dieRoll: number;
+      if (remoteEnabled) {
+        const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+          method: "POST",
+          body: JSON.stringify({ count: 1, sides: hitDice.dieSides, modifier: 0, mode: "normal" }),
+        });
+        dieRoll = result.rolls[0];
+      } else {
+        dieRoll = Math.floor(Math.random() * hitDice.dieSides) + 1;
+      }
+      const constitutionModifier = Number(selected.abilityModifiers?.constitution ?? 0);
+      const healing = Math.max(0, dieRoll + constitutionModifier);
+      const nextHp = Math.min(selected.maxHp, selected.hp + healing);
+      recordEditorHistory();
+      setTokens(items => items.map(token => token.id === selected.id ? {
+        ...token,
+        hp: nextHp,
+        hitDice: { ...(token.hitDice ?? hitDice), used: Math.min((token.hitDice ?? hitDice).total, (token.hitDice ?? hitDice).used + 1) },
+        ...(nextHp > 0 ? { deathSaves: { successes: 0, failures: 0 } } : {}),
+      } : token));
+      addLog(selected.name + ": короткий отдых — потрачена 1 кость хитов (d" + hitDice.dieSides + "), бросок " + dieRoll + (constitutionModifier >= 0 ? " + " : " - ") + Math.abs(constitutionModifier) + "; восстановлено " + (nextHp - selected.hp) + " хитов. Осталось костей: " + (hitDice.total - hitDice.used - 1) + ".", "gold");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось бросить кость хитов.");
+    } finally {
+      setDiceBusy(false);
+    }
+  };
+
+  const updateHitDice = (field: "dieSides" | "total", value: number) => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const current = selected.hitDice ?? { dieSides: 8, total: 0, used: 0 };
+    const nextValue = field === "dieSides" ? ([4,6,8,10,12,20].includes(value) ? value : 8) : Math.max(0, Math.min(20, value));
+    const updated = { ...current, [field]: nextValue, used: field === "total" ? Math.min(current.used, nextValue) : current.used };
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, hitDice: updated } : token));
   };
 
   const applyTemporaryHp = () => {
@@ -1261,6 +1317,20 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <small>При получении урона автоматически выполняется спасбросок Телосложения (СЛ 10 или половина урона, если больше).</small>
             </div>
             <div className="hp-line"><span>Хиты</span><b>{selected.hp} / {selected.maxHp}{(selected.temporaryHp ?? 0) > 0 ? ` · +${selected.temporaryHp} врем.` : ""}</b></div><div className="hp-track"><i style={{ width: `${(selected.hp / selected.maxHp) * 100}%` }}/></div>
+            {selected.kind === "hero" && <div className="short-rest-panel">
+              <strong>Кости хитов и короткий отдых</strong>
+              <div className="combat-roll-row">
+                <label>Кость<select value={selected.hitDice?.dieSides ?? 8} onChange={event => updateHitDice("dieSides", Number(event.target.value))} disabled={!canEdit || layerLocks.figures}>
+                  {[4,6,8,10,12,20].map(sides=><option key={sides} value={sides}>d{sides}</option>)}
+                </select></label>
+                <label>Всего<input type="number" min="0" max="20" value={selected.hitDice?.total ?? 0} onChange={event => updateHitDice("total", Number(event.target.value)||0)} disabled={!canEdit || layerLocks.figures}/></label>
+              </div>
+              <span>Доступно: {Math.max(0,(selected.hitDice?.total ?? 0)-(selected.hitDice?.used ?? 0))} / {selected.hitDice?.total ?? 0}</span>
+              <button type="button" onClick={spendHitDieDuringShortRest} disabled={!canEdit || layerLocks.figures || diceBusy || (selected.hitDice?.used ?? 0) >= (selected.hitDice?.total ?? 0) || selected.hp >= selected.maxHp}>
+                {diceBusy ? "Бросок…" : "Потратить кость хитов"}
+              </button>
+              <small>За один бросок тратится одна кость. Можно повторять во время короткого отдыха, пока остаются кости и не восстановлены все хиты.</small>
+            </div>}
             <div className="hp-management">
               <label>Количество<input type="number" min="1" max="999" value={hpAdjustment} onChange={event => setHpAdjustment(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
               <label>Тип урона<select value={damageType} onChange={event => setDamageType(event.target.value as DamageType)} disabled={!canEdit || layerLocks.figures}>{damageTypeOptions.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></label>
