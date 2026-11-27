@@ -1,11 +1,12 @@
 import { useState } from "react";
+import GameTable from "./GameTable";
 import {
   BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
   ScrollText, X, LockKeyhole, Globe2, Copy, MoreHorizontal, WandSparkles
 } from "lucide-react";
 
-type Section = "Главная" | "Кампании" | "Персонажи" | "Библиотека" | "Настройки";
+type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки";
 type Campaign = { id: number; name: string; description: string; access: "Открытая" | "По приглашению"; players: number };
 type Character = { id: number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
@@ -40,7 +41,7 @@ const ancestrySubraces: Record<string, string[]> = {
 };
 
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
-  { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords },
+  { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords }, { label: "Игровой стол", icon: Dice5 },
   { label: "Персонажи", icon: UserRound }, { label: "Библиотека", icon: BookOpen },
   { label: "Настройки", icon: Settings }
 ];
@@ -49,6 +50,7 @@ function App() {
   const [active, setActive] = useState<Section>("Главная");
   const [menuOpen, setMenuOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [campaignModal, setCampaignModal] = useState(false);
   const [characterModal, setCharacterModal] = useState(false);
@@ -112,9 +114,10 @@ function App() {
         {active==="Кампании"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> СОВМЕСТНЫЕ ПРИКЛЮЧЕНИЯ</div><h1>Кампании</h1><p className="subtitle">Создавай игровые миры или присоединяйся к приключениям.</p></div><button className="button button-primary" onClick={()=>setCampaignModal(true)}><Plus size={17}/> Создать кампанию</button></div>
           <div className="toolbar"><div className="search-field"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск среди моих кампаний"/></div><span className="muted-count">{campaigns.length} кампаний</span></div>
-          {campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).length===0?<EmptyState icon={<Swords size={26}/>} title="Пока нет кампаний" description="Создай первую кампанию. Здесь появятся твои игровые миры и приглашения." action="Создать кампанию" onAction={()=>setCampaignModal(true)}/>:<div className="entity-grid">{campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).map(c=><article className="entity-card" key={c.id}><div className="entity-card-top"><div className="quick-icon gold-icon"><Swords size={22}/></div><span className="status-pill">{c.access==="Открытая"?<Globe2 size={13}/>:<LockKeyhole size={13}/>} {c.access}</span><button className="icon-button compact" aria-label="Дополнительные действия"><MoreHorizontal size={18}/></button></div><h3>{c.name}</h3><p>{c.description||"Описание кампании пока не добавлено."}</p><div className="entity-meta"><span><Users size={14}/> {c.players} участник</span><span>Система: 5e</span></div><button className="button button-secondary full-width" disabled>Открыть игровой стол <Compass size={15}/></button><small className="prototype-note">Подключение и игровой стол появятся на следующих этапах</small></article>)}</div>}
+          {campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).length===0?<EmptyState icon={<Swords size={26}/>} title="Пока нет кампаний" description="Создай первую кампанию. Здесь появятся твои игровые миры и приглашения." action="Создать кампанию" onAction={()=>setCampaignModal(true)}/>:<div className="entity-grid">{campaigns.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).map(c=><article className="entity-card" key={c.id}><div className="entity-card-top"><div className="quick-icon gold-icon"><Swords size={22}/></div><span className="status-pill">{c.access==="Открытая"?<Globe2 size={13}/>:<LockKeyhole size={13}/>} {c.access}</span><button className="icon-button compact" aria-label="Дополнительные действия"><MoreHorizontal size={18}/></button></div><h3>{c.name}</h3><p>{c.description||"Описание кампании пока не добавлено."}</p><div className="entity-meta"><span><Users size={14}/> {c.players} участник</span><span>Система: 5e</span></div><button className="button button-secondary full-width" onClick={() => { setSelectedCampaign(c); setActive("Игровой стол"); }}>Открыть игровой стол <Compass size={15}/></button><small className="prototype-note">Открывает интерактивную сцену кампании</small></article>)}</div>}
           <div className="join-panel"><div className="join-icon"><Copy size={19}/></div><div><strong>Есть приглашение?</strong><span>Вставь пригласительную ссылку или код, чтобы отправить заявку на вступление.</span></div><button className="button button-secondary" disabled>Ввести приглашение</button></div>
         </section>}
+        {active==="Игровой стол"&&<GameTable campaignName={selectedCampaign?.name ?? "Демонстрационная сцена"} onBack={()=>setActive("Кампании")}/>}
         {active==="Персонажи"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
           <div className="notice-strip"><Shield size={17}/><span>Личные карточки независимы от персонажей в игровых кампаниях. Правила создания и расчёты будут реализованы по стандарту 5e.</span></div>
