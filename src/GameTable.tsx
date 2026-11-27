@@ -650,7 +650,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const naturalOne = kept === 1;
       const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
-        selected.name + " атакует " + target.name + ": " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
+        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + selectedRollModeLabel.toLowerCase() + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
       );
       if (!hit) return;
@@ -878,7 +878,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </div>
               {rollKind === "attack" && <div className="combat-attack-options">
                 <label>Оружие<select value={selectedWeaponId} onChange={event => selectWeapon(event.target.value)} disabled={!canEdit}>
-                  {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} {weapon.damageType}</option>)}
+                  {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} · {damageTypeOptions.find(type => type.id === weapon.damageType)?.label ?? ""}{weapon.rangeFt ? " · " + weapon.rangeFt.normal + "/" + weapon.rangeFt.long + " фт." : ""}</option>)}
                 </select></label>
                 <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
                   {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
