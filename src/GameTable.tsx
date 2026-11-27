@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
+import RoomMapEditor, { type MapObject } from "./RoomMapEditor";
 import "./styles/tabletop.css";
 import "./styles/tabletop-room.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
 type RoomSettings = { configured: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
-type TableState = { room: RoomSettings; tokens: Token[]; round: number; log: LogEntry[] };
+type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; round: number; log: LogEntry[] };
+type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 
 const emptyRoom: RoomSettings = { configured: false, name: "", description: "", mapTheme: "sand", grid: true };
@@ -18,6 +20,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const remoteEnabled = Boolean(campaignId && !isGuest && isApiConfigured());
   const [room, setRoom] = useState<RoomSettings>({ ...emptyRoom });
   const [tokens, setTokens] = useState<Token[]>([]);
+  const [objects, setObjects] = useState<MapObject[]>([]);
+  const [campaignCharacters, setCampaignCharacters] = useState<CampaignCharacter[]>([]);
+  const [rosterError, setRosterError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
@@ -115,7 +120,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     if (!campaignId || !tableLoaded) return;
-    const state: TableState = { room, tokens, round, log };
+    const state: TableState = { room, tokens, objects, round, log };
     if (!remoteEnabled) {
       try { window.localStorage.setItem(localKey(campaignId), JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
       return;
@@ -135,9 +140,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       }
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [room, tokens, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
+  }, [room, tokens, objects, round, log, campaignId, remoteEnabled, tableLoaded, canEdit]);
 
-  const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
+  useEffect(() => {\n    if (!remoteEnabled || !campaignId) return;\n    let active = true;\n    apiRequest<CampaignCharacter[]>(`/characters/campaigns/${campaignId}`)\n      .then(items => { if (active) { setCampaignCharacters(items); setRosterError(""); } })\n      .catch(error => { if (active) setRosterError(error instanceof Error ? error.message : "Не удалось загрузить персонажей кампании."); });\n    return () => { active = false; };\n  }, [campaignId, remoteEnabled]);\n\n  const addCampaignCharacter = (character: CampaignCharacter) => {\n    const data = character.data ?? {};\n    const hp = (data.hitPoints as { maximum?: number } | undefined)?.maximum ?? 1;\n    const initiativeValue = Number(data.initiative ?? 0);\n    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue };\n    setTokens(items => [...items, token]);\n    addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);\n  };\n\n  const addLog = (text: string, tone: LogEntry["tone"] = "muted") => {
     setLog(items => [...items.slice(-99), { id: Date.now() + Math.floor(Math.random() * 1000), text, tone }]);
   };
   const saveRoom = (event: React.FormEvent) => {
@@ -229,7 +234,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </button>)}
             </div>
             {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
-            <div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
