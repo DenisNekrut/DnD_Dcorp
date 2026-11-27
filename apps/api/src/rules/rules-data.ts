@@ -23,18 +23,18 @@ export const ALIGNMENTS = [
 ] as const;
 
 export const CLASSES = [
-  { id: 'barbarian', name: 'Варвар', hitDie: 12, savingThrows: ['str', 'con'], skillChoices: 2 },
-  { id: 'bard', name: 'Бард', hitDie: 8, savingThrows: ['dex', 'cha'], skillChoices: 3 },
-  { id: 'cleric', name: 'Жрец', hitDie: 8, savingThrows: ['wis', 'cha'], skillChoices: 2 },
-  { id: 'druid', name: 'Друид', hitDie: 8, savingThrows: ['int', 'wis'], skillChoices: 2 },
-  { id: 'fighter', name: 'Воин', hitDie: 10, savingThrows: ['str', 'con'], skillChoices: 2 },
-  { id: 'monk', name: 'Монах', hitDie: 8, savingThrows: ['str', 'dex'], skillChoices: 2 },
-  { id: 'paladin', name: 'Паладин', hitDie: 10, savingThrows: ['wis', 'cha'], skillChoices: 2 },
-  { id: 'ranger', name: 'Следопыт', hitDie: 10, savingThrows: ['str', 'dex'], skillChoices: 3 },
-  { id: 'rogue', name: 'Плут', hitDie: 8, savingThrows: ['dex', 'int'], skillChoices: 4 },
-  { id: 'sorcerer', name: 'Чародей', hitDie: 6, savingThrows: ['con', 'cha'], skillChoices: 2 },
-  { id: 'warlock', name: 'Колдун', hitDie: 8, savingThrows: ['wis', 'cha'], skillChoices: 2 },
-  { id: 'wizard', name: 'Волшебник', hitDie: 6, savingThrows: ['int', 'wis'], skillChoices: 2 },
+  { id: 'barbarian', name: 'Варвар', hitDie: 12, savingThrows: ['str', 'con'], skillChoices: 2, skillOptions: ['animalHandling', 'athletics', 'intimidation', 'nature', 'perception', 'survival'] },
+  { id: 'bard', name: 'Бард', hitDie: 8, savingThrows: ['dex', 'cha'], skillChoices: 3, skillOptions: 'any' },
+  { id: 'cleric', name: 'Жрец', hitDie: 8, savingThrows: ['wis', 'cha'], skillChoices: 2, skillOptions: ['history', 'insight', 'medicine', 'persuasion', 'religion'] },
+  { id: 'druid', name: 'Друид', hitDie: 8, savingThrows: ['int', 'wis'], skillChoices: 2, skillOptions: ['arcana', 'animalHandling', 'insight', 'medicine', 'nature', 'perception', 'religion', 'survival'] },
+  { id: 'fighter', name: 'Воин', hitDie: 10, savingThrows: ['str', 'con'], skillChoices: 2, skillOptions: ['acrobatics', 'animalHandling', 'athletics', 'history', 'insight', 'intimidation', 'perception', 'survival'] },
+  { id: 'monk', name: 'Монах', hitDie: 8, savingThrows: ['str', 'dex'], skillChoices: 2, skillOptions: ['acrobatics', 'athletics', 'history', 'insight', 'religion', 'stealth'] },
+  { id: 'paladin', name: 'Паладин', hitDie: 10, savingThrows: ['wis', 'cha'], skillChoices: 2, skillOptions: ['athletics', 'insight', 'intimidation', 'medicine', 'persuasion', 'religion'] },
+  { id: 'ranger', name: 'Следопыт', hitDie: 10, savingThrows: ['str', 'dex'], skillChoices: 3, skillOptions: ['animalHandling', 'athletics', 'insight', 'investigation', 'nature', 'perception', 'stealth', 'survival'] },
+  { id: 'rogue', name: 'Плут', hitDie: 8, savingThrows: ['dex', 'int'], skillChoices: 4, skillOptions: ['acrobatics', 'athletics', 'deception', 'insight', 'intimidation', 'investigation', 'perception', 'performance', 'persuasion', 'sleightOfHand', 'stealth'] },
+  { id: 'sorcerer', name: 'Чародей', hitDie: 6, savingThrows: ['con', 'cha'], skillChoices: 2, skillOptions: ['arcana', 'deception', 'insight', 'intimidation', 'persuasion', 'religion'] },
+  { id: 'warlock', name: 'Колдун', hitDie: 8, savingThrows: ['wis', 'cha'], skillChoices: 2, skillOptions: ['arcana', 'deception', 'history', 'intimidation', 'investigation', 'nature', 'religion'] },
+  { id: 'wizard', name: 'Волшебник', hitDie: 6, savingThrows: ['int', 'wis'], skillChoices: 2, skillOptions: ['arcana', 'history', 'insight', 'investigation', 'medicine', 'religion'] },
 ] as const;
 
 export const SPECIES = [
