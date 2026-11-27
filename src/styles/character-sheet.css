@@ -1,0 +1,56 @@
+.character-sheet{display:grid;gap:12px;max-height:min(74vh,760px);overflow:auto;padding:2px 3px 8px;color:#ead8b8}
+.character-sheet::-webkit-scrollbar{width:7px}
+.character-sheet::-webkit-scrollbar-thumb{border-radius:8px;background:rgba(207,169,105,.38)}
+.sheet-identity{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px;border:1px solid rgba(204,163,99,.3);border-radius:9px;background:linear-gradient(135deg,rgba(117,76,37,.28),rgba(40,29,19,.62))}
+.sheet-kicker{display:block;color:#c7a46d;font-size:9px;font-weight:800;letter-spacing:.13em}
+.sheet-identity h2{margin:5px 0;color:#f5e6ca;font-family:Georgia,serif;font-size:25px}
+.sheet-identity p{margin:0;color:#c6b18e;font-size:11px}
+.sheet-bonus{display:grid;gap:3px;min-width:100px;padding:9px;border:1px solid rgba(212,177,116,.38);border-radius:7px;text-align:center;background:rgba(212,177,116,.08)}
+.sheet-bonus span,.sheet-combat-strip span{color:#c4ad88;font-size:9px}
+.sheet-bonus strong{color:#f1d59d;font-size:23px}
+.sheet-combat-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.sheet-combat-strip>div{display:grid;gap:4px;padding:9px 7px;border:1px solid rgba(204,163,99,.22);border-radius:7px;text-align:center;background:rgba(24,18,13,.44)}
+.sheet-combat-strip strong{color:#f0d7a7;font-size:19px;font-variant-numeric:tabular-nums}
+.sheet-panel,.sheet-hp-form{min-width:0;padding:11px;border:1px solid rgba(204,163,99,.23);border-radius:8px;background:rgba(28,21,15,.55)}
+.sheet-panel h3,.sheet-hp-heading h3{margin:0 0 9px;color:#f0d7a7;font-family:Georgia,serif;font-size:15px}
+.sheet-abilities{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+.sheet-ability{display:grid;justify-items:center;gap:4px;padding:8px 3px;border:1px solid rgba(204,163,99,.24);border-radius:6px;background:rgba(117,76,37,.13)}
+.sheet-ability span{color:#c8b18b;font-size:9px}
+.sheet-ability strong{color:#f6e5c4;font-size:21px}
+.sheet-ability small{padding:2px 6px;border-radius:20px;color:#261a0f;background:#d7b777;font-size:10px;font-weight:800}
+.sheet-two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-items:start}
+.sheet-roll-list{display:grid;grid-template-columns:1fr;gap:3px}
+.sheet-roll-list>div{display:grid;grid-template-columns:16px minmax(0,1fr) 32px 28px;align-items:center;gap:5px;padding:4px 5px;border-bottom:1px solid rgba(204,163,99,.1)}
+.sheet-roll-list>div>span{color:#786b56;font-size:9px;text-align:center}
+.sheet-roll-list>div>span.is-proficient{color:#e0bb79}
+.sheet-roll-list>div>span.is-expert{color:#9fc6a1}
+.sheet-roll-list b{overflow:hidden;color:#e3d2b1;font-size:10px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.sheet-roll-list small{color:#99866a;font-size:8px;text-align:right}
+.sheet-roll-list strong{color:#f2d89e;font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.sheet-muted{margin:6px 0 0;color:#a99470;font-size:9px}
+.sheet-hp-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.sheet-hp-heading h3{margin:4px 0 0}
+.sheet-hp-total{color:#d7bb88;font-size:10px}
+.sheet-hp-fields{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:8px}
+.sheet-hp-fields label{display:grid;gap:4px;color:#cdb992;font-size:9px}
+.sheet-hp-fields input{width:100%;min-width:0;padding:8px;border:1px solid rgba(204,163,99,.32);border-radius:5px;color:#f4e3c2;background:#18120d;font-size:13px}
+.sheet-hp-fields .button{min-height:34px;padding:7px 10px;font-size:10px}
+.sheet-death-saves{display:flex;flex-wrap:wrap;gap:8px}
+.sheet-death-saves span{padding:6px 8px;border:1px solid rgba(204,163,99,.18);border-radius:5px;color:#d9c39d;font-size:10px}
+.sheet-text-list{display:grid;gap:5px;margin:0;padding-left:17px;color:#decba8;font-size:10px}
+.sheet-text-list li::marker{color:#c59b5b}
+.sheet-biography{display:grid;gap:6px}
+.sheet-biography p{margin:0;color:#d6c3a0;font-size:10px;line-height:1.55}
+.sheet-biography b{color:#f0d7a7}
+@media(max-width:620px){
+ .character-sheet{max-height:72vh}
+ .sheet-identity{align-items:flex-start;padding:10px}
+ .sheet-identity h2{font-size:20px}
+ .sheet-bonus{min-width:84px;padding:7px}
+ .sheet-bonus strong{font-size:19px}
+ .sheet-combat-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sheet-abilities{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .sheet-two-columns{grid-template-columns:1fr}
+ .sheet-hp-fields{grid-template-columns:1fr 1fr}
+ .sheet-hp-fields .button{grid-column:1/-1;width:100%}
+}
