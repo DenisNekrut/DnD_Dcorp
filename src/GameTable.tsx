@@ -116,9 +116,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const activeConditionToAdd = availableConditions.some(condition => condition.id === conditionToAdd) ? conditionToAdd : availableConditions[0]?.id ?? conditionToAdd;
   const selectedRollMode = selected ? (rollModeOverride === "auto" ? getAutoRollMode(selected, rollKind, saveAbility) : rollModeOverride) : "normal";
   const selectedBlockedCondition = selected?.conditions?.find(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition));
-  const selectedAttackBlocked = Boolean(selected && rollKind === "attack" && rollModeOverride === "auto" && (selectedBlockedCondition || (selected.exhaustionLevel ?? 0) >= 6));
+  const selectedRollBlocked = Boolean(selected && ((selected.exhaustionLevel ?? 0) >= 6 || (rollKind === "attack" && selectedBlockedCondition)));
   const selectedAutoFailCondition = selected?.conditions?.find(condition => ["paralyzed", "stunned", "unconscious"].includes(condition));
-  const selectedSaveAutoFail = Boolean(selected && rollKind === "save" && rollModeOverride === "auto" && (saveAbility === "strength" || saveAbility === "dexterity") && selectedAutoFailCondition);
+  const selectedSaveAutoFail = Boolean(selected && rollKind === "save" && (saveAbility === "strength" || saveAbility === "dexterity") && selectedAutoFailCondition);
   const selectedRollModeLabel = selectedRollMode === "advantage" ? "Преимущество" : selectedRollMode === "disadvantage" ? "Помеха" : "Обычный бросок";
   const selectedRollBlockReason = (selected?.exhaustionLevel ?? 0) >= 6 ? "Истощение 6: персонаж мёртв." : selectedBlockedCondition ? `Состояние «${conditionCatalog.find(item => item.id === selectedBlockedCondition)?.label ?? selectedBlockedCondition}» не позволяет атаковать.` : "";
   const selectedSaveFailReason = selectedAutoFailCondition ? `Состояние «${conditionCatalog.find(item => item.id === selectedAutoFailCondition)?.label ?? selectedAutoFailCondition}» автоматически проваливает спасброски Силы и Ловкости.` : "";
@@ -378,7 +378,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
-    if (selectedAttackBlocked) {
+    if (selectedRollBlocked) {
       addLog(`${selected.name}: атака невозможна. ${selectedRollBlockReason}`, "danger");
       return;
     }
@@ -582,10 +582,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <select className="combat-roll-mode" value={rollModeOverride} onChange={event => setRollModeOverride(event.target.value as RollModeOverride)} disabled={!canEdit}>
                 <option value="auto">Автоматически по состояниям</option><option value="normal">Обычный бросок</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option>
               </select>
-              <span className={selectedAttackBlocked || selectedSaveAutoFail ? "combat-roll-warning" : "combat-roll-hint"}>
-                {selectedAttackBlocked ? selectedRollBlockReason : selectedSaveAutoFail ? selectedSaveFailReason : `Режим: ${selectedRollModeLabel.toLowerCase()}.`}
+              <span className={selectedRollBlocked || selectedSaveAutoFail ? "combat-roll-warning" : "combat-roll-hint"}>
+                {selectedRollBlocked ? selectedRollBlockReason : selectedSaveAutoFail ? selectedSaveFailReason : `Режим: ${selectedRollModeLabel.toLowerCase()}.`}
               </span>
-              <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedAttackBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
+              <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedRollBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
             </div>
             <div className="condition-panel">
               <strong>Состояния</strong>
