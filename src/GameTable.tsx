@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus } from "lucide-react";
+import { ArrowLeft, ChevronRight, Dice5, Eye, Grid3X3, Minus, Plus, Send, Shield, Swords, Users, ZoomIn, ZoomOut, Settings2, Map, UserPlus, Magnet } from "lucide-react";
 import { apiRequest, isApiConfigured } from "./api";
 import RoomMapEditor, { type MapObject, type LayerVisibility, defaultLayerVisibility } from "./RoomMapEditor";
 import "./styles/tabletop.css";
@@ -10,12 +10,12 @@ import "./styles/tabletop-layers.css";
 
 type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number };
 type LogEntry = { id: number; text: string; tone: "gold" | "muted" | "danger" };
-type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean };
+type RoomSettings = { configured: boolean; published: boolean; name: string; description: string; mapTheme: "sand" | "stone" | "forest"; grid: boolean; snapToGrid: boolean };
 type TableState = { room: RoomSettings; tokens: Token[]; objects?: MapObject[]; layerVisibility?: LayerVisibility; round: number; log: LogEntry[] };
 type CampaignCharacter = { id: string; name: string; data: Record<string, unknown> };
 type TableResponse = { state: Partial<TableState>; updatedAt: string | null; permissions?: { canEdit: boolean } };
 
-const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true };
+const emptyRoom: RoomSettings = { configured: false, published: false, name: "", description: "", mapTheme: "sand", grid: true, snapToGrid: true };
 const localKey = (id: string) => `dnd-dcorp-table-${id}`;
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `token-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -57,7 +57,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const state = response.state ?? {};
     // Older demo scenes had no room configuration. Migrate those to a genuinely empty room.
     if (state.room?.configured) {
-      setRoom(state.room);
+      setRoom({ ...state.room, snapToGrid: state.room.snapToGrid ?? true });
       setRoomName(state.room.name);
       setRoomDescription(state.room.description);
       setMapTheme(state.room.mapTheme);
@@ -87,7 +87,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         if (saved) {
           const state = JSON.parse(saved) as Partial<TableState>;
           if (state.room?.configured) {
-            setRoom(state.room);
+            setRoom({ ...state.room, snapToGrid: state.room.snapToGrid ?? true });
             setRoomName(state.room.name);
             setRoomDescription(state.room.description);
             setMapTheme(state.room.mapTheme);
@@ -176,7 +176,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const saveRoom = (event: React.FormEvent) => {
     event.preventDefault();
     if (!roomName.trim()) return;
-    setRoom({ configured: true, published: false, name: roomName.trim(), description: roomDescription.trim(), mapTheme, grid });
+    setRoom({ configured: true, published: false, name: roomName.trim(), description: roomDescription.trim(), mapTheme, grid, snapToGrid: room.snapToGrid ?? true });
     setEditingRoom(false);
     addLog("Мастер подготовил игровую комнату.", "gold");
   };
@@ -217,8 +217,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const moveToken = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingId || !canEdit) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(4, Math.min(96, ((event.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(5, Math.min(95, ((event.clientY - rect.top) / rect.height) * 100));
+    const scale = zoom / 100;
+    const localX = (event.clientX - rect.left - rect.width / 2) / scale + rect.width / 2;
+    const localY = (event.clientY - rect.top - rect.height / 2) / scale + rect.height / 2;
+    const rawX = localX;
+    const rawY = localY;
+    const snap = room.grid && room.snapToGrid;
+    const x = Math.max(4, Math.min(96, (snap ? Math.round(rawX / 38) * 38 : rawX) / rect.width * 100));
+    const y = Math.max(5, Math.min(95, (snap ? Math.round(rawY / 38) * 38 : rawY) / rect.height * 100));
     setTokens(items => items.map(token => token.id === draggingId ? { ...token, x, y } : token));
   };
   const sendMessage = (event: React.FormEvent) => {
@@ -248,6 +254,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         <label>Описание и вступление<textarea value={roomDescription} onChange={event => setRoomDescription(event.target.value)} placeholder="Опиши место, атмосферу и начальные условия…" rows={3} disabled={!canEdit}/></label>
         <label>Основа игровой карты<select value={mapTheme} onChange={event => setMapTheme(event.target.value as RoomSettings["mapTheme"])} disabled={!canEdit}><option value="sand">Песчаная карта</option><option value="stone">Каменная площадка</option><option value="forest">Лесная поляна</option></select></label>
         <label className="room-grid-toggle"><input type="checkbox" checked={grid} onChange={event => setGrid(event.target.checked)} disabled={!canEdit}/> Показывать игровую сетку</label>
+         <label className="room-grid-toggle"><input type="checkbox" checked={room.snapToGrid} onChange={event => setRoom(value => ({ ...value, snapToGrid: event.target.checked }))} disabled={!canEdit || !grid}/> Привязывать фигуры и объекты к сетке</label>
         {canEdit ? <div className="room-setup-actions"><button className="button button-primary" type="submit"><Settings2 size={16}/> {room.configured ? "Сохранить настройки" : "Создать комнату"}</button>{room.configured && <button className="button button-secondary" type="button" onClick={() => setEditingRoom(false)}>Отмена</button>}</div> : <p className="validation-note">Настраивать комнату может только мастер или помощник.</p>}
       </form>
     </section> : <>
@@ -257,7 +264,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         <div className="tabletop-center">
           <div className="table-toolbar">
             <div className="table-tool-group">
-              <button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button>
+              <button title="Показать или скрыть сетку" className={room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, grid: !value.grid }))} disabled={!canEdit}><Grid3X3 size={17}/></button><button title={room.snapToGrid ? "Отключить привязку к сетке" : "Включить привязку к сетке"} className={room.snapToGrid && room.grid ? "tool-active" : ""} onClick={() => setRoom(value => ({ ...value, snapToGrid: !value.snapToGrid }))} disabled={!canEdit || !room.grid}><Magnet size={16}/></button>
               <button title="Уменьшить" onClick={() => setZoom(value => Math.max(60, value - 10))}><ZoomOut size={17}/></button><span>{zoom}%</span><button title="Увеличить" onClick={() => setZoom(value => Math.min(150, value + 10))}><ZoomIn size={17}/></button>
             </div>
             <div className="table-tool-group"><span className="scene-label"><Eye size={14}/> {canEdit ? "Редактор комнаты" : "Только просмотр"}</span></div>
@@ -269,7 +276,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </button>)}
             </div>
             {tokens.length === 0 && <div className="empty-map-hint"><Map size={27}/><strong>Карта пока пуста</strong><span>Добавь участников и расставь их на поле. Окружение и декорации можно будет разместить в редакторе карты.</span></div>}
-            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={setLayerVisibility}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+            <RoomMapEditor objects={objects} onChange={setObjects} canEdit={canEdit} visibleLayers={layerVisibility} onVisibilityChange={setLayerVisibility} snapToGrid={room.grid && room.snapToGrid}/><div className="map-coordinates"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
           </div>
           <div className="map-caption"><span><i className="legend-dot hero-dot"/> Союзники</span><span><i className="legend-dot enemy-dot"/> Противники</span><span>{canEdit ? "Перетаскивай фигуры мышью" : "Сцена доступна для просмотра"}</span></div>
         </div>
