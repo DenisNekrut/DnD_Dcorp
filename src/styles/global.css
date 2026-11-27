@@ -325,3 +325,31 @@ button, .quick-card, .nav-item { -webkit-tap-highlight-color: transparent; }
   .ability-assignment,.skill-choice-grid { grid-template-columns: 1fr 1fr; }
   .ability-preview { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
+
+
+.derived-preview {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 7px;
+  margin: 13px 0;
+}
+.derived-preview span {
+  display: block;
+  padding: 8px 6px;
+  border: 1px solid rgba(215,181,109,.22);
+  border-radius: 6px;
+  color: #f0e5c8;
+  background: rgba(215,181,109,.055);
+  text-align: center;
+  font-size: 12px;
+}
+.derived-preview b {
+  display: block;
+  margin-bottom: 5px;
+  color: #9eacba;
+  font-size: 8px;
+  letter-spacing: .45px;
+}
+@media(max-width:520px) {
+  .derived-preview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
