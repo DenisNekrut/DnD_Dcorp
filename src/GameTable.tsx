@@ -96,7 +96,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
-type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -647,8 +647,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             damageRolls = result.rolls;
             damage = result.total;
           } else {
-            damageRolls = Array.from({ length: diceCount }, () => Math.floor(Math.random() * attack.sides) + 1);
-            damage = damageRolls.reduce((sum, value) => sum + value, 0) + attack.bonus;
+            damageRolls = Array.from({ length: diceCount }, () => Math.floor(Math.random() * attack.sides) + 1);            damage = damageRolls.reduce((sum, value) => sum + value, 0) + attack.bonus;
           }
           const adjusted = adjustDamageForTraits(updatedTarget, damage, attack.type);
           updatedTarget = applyDamageToToken(updatedTarget, adjusted.amount, critical);
@@ -755,6 +754,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       return;
     }
     const dc = 8 + (selected.proficiencyBonus ?? 2) + (selected.abilityModifiers?.wisdom ?? 0);
+    const clericLevel = selected.classLevel ?? 1;
+    const destroyCr = clericLevel >= 17 ? 4 : clericLevel >= 14 ? 3 : clericLevel >= 11 ? 2 : clericLevel >= 8 ? 1 : clericLevel >= 5 ? 0.5 : 0;
     const mapRect = battleMapRef.current?.getBoundingClientRect();
     const eligible = undeadTargets.filter(target => {
       const distance = getGridDistanceFeet(selected, target, mapRect, room.gridCellSizePx ?? 38);
@@ -778,22 +779,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           die = Math.floor(Math.random() * 20) + 1;
         }
         const total = die + (target.abilityModifiers?.wisdom ?? 0);
-        return { target, die, total, success: total >= dc };
+        const success = total >= dc;
+        const destroyed = !success && destroyCr > 0 && target.challengeRating !== undefined && target.challengeRating <= destroyCr;
+        return { target, die, total, success, destroyed };
       }));
       recordEditorHistory();
-      const failedIds = new Set(results.filter(result => !result.success).map(result => result.target.id));
+      const failedIds = new Set(results.filter(result => !result.success && !result.destroyed).map(result => result.target.id));
+      const destroyedIds = new Set(results.filter(result => result.destroyed).map(result => result.target.id));
       setTokens(items => items.map(token => {
         if (token.id === selected.id) return {
           ...token,
           actionUsed: true,
           classResources: (token.classResources ?? []).map(item => item.id === "auto-channel-divinity" ? { ...item, used: item.used + 1 } : item),
         };
+        if (destroyedIds.has(token.id)) return { ...token, hp: 0, destroyed: true, turned: false };
         return failedIds.has(token.id) ? { ...token, turned: true } : token;
       }));
       addLog(selected.name + " использует «Изгнание нежити» (СЛ " + dc + "). " +
         results.map(result => result.target.name + ": d20 " + result.die + " + " +
-          (result.total - result.die) + " = " + result.total + (result.success ? " — успех" : " — провал, нежить изгнана")).join("; ") +
-        ". Изгнано: " + failedIds.size + " из " + results.length + ".", failedIds.size ? "gold" : "muted");
+          (result.total - result.die) + " = " + result.total + (result.success ? " — успех" : result.destroyed ? " — провал, нежить уничтожена" : " — провал, нежить изгнана")).join("; ") +
+        ". Изгнано: " + failedIds.size + "; уничтожено: " + destroyedIds.size + " из " + results.length + ".", (failedIds.size || destroyedIds.size) ? "gold" : "muted");
     } catch (error) {
       setTableError(error instanceof Error ? error.message : "Не удалось выполнить спасброски от Изгнания нежити.");
     } finally {
@@ -1297,8 +1302,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog("Для безоружных атак «Шквала ударов» цель должна находиться в пределах 5 футов.", "danger");
       return;
     }
-    const level = selected.classLevel ?? 1;
-    const dieSides = level >= 17 ? 10 : level >= 11 ? 8 : level >= 5 ? 6 : 4;
+    const level = selected.classLevel ?? 1;    const dieSides = level >= 17 ? 10 : level >= 11 ? 8 : level >= 5 ? 6 : 4;
     const abilityModifier = Math.max(Number(selected.abilityModifiers?.strength ?? 0), Number(selected.abilityModifiers?.dexterity ?? 0));
     const attackModifier = abilityModifier + Number(selected.proficiencyBonus ?? 0);
     setDiceBusy(true);
@@ -1947,8 +1951,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   return <section className="tabletop-page">
     <div className="tabletop-heading">
-      <div>
-        <button className="table-back" onClick={onBack}><ArrowLeft size={16}/> К кампаниям</button>
+      <div>        <button className="table-back" onClick={onBack}><ArrowLeft size={16}/> К кампаниям</button>
         <div className="eyebrow"><span/> ИГРОВАЯ СЕССИЯ</div>
         <h1>{room.configured ? room.name : campaignName}</h1>
         <p className="subtitle">{room.configured ? "Комната мастера" : "Подготовка игровой комнаты"}</p>
@@ -2156,7 +2159,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 recordEditorHistory();
                 setTokens(items => items.map(token => token.id === selected.id ? { ...token, turned: event.target.checked } : token));
               }} disabled={!canEdit || layerLocks.figures}/> Сейчас изгнана (снять вручную)</label>
-              <small>Отметь тип существа у противника. Изгнание нежити автоматически проверяет только отмеченных противников.</small>
+              {selected.isUndead && <label>Показатель опасности (ПО)<input type="number" min="0" max="30" step="0.125" value={selected.challengeRating ?? ""} onChange={event => {
+                const value = event.target.value === "" ? undefined : Math.max(0, Number(event.target.value));
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, challengeRating: value } : token));
+              }} disabled={!canEdit || layerLocks.figures} placeholder="Например, 0.5"/></label>}
+              <small>Отметь тип существа и его ПО. На 5-м уровне жреца и выше провалившая спасбросок нежить с ПО в пределах порога будет уничтожена.</small>
             </details>
             <details className="damage-traits-panel">
               <summary>Сопротивления, уязвимости и иммунитеты</summary>
