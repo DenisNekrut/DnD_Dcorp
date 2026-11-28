@@ -2176,6 +2176,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {selected.turned && <div className="combat-rule-note">
                 <strong>Эффект «Изгнание нежити»</strong>
                 <small>Источник: {tokens.find(token => token.id === selected.turnedByTokenId)?.name ?? "не указан"}.</small>
+                {(() => {
+                  const source = tokens.find(token => token.id === selected.turnedByTokenId);
+                  const distanceFeet = source
+                    ? getGridDistanceFeet(selected, source, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38)
+                    : null;
+                  return <small>{distanceFeet !== null
+                    ? `Текущее расстояние до источника: ${distanceFeet} фут. По мере возможности увеличивай это расстояние в свой ход.`
+                    : source
+                      ? "Расстояние до источника пока нельзя рассчитать: проверь отображение боевой карты и размер клетки."
+                      : "Источник изгнания не найден на карте: проверь, что фигура жреца не удалена."}</small>;
+                })()}
                 <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
                 <small>В свой ход существо должно перемещаться как можно дальше от источника и не может добровольно приближаться к нему. Реакции запрещены. Если отступить некуда, оно использует действие Уклонение.</small>
                 <button type="button" className="secondary-button" onClick={() => {
