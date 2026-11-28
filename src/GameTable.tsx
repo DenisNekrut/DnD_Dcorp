@@ -16,11 +16,11 @@ type AbilityId = "strength" | "dexterity" | "constitution" | "intelligence" | "w
 const abilityLabels: Record<AbilityId, string> = { strength: "Сила", dexterity: "Ловкость", constitution: "Телосложение", intelligence: "Интеллект", wisdom: "Мудрость", charisma: "Харизма" };
 type SkillId = "acrobatics" | "animalHandling" | "arcana" | "athletics" | "deception" | "history" | "insight" | "intimidation" | "investigation" | "medicine" | "nature" | "perception" | "performance" | "persuasion" | "religion" | "sleightOfHand" | "stealth" | "survival";
 type DamageType = "acid" | "bludgeoning" | "cold" | "fire" | "force" | "lightning" | "necrotic" | "piercing" | "poison" | "psychic" | "radiant" | "slashing" | "thunder";
-type WeaponOption = { id: string; name: string; category: "simple" | "martial"; kind: "melee" | "ranged"; damage: string | null; damageType: DamageType | null; properties: string[]; versatileDamage?: string; rangeFt?: { normal: number; long: number } };
+type WeaponOption = { id: string; name: string; category: "simple" | "martial"; kind: "melee" | "ranged"; damage: string | null; damageType: DamageType | null; properties: string[]; versatileDamage?: string; rangeM?: { normal: number; long: number } };
 const fallbackWeapons: WeaponOption[] = [
-  { id: "dagger", name: "Кинжал", category: "simple", kind: "melee", damage: "1d4", damageType: "piercing", properties: ["finesse", "light", "thrown"], rangeFt: { normal: 20, long: 60 } },
+  { id: "dagger", name: "Кинжал", category: "simple", kind: "melee", damage: "1d4", damageType: "piercing", properties: ["finesse", "light", "thrown"], rangeM: { normal: 6, long: 18 } },
   { id: "longsword", name: "Длинный меч", category: "martial", kind: "melee", damage: "1d8", damageType: "slashing", properties: ["versatile"], versatileDamage: "1d10" },
-  { id: "shortbow", name: "Короткий лук", category: "simple", kind: "ranged", damage: "1d6", damageType: "piercing", properties: ["ammunition", "two-handed"], rangeFt: { normal: 80, long: 320 } },
+  { id: "shortbow", name: "Короткий лук", category: "simple", kind: "ranged", damage: "1d6", damageType: "piercing", properties: ["ammunition", "two-handed"], rangeM: { normal: 24, long: 96 } },
   { id: "greatsword", name: "Двуручный меч", category: "martial", kind: "melee", damage: "2d6", damageType: "slashing", properties: ["heavy", "two-handed"] },
 ];
 const damageTypeOptions: { id: DamageType; label: string }[] = [
@@ -41,7 +41,7 @@ const skillLabels: { id: SkillId; label: string; ability: AbilityId }[] = [
   { id: "religion", label: "Религия", ability: "intelligence" }, { id: "sleightOfHand", label: "Ловкость рук", ability: "dexterity" },
   { id: "stealth", label: "Скрытность", ability: "dexterity" }, { id: "survival", label: "Выживание", ability: "wisdom" },
 ];
-const getGridDistanceFeet = (
+const getGridDistanceMeters = (
   first: { x: number; y: number },
   second: { x: number; y: number },
   bounds: DOMRect | undefined,
@@ -52,8 +52,8 @@ const getGridDistanceFeet = (
   const vertical = Math.round(Math.abs(first.y - second.y) / 100 * bounds.height / cellSizePx);
   const diagonal = Math.min(horizontal, vertical);
   const straight = Math.max(horizontal, vertical) - diagonal;
-  const diagonalFeet = Math.floor(diagonal / 2) * 15 + (diagonal % 2) * 5;
-  return (straight * 5) + diagonalFeet;
+  const diagonalMeters = Math.floor(diagonal / 2) * 3 + (diagonal % 2) * 1.5;
+  return Number(((straight * 1.5) + diagonalMeters).toFixed(2));
 };
 
 const parseDamageFormula = (formula: string) => {
@@ -603,9 +603,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const performWildShapeAttack = async (attackMode: "wolf-bite" | "goat-ram" | "bear-bite" | "bear-claw" | "bear-multiattack") => {
     if (!selected || !attackTarget || !selected.wildShape || !canEdit || layerLocks.figures || diceBusy ||
       selected.actionUsed || selected.hp <= 0 || selected.turned || (selected.conditions ?? []).some(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition))) return;
-    const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
-    if (distanceFeet !== null && distanceFeet > 5) {
-      addLog("Атака звериной формы доступна только по цели в пределах 5 футов.", "danger");
+    const distanceMeters = getGridDistanceMeters(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceMeters !== null && distanceMeters > 1.5) {
+      addLog("Атака звериной формы доступна только по цели в пределах 1,5 м.", "danger");
       return;
     }
     const attacks = attackMode === "bear-multiattack"
@@ -771,11 +771,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const destroyCr = clericLevel >= 17 ? 4 : clericLevel >= 14 ? 3 : clericLevel >= 11 ? 2 : clericLevel >= 8 ? 1 : clericLevel >= 5 ? 0.5 : 0;
     const mapRect = battleMapRef.current?.getBoundingClientRect();
     const eligible = undeadTargets.filter(target => {
-      const distance = getGridDistanceFeet(selected, target, mapRect, room.gridCellSizePx ?? 38);
+      const distance = getGridDistanceMeters(selected, target, mapRect, room.gridCellSizePx ?? 38);
       return distance === null || distance <= 30;
     });
     if (!eligible.length) {
-      addLog("Изгнание нежити: отмеченная нежить находится дальше 30 футов.", "danger");
+      addLog("Изгнание нежити: отмеченная нежить находится дальше 9 м.", "danger");
       return;
     }
     setDiceBusy(true);
@@ -1285,9 +1285,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(inspirationTarget.name + " уже имеет кость Вдохновения барда.", "muted");
       return;
     }
-    const distanceFeet = getGridDistanceFeet(selected, inspirationTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
-    if (distanceFeet !== null && distanceFeet > 60) {
-      addLog(inspirationTarget.name + " находится дальше 60 футов — Вдохновение барда не передано.", "danger");
+    const distanceMeters = getGridDistanceMeters(selected, inspirationTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceMeters !== null && distanceMeters > 18) {
+      addLog(inspirationTarget.name + " находится дальше 18 м — Вдохновение барда не передано.", "danger");
       return;
     }
     const level = selected.classLevel ?? 1;
@@ -1314,9 +1314,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(selected.name + ": недостаточно очков ци для «Шквала ударов».", "danger");
       return;
     }
-    const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
-    if (distanceFeet !== null && distanceFeet > 5) {
-      addLog("Для безоружных атак «Шквала ударов» цель должна находиться в пределах 5 футов.", "danger");
+    const distanceMeters = getGridDistanceMeters(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceMeters !== null && distanceMeters > 1.5) {
+      addLog("Для безоружных атак «Шквала ударов» цель должна находиться в пределах 1,5 м.", "danger");
       return;
     }
     const level = selected.classLevel ?? 1;    const dieSides = level >= 17 ? 10 : level >= 11 ? 8 : level >= 5 ? 6 : 4;
@@ -1591,22 +1591,22 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     let finalRollMode = selectedRollMode;
     if (rollKind === "attack" && attackTarget) {
-      const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
-      if (distanceFeet !== null) {
+      const distanceMeters = getGridDistanceMeters(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+      if (distanceMeters !== null) {
         if (attackType === "melee") {
-          const reach = selectedWeapon?.properties.includes("reach") ? 10 : 5;
-          if (distanceFeet > reach) {
-            addLog("Цель вне досягаемости: " + distanceFeet + " фт. Максимум для этой атаки: " + reach + " фт.", "danger");
+          const reach = selectedWeapon?.properties.includes("reach") ? 3 : 1.5;
+          if (distanceMeters > reach) {
+            addLog("Цель вне досягаемости: " + distanceMeters + " м. Максимум для этой атаки: " + reach + " м", "danger");
             return;
           }
         } else {
-          const normalRange = selectedWeapon?.rangeFt?.normal ?? 30;
-          const longRange = selectedWeapon?.rangeFt?.long ?? normalRange;
-          if (distanceFeet > longRange) {
-            addLog("Цель вне максимальной дальности: " + distanceFeet + " фт. Максимум: " + longRange + " фт.", "danger");
+          const normalRange = selectedWeapon?.rangeM?.normal ?? 9;
+          const longRange = selectedWeapon?.rangeM?.long ?? normalRange;
+          if (distanceMeters > longRange) {
+            addLog("Цель вне максимальной дальности: " + distanceMeters + " м. Максимум: " + longRange + " м", "danger");
             return;
           }
-          const rangeDisadvantage = distanceFeet > normalRange || distanceFeet <= 5;
+          const rangeDisadvantage = distanceMeters > normalRange || distanceMeters <= 1.5;
           if (rollModeOverride === "auto") {
             finalRollMode = resolveRollMode({
               advantage: attackerRollFlags.advantage || targetRollFlags.advantage,
@@ -1749,8 +1749,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const isRogue = rogueClass.includes("плут") || rogueClass.includes("rogue");
       const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
       const allyNearTarget = tokens.some(token => token.id !== selected.id && token.id !== target.id && (target.kind === "enemy" ? token.kind !== "enemy" : token.kind === "enemy")
-        && getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) !== null
-        && (getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 5);
+        && getGridDistanceMeters(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) !== null
+        && (getGridDistanceMeters(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 1.5);
       const sneakAttackWeaponEligible = Boolean(selectedWeapon && (selectedWeapon.kind === "ranged" || selectedWeapon.properties.includes("finesse")));
       const sneakAttackEligible = isRogue && sneakAttackWeaponEligible && finalRollMode !== "disadvantage"
         && (finalRollMode === "advantage" || allyNearTarget)
@@ -2141,7 +2141,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <option value="reactionUsed">Реакция</option>
                 </select></label>
                 <label>Оружие<select value={selectedWeaponId} onChange={event => selectWeapon(event.target.value)} disabled={!canEdit}>
-                  {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} · {damageTypeOptions.find(type => type.id === weapon.damageType)?.label ?? ""}{weapon.rangeFt ? " · " + weapon.rangeFt.normal + "/" + weapon.rangeFt.long + " фт." : ""}</option>)}
+                  {weaponOptions.map(weapon => <option key={weapon.id} value={weapon.id}>{weapon.name} · {weapon.damage} · {damageTypeOptions.find(type => type.id === weapon.damageType)?.label ?? ""}{weapon.rangeM ? " · " + weapon.rangeM.normal + "/" + weapon.rangeM.long + " м" : ""}</option>)}
                 </select></label>
                 <label>Цель<select value={attackTarget?.id ?? ""} onChange={event => setAttackTargetId(event.target.value)} disabled={!canEdit || attackTargets.length === 0}>
                   {attackTargets.map(token => <option key={token.id} value={token.id}>{token.name} · КД {token.armorClass ?? 10}</option>)}
@@ -2189,7 +2189,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {selected.turned && <div className="combat-rule-note">
                 {(() => {
                   const source = tokens.find(token => token.id === selected.turnedByTokenId);
-                  const distance = source ? getGridDistanceFeet(selected, source, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) : null;
+                  const distance = source ? getGridDistanceMeters(selected, source, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) : null;
                   const dx = source ? selected.x - source.x : 0;
                   const dy = source ? selected.y - source.y : 0;
                   const horizontal = dx > 1 ? "восток" : dx < -1 ? "запад" : "";
@@ -2198,8 +2198,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   return <>
                     <strong>Эффект «Изгнание нежити»</strong>
                     <small>Источник: {source?.name ?? "не указан"}.</small>
-                    <small>Ориентир для Мастера: {source ? `отступать в сторону ${direction}; расстояние до источника — ${distance === null ? "не удалось рассчитать" : distance + " фут."}.` : "источник не найден — проверьте привязку к жрецу."}</small>
-                    {distance !== null && <small>{distance <= 30 ? "Нежить находится в пределах 30 футов от источника: не допускайте её добровольного приближения." : "Нежить уже дальше 30 футов от источника."}</small>}
+                    <small>Ориентир для Мастера: {source ? `отступать в сторону ${direction}; расстояние до источника — ${distance === null ? "не удалось рассчитать" : distance + " м"}.` : "источник не найден — проверьте привязку к жрецу."}</small>
+                    {distance !== null && <small>{distance <= 30 ? "Нежить находится в пределах 9 м от источника: не допускайте её добровольного приближения." : "Нежить уже дальше 9 м от источника."}</small>}
                     <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
                     <small>В свой ход существо должно двигаться как можно дальше от источника. Для действия оно может использовать только Рывок или попытаться освободиться от эффекта, мешающего двигаться. Реакции запрещены. Если двигаться некуда — Уклонение.</small>
                   </>;
@@ -2249,7 +2249,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {(selected.classResources ?? []).some(resource => resource.id === "auto-channel-divinity") && <div className="combat-economy">
                 <div className="combat-economy-heading"><strong>Канал божественности</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0} доступно</small></div>
                 <button type="button" className="secondary-button" onClick={useTurnUndead} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || selected.hp <= 0 || (selected.conditions ?? []).includes("incapacitated") || ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0)}>{diceBusy ? "Спасброски…" : "Изгнать нежить (действие)"}</button>
-                <small>Нежить в пределах 30 футов совершает спасбросок Мудрости против СЛ 8 + бонус мастерства + модификатор Мудрости жреца. Провал помечает цель как изгнанную; перемещение и длительность пока контролирует Мастер.</small>
+                <small>Нежить в пределах 9 м совершает спасбросок Мудрости против СЛ 8 + бонус мастерства + модификатор Мудрости жреца. Провал помечает цель как изгнанную; перемещение и длительность пока контролирует Мастер.</small>
               </div>}
               {(selected.classResources ?? []).some(resource => resource.id === "auto-bardic-inspiration") && <div className="combat-economy">
                 <div className="combat-economy-heading"><strong>Вдохновение барда</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0))} использований доступно</small></div>
@@ -2257,7 +2257,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   {inspirationTargets.map(token => <option key={token.id} value={token.id}>{token.name}{token.bardicInspirationDie ? " (уже вдохновлён)" : ""}</option>)}
                 </select></label>
                 <button type="button" className="secondary-button" onClick={grantBardicInspiration} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || !inspirationTarget || inspirationTarget.bardicInspirationDie !== undefined || ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0)}>Передать Вдохновение (бонусное действие)</button>
-                <small>Кость: d{(selected.classLevel ?? 1) >= 15 ? 12 : (selected.classLevel ?? 1) >= 10 ? 10 : (selected.classLevel ?? 1) >= 5 ? 8 : 6}. Дальность — 60 футов. Вдохновение восстанавливается после короткого отдыха с 5-го уровня барда.</small>
+                <small>Кость: d{(selected.classLevel ?? 1) >= 15 ? 12 : (selected.classLevel ?? 1) >= 10 ? 10 : (selected.classLevel ?? 1) >= 5 ? 8 : 6}. Дальность — 18 м. Вдохновение восстанавливается после короткого отдыха с 5-го уровня барда.</small>
               </div>}
 
               {(selected.classResources ?? []).some(resource => resource.id === "auto-lay-on-hands") && <div className="combat-economy">
@@ -2309,7 +2309,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <button type="button" onClick={() => useMonkKiTechnique("step-of-wind", "dash")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра: Рывок</button>
                   <button type="button" onClick={() => useMonkKiTechnique("step-of-wind", "disengage")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра: Отход</button>
                 </div>
-                <small>«Шквал ударов» автоматически выполняет две безоружные атаки по выбранной цели в пределах 5 футов. «Терпеливая оборона» даёт уклонение до начала следующего хода. «Шаг ветра» позволяет выбрать «Рывок» или «Отход»; выбранный эффект и удвоение дистанции прыжка отмечаются до начала следующего хода.</small>
+                <small>«Шквал ударов» автоматически выполняет две безоружные атаки по выбранной цели в пределах 1,5 м. «Терпеливая оборона» даёт уклонение до начала следующего хода. «Шаг ветра» позволяет выбрать «Рывок» или «Отход»; выбранный эффект и удвоение дистанции прыжка отмечаются до начала следующего хода.</small>
                 {(selected.disengaging || selected.dashActive || selected.jumpDistanceDoubled) && <small>Активный эффект: {selected.disengaging ? "Отход" : selected.dashActive ? "Рывок" : "Шаг ветра"}{selected.jumpDistanceDoubled ? " · дистанция прыжка удвоена" : ""}. Действует до начала следующего хода.</small>}
               </div>}
 
