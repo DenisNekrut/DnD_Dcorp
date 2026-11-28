@@ -72,6 +72,10 @@ export default function TrainingArena({characters}:Props) {
   const [terrainMode,setTerrainMode]=useState<"move"|"obstacle"|"cover">("move");
   const [extraOpponents,setExtraOpponents]=useState<ExtraOpponent[]>([]);
   const [newOpponentType,setNewOpponentType]=useState<Exclude<TargetMode,"dummy">>("orc");
+  const [areaShape,setAreaShape]=useState<"radius"|"square"|"line"|"cone">("radius");
+  const [areaSize,setAreaSize]=useState("6");
+  const [attackRange,setAttackRange]=useState("9");
+  const [showArea,setShowArea]=useState(true);
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -140,6 +144,20 @@ export default function TrainingArena({characters}:Props) {
     addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${effectiveArmorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
+  const areaRadiusCells=Math.max(1,Math.min(12,Math.ceil((Number(areaSize)||0)/CELL_METERS)));
+  const isInSpellArea=(point:GridPoint)=>{
+    if(!showArea)return false;
+    const dx=point.x-heroPosition.x,dy=point.y-heroPosition.y;
+    const tx=targetPosition.x-heroPosition.x,ty=targetPosition.y-heroPosition.y;
+    const length=Math.hypot(tx,ty)||1,forward=(dx*tx+dy*ty)/length,lateral=Math.abs(dx*ty-dy*tx)/length;
+    if(areaShape==="radius")return Math.hypot(dx,dy)<=areaRadiusCells;
+    if(areaShape==="square")return Math.max(Math.abs(dx),Math.abs(dy))<=areaRadiusCells;
+    if(areaShape==="line")return forward>=0&&forward<=areaRadiusCells&&lateral<=0.55;
+    return forward>=0&&forward<=areaRadiusCells&&lateral<=forward*0.58+0.5;
+  };
+  const attackDistance=distanceInMeters(heroPosition,targetPosition);
+  const attackRangeMeters=Math.max(0,Number(attackRange)||0);
+
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
     const queue:[GridPoint,number][]=[[heroPosition,0]], visited=new Set([gridKey(heroPosition)]);
@@ -298,7 +316,7 @@ export default function TrainingArena({characters}:Props) {
         <div className="training-grid" role="grid" aria-label="Тактическое поле 9 на 7 клеток">
           {Array.from({length:GRID_ROWS},(_,y)=>Array.from({length:GRID_COLS},(_,x)=>{
             const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),extra=extraOpponents.find(enemy=>gridKey(enemy.position)===key),blocked=obstacles.includes(key),cover=coverCells.includes(key);
-            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":""}</button>;
+            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}${isInSpellArea(point)?" spell-area-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":isInSpellArea(point)?"·":""}</button>;
           }))}
         </div>
         <div className="training-extra-opponents">
@@ -312,6 +330,18 @@ export default function TrainingArena({characters}:Props) {
             <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
             <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
           </div>)}
+        </div>
+        <div className="training-area-tools">
+          <div className="training-panel-title"><h3>Дальность атак и зоны заклинаний</h3><span>ПРЕДПРОСМОТР</span></div>
+          <div className="training-area-fields">
+            <label>Дальность атаки, м<input type="number" min="0" max="100" step="1" value={attackRange} onChange={event=>setAttackRange(event.target.value)}/></label>
+            <label>Форма зоны<select value={areaShape} onChange={event=>setAreaShape(event.target.value as typeof areaShape)}><option value="radius">Радиус</option><option value="square">Квадрат</option><option value="line">Линия</option><option value="cone">Конус</option></select></label>
+            <label>Размер зоны, м<input type="number" min="1.5" max="18" step="1.5" value={areaSize} onChange={event=>setAreaSize(event.target.value)}/></label>
+          </div>
+          <div className="training-map-actions">
+            <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
+          </div>
+          <p className="training-muted">Расстояние до основной цели: {attackDistance.toFixed(1)} м. {attackDistance<=attackRangeMeters?"Цель в пределах заданной дальности.":"Цель за пределами заданной дальности."} Подсветка показывает геометрический предварительный просмотр от героя в направлении цели; она не применяет урон и не заменяет проверку правил конкретного заклинания.</p>
         </div>
         <div className="training-map-controls">
           <div><b>Герой:</b> клетка {heroPosition.x+1}, {heroPosition.y+1}</div>
