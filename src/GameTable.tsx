@@ -772,7 +772,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const mapRect = battleMapRef.current?.getBoundingClientRect();
     const eligible = undeadTargets.filter(target => {
       const distance = getGridDistanceMeters(selected, target, mapRect, room.gridCellSizePx ?? 38);
-      return distance === null || distance <= 30;
+      return distance === null || distance <= 9;
     });
     if (!eligible.length) {
       addLog("Изгнание нежити: отмеченная нежить находится дальше 9 м.", "danger");
@@ -2198,7 +2198,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   return <>
                     <strong>Эффект «Изгнание нежити»</strong>
                     <small>Источник: {source?.name ?? "не указан"}.</small>
-                    <small>Ориентир для Мастера: {source ? `отступать в сторону ${direction}; расстояние до источника — ${distance === null ? "не удалось рассчитать" : distance + " фут."}.` : "источник не найден — проверьте привязку к жрецу."}</small>
+                    <small>Ориентир для Мастера: {source ? `отступать в сторону ${direction}; расстояние до источника — ${distance === null ? "не удалось рассчитать" : distance + " м"}.` : "источник не найден — проверьте привязку к жрецу."}</small>
                     {distance !== null && <small>{distance <= 30 ? "Нежить находится в пределах 9 м от источника: не допускайте её добровольного приближения." : "Нежить уже дальше 9 м от источника."}</small>}
                     <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
                     <small>В свой ход существо должно двигаться как можно дальше от источника. Для действия оно может использовать только Рывок или попытаться освободиться от эффекта, мешающего двигаться. Реакции запрещены. Если двигаться некуда — Уклонение.</small>
