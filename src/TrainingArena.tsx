@@ -241,7 +241,7 @@ export default function TrainingArena({characters}:Props) {
     const dx=point.x-heroPosition.x,dy=point.y-heroPosition.y;
     const tx=targetPosition.x-heroPosition.x,ty=targetPosition.y-heroPosition.y;
     const length=Math.hypot(tx,ty)||1,forward=(dx*tx+dy*ty)/length,lateral=Math.abs(dx*ty-dy*tx)/length;
-    if(areaShape==="radius")return Math.hypot(dx,dy)<=areaRadiusCells;
+    if(areaShape==="radius")return Math.max(Math.abs(dx),Math.abs(dy))<=areaRadiusCells;
     if(areaShape==="square")return Math.max(Math.abs(dx),Math.abs(dy))<=areaRadiusCells;
     if(areaShape==="line")return forward>=0&&forward<=areaRadiusCells&&lateral<=0.55;
     return forward>=0&&forward<=areaRadiusCells&&lateral<=forward*0.58+0.5;
