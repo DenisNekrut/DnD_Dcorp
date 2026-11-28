@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -193,6 +193,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [attackTargetId, setAttackTargetId] = useState("");
   const [inspirationTargetId, setInspirationTargetId] = useState("");
   const [useBardicInspiration, setUseBardicInspiration] = useState(false);
+  const [useSneakAttack, setUseSneakAttack] = useState(false);
   const [damageFormula, setDamageFormula] = useState("1d4");
   const [damageType, setDamageType] = useState<DamageType>("piercing");
   const [weaponOptions, setWeaponOptions] = useState<WeaponOption[]>(fallbackWeapons);
@@ -1238,6 +1239,37 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
         return;
       }
+      const rogueClass = (selected.className ?? "").toLocaleLowerCase();
+      const isRogue = rogueClass.includes("плут") || rogueClass.includes("rogue");
+      const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
+      const allyNearTarget = tokens.some(token => token.id !== selected.id && token.id !== target.id && token.kind !== "enemy"
+        && getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) !== null
+        && (getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 5);
+      const sneakAttackWeaponEligible = Boolean(selectedWeapon && (selectedWeapon.kind === "ranged" || selectedWeapon.properties.includes("finesse")));
+      const sneakAttackEligible = isRogue && sneakAttackWeaponEligible && finalRollMode !== "disadvantage"
+        && (finalRollMode === "advantage" || allyNearTarget)
+        && selected.sneakAttackUsedTurnKey !== sneakAttackTurnKey;
+      let sneakAttackRolls: number[] = [];
+      let sneakAttackDamage = 0;
+      if (useSneakAttack && sneakAttackEligible) {
+        const sneakDice = Math.ceil((selected.classLevel ?? 1) / 2) * (critical ? 2 : 1);
+        if (remoteEnabled) {
+          const sneakResult = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: sneakDice, sides: 6, modifier: 0, mode: "normal" }),
+          });
+          sneakAttackRolls = sneakResult.rolls;
+          sneakAttackDamage = sneakResult.total;
+        } else {
+          sneakAttackRolls = Array.from({ length: sneakDice }, () => Math.floor(Math.random() * 6) + 1);
+          sneakAttackDamage = sneakAttackRolls.reduce((sum, value) => sum + value, 0);
+        }
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? { ...token, sneakAttackUsedTurnKey: sneakAttackTurnKey } : token));
+        setUseSneakAttack(false);
+      } else if (useSneakAttack && !sneakAttackEligible) {
+        addLog("Скрытая атака не применена: проверь оружие, преимущество/союзника рядом с целью и доступность умения в этом ходу.", "muted");
+      }
       const damageCount = parsed.flatDamage !== undefined ? 0 : parsed.count * (critical ? 2 : 1);
       let damageRolls: number[];
       let damageTotal: number;
@@ -1259,7 +1291,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const rageBonus = selected.raging && attackType === "melee" && attackAbility === "strength"
         ? (rageLevel >= 16 ? 4 : rageLevel >= 9 ? 3 : 2)
         : 0;
-      damageTotal = Math.max(0, damageTotal + rageBonus);
+      damageTotal = Math.max(0, damageTotal + rageBonus + sneakAttackDamage);
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
       const appliedDamage = adjustedDamage.amount;
       recordEditorHistory();
@@ -1270,7 +1302,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         ? String(parsed.flatDamage)
         : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (sneakAttackRolls.length ? " + Скрытая атака " + sneakAttackRolls.join(" + ") : "") + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -1318,7 +1350,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const first = initiative[0];
     setRound(1);
     setActiveTokenId(first.id);
-    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false })));
+    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], sneakAttackUsedTurnKey: undefined, actionUsed: false, bonusActionUsed: false, reactionUsed: false })));
     addLog(`Инициатива сброшена. Раунд 1: ход ${first.name}.`, "gold");
   };
 
@@ -1613,6 +1645,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                     : <option value={selectedWeapon?.kind === "ranged" ? "dexterity" : "strength"}>{selectedWeapon?.kind === "ranged" ? "Ловкость" : "Сила"}</option>}
                 </select></label>
                 <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useWeaponProficiency} onChange={event => setUseWeaponProficiency(event.target.checked)} disabled={!canEdit}/> Владение оружием (+{selected?.proficiencyBonus ?? 0})</label>
+                {(selected?.className ?? "").toLocaleLowerCase().match(/плут|rogue/) && <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useSneakAttack} onChange={event => setUseSneakAttack(event.target.checked)} disabled={!canEdit || diceBusy || Boolean(selected?.sneakAttackUsedTurnKey === `${round}:${activeTokenId ?? selected.id}`)}/> Применить Скрытую атаку ({Math.ceil((selected?.classLevel ?? 1) / 2)}d6 при попадании)</label>}
                 <span className="attack-bonus-preview">Бонус атаки: {effectiveRollModifier >= 0 ? "+" : ""}{effectiveRollModifier}</span>
                 <label>Урон<input value={damageFormula} onChange={event => setDamageFormula(event.target.value)} placeholder="1d8+3" disabled={!canEdit} aria-label="Формула урона"/></label>
               </div>}
