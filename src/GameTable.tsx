@@ -1256,6 +1256,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       );
       if (!hit) return;
 
+      const parsed = parseDamageFormula(damageFormula);
+      if (!parsed) {
+        addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
+        return;
+      }
       let divineSmiteRolls: number[] = [];
       let divineSmiteDamage = 0;
       const paladinClass = (selected.className ?? "").toLocaleLowerCase();
@@ -1284,11 +1289,6 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         addLog("Божественная кара не применена: требуется попадание рукопашной атакой и доступная ячейка заклинаний.", "muted");
       }
 
-      const parsed = parseDamageFormula(damageFormula);
-      if (!parsed) {
-        addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
-        return;
-      }
       const rogueClass = (selected.className ?? "").toLocaleLowerCase();
       const isRogue = rogueClass.includes("плут") || rogueClass.includes("rogue");
       const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
