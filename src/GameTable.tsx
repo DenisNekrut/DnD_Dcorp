@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -564,6 +564,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     };
     if (className.includes("воин") || className.includes("fighter")) {
       addAutomaticResource("auto-second-wind", "Второе дыхание", level >= 17 ? 2 : 1, "short");
+      addAutomaticResource("auto-action-surge", "Всплеск действий", level >= 17 ? 2 : 1, "short");
     }
     if (className.includes("варвар") || className.includes("barbarian")) {
       const rageUses = level >= 20 ? 99 : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2;
@@ -863,6 +864,21 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       ...token,
       spellSlots: { ...(token.spellSlots ?? {}), [level]: { max, used: Math.min(current.used, max) } },
     } : token));
+  };
+
+  const useActionSurge = () => {
+    if (!selected || !canEdit || layerLocks.figures || !selected.actionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-action-surge");
+    const turnKey = `${round}:${activeTokenId ?? selected.id}`;
+    if (!resource || resource.used >= resource.max || selected.actionSurgeUsedTurnKey === turnKey) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id ? token : {
+      ...token,
+      actionUsed: false,
+      actionSurgeUsedTurnKey: turnKey,
+      classResources: (token.classResources ?? []).map(item => item.id === "auto-action-surge" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+    }));
+    addLog(selected.name + " использует «Всплеск действий» и получает дополнительное действие в этом ходу.", "gold");
   };
 
   const toggleConcentration = () => {
@@ -1587,6 +1603,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <div className="combat-economy-heading"><strong>Ярость</strong><small>{selected.raging ? "Активна" : Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0)) + " использований доступно"}</small></div>
               {selected.raging ? <button type="button" className="secondary-button" onClick={endRage} disabled={!canEdit || layerLocks.figures}>Завершить ярость</button> : <button type="button" className="secondary-button" onClick={useRage} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0)}>Начать ярость (бонусное действие)</button>}
               <small>Пока ярость активна: сопротивление дробящему, колющему и рубящему урону; дополнительный урон рукопашным атакам Силой: +{(selected.classLevel ?? 1) >= 16 ? 4 : (selected.classLevel ?? 1) >= 9 ? 3 : 2}. Завершай ярость вручную по окончании её действия.</small>
+            </div>}
+            {(selected.classResources ?? []).some(resource => resource.id === "auto-action-surge") && <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Всплеск действий</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-action-surge")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-action-surge")?.used ?? 0))} использований доступно</small></div>
+              <button type="button" className="secondary-button" onClick={useActionSurge} disabled={!canEdit || layerLocks.figures || !selected.actionUsed || (selected.conditions ?? []).includes("incapacitated") || ((selected.classResources ?? []).find(resource => resource.id === "auto-action-surge")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-action-surge")?.max ?? 0) || selected.actionSurgeUsedTurnKey === `${round}:${activeTokenId ?? selected.id}`}>Использовать Всплеск действий</button>
+              <small>После использования действия даёт ещё одно действие. Не более одного раза за ход; восстанавливается после короткого или длительного отдыха.</small>
             </div>}
             {(selected.classResources ?? []).some(resource => resource.id === "auto-second-wind") && <div className="combat-economy">
               <div className="combat-economy-heading"><strong>Второе дыхание</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0))} использований доступно</small></div>
