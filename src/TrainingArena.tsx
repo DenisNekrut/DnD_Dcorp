@@ -51,6 +51,14 @@ const inferExplicitActionCost = (name:string):ActionCost|null => {
   return null;
 };
 const actionCostLabel:Record<ActionCost,string>={action:"Действие",bonus:"Бонусное действие",reaction:"Реакция",free:"Без расхода"};
+const normalizeActionCost=(value:unknown):ActionCost|null=>value==="action"||value==="bonus"||value==="reaction"||value==="free"?value:null;
+const readActionEntries=(value:unknown,kind:string)=>Array.isArray(value)?value.flatMap(item=>{
+  if(typeof item==="string") return item.trim()?[{name:item.trim(),kind,actionCost:null as ActionCost|null}]:[];
+  if(!item||typeof item!=="object") return [];
+  const entry=item as Record<string,unknown>;
+  const name=typeof entry.name==="string"?entry.name.trim():typeof entry.title==="string"?entry.title.trim():"";
+  return name?[{name,kind,actionCost:normalizeActionCost(entry.actionCost)}]:[];
+}):[];
 
 const TRAINING_CLASSES=["Варвар","Бард","Жрец","Друид","Воин","Монах","Паладин","Следопыт","Плут","Чародей","Колдун","Волшебник"];
 const TRAINING_SAVE_PROFICIENCIES:Record<string,string[]>={Варвар:["str","con"],Бард:["dex","cha"],Жрец:["wis","cha"],Друид:["int","wis"],Воин:["str","con"],Монах:["str","dex"],Паладин:["wis","cha"],Следопыт:["str","dex"],Плут:["dex","int"],Чародей:["con","cha"],Колдун:["wis","cha"],Волшебник:["int","wis"]};
@@ -133,9 +141,9 @@ export default function TrainingArena({characters}:Props) {
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
-    ...readNames(data.features).map(name=>({name,kind:"Особенность"})),
-    ...readNames(data.spells).map(name=>({name,kind:"Заклинание"})),
-    ...readNames(data.attacks).map(name=>({name,kind:"Атака"})),
+    ...readActionEntries(data.features,"Особенность"),
+    ...readActionEntries(data.spells,"Заклинание"),
+    ...readActionEntries(data.attacks,"Атака"),
   ].filter((item,index,all)=>all.findIndex(other=>other.name===item.name)===index),[hero]);
   const hpMax = Math.max(1,hero?.derived.maxHp ?? 1);
   const armorClass = hero?.derived.armorClass ?? 10;
@@ -418,7 +426,7 @@ export default function TrainingArena({characters}:Props) {
         </div>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
         <div className="training-movement"><div><span>Перемещение за ход</span><strong>{Math.max(0,Number(hero.derived.speed||0)*0.3-movementUsedMeters).toFixed(1)} / {(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</strong></div><div className="training-bar"><i style={{width:`${Number(hero.derived.speed||0)>0?Math.min(100,movementUsedMeters/(Number(hero.derived.speed||0)*0.3)*100):0}%`}}/></div><small>Потраченный запас учитывается между несколькими перемещениями и восстанавливается после хода противников.</small></div>
-        <div className="training-actions"><h3>Действия героя</h3><label className="training-field">Тип расхода действия<select value={selectedActionCost} onChange={event=>setSelectedActionCost(event.target.value as "action"|"bonus"|"reaction"|"free")}><option value="action">Действие</option><option value="bonus">Бонусное действие</option><option value="reaction">Реакция</option><option value="free">Без расхода</option><option value="auto">Авто по явной пометке</option></select></label><div className="training-resource-status"><span>Действие: {actionUsed?"использовано":"доступно"}</span><span>Бонусное: {bonusActionUsed?"использовано":"доступно"}</span><span>Реакция: {reactionUsed?"использована":"доступна"}</span></div><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}<small>{selectedActionCost==="auto"?(inferExplicitActionCost(item.name)?actionCostLabel[inferExplicitActionCost(item.name)!]:"Требуется выбор вручную"):actionCostLabel[selectedActionCost]}</small></button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
+        <div className="training-actions"><h3>Действия героя</h3><label className="training-field">Тип расхода действия<select value={selectedActionCost} onChange={event=>setSelectedActionCost(event.target.value as "action"|"bonus"|"reaction"|"free"|"auto")}><option value="action">Действие</option><option value="bonus">Бонусное действие</option><option value="reaction">Реакция</option><option value="free">Без расхода</option><option value="auto">Авто по явной пометке</option></select></label><div className="training-resource-status"><span>Действие: {actionUsed?"использовано":"доступно"}</span><span>Бонусное: {bonusActionUsed?"использовано":"доступно"}</span><span>Реакция: {reactionUsed?"использована":"доступна"}</span></div><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind,item.actionCost)}><Activity size={16}/>{item.name}<small>{selectedActionCost==="auto"?(item.actionCost??inferExplicitActionCost(item.name)?actionCostLabel[(item.actionCost??inferExplicitActionCost(item.name))!]: "Требуется выбор вручную"):actionCostLabel[selectedActionCost]}</small></button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
         {targetPresets[target].aggressive&&<div className="training-orc-controls">
           <div className="training-opponent-settings">
             <label className="training-field">Бонус атаки<input type="number" min="-5" max="20" value={targetAttackBonus} onChange={event=>setTargetAttackBonus(Math.max(-5,Math.min(20,Number(event.target.value)||0)))}/></label>
