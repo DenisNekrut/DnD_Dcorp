@@ -249,6 +249,11 @@ export default function TrainingArena({characters}:Props) {
   const attackDistance=distanceInMeters(heroPosition,targetPosition);
   const attackRangeMeters=Math.max(0,Number(attackRange)||0);
   const applyAreaEffect=()=>{
+    if(!hero||heroHp<=0)return;
+    const effectiveCost=selectedActionCost==="auto"?null:selectedActionCost;
+    if(effectiveCost===null){addLog("Для тестового эффекта по зоне укажи тип расхода действия вручную.");return;}
+    const alreadyUsed=effectiveCost==="action"?actionUsed:effectiveCost==="bonus"?bonusActionUsed:effectiveCost==="reaction"?reactionUsed:false;
+    if(alreadyUsed){addLog("Этот тип действия уже использован в текущем раунде. Дождись следующего раунда или выбери другой доступный тип.");return;}
     if(!customDamageFormula.trim()){addLog("Укажи формулу тестового урона перед применением эффекта по зоне.");return;}
     const dc=Math.max(1,Math.min(30,Number(areaSaveDc)||12));
     const defenseFor=(type:Exclude<TargetMode,"dummy">):DefenseMode=>damageDefenses[type]?.[damageType]??"none";
@@ -264,6 +269,9 @@ export default function TrainingArena({characters}:Props) {
     const affected=[...(primaryAffected?[{id:"primary",name:targetPresets[target].name}]:[]),...extraAffected.map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name}))];
     const rolled=rollDamageFormula(customDamageFormula);
     if(rolled===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
+    if(effectiveCost==="action")setActionUsed(true);
+    if(effectiveCost==="bonus")setBonusActionUsed(true);
+    if(effectiveCost==="reaction")setReactionUsed(true);
     const updates=affected.map(enemy=>{
       const enemyType:Exclude<TargetMode,"dummy">=enemy.id==="primary"?(target==="dummy"?"orc":target):(extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc");
       const saveBonus=getTargetSaveBonus(enemyType,areaSaveAbility);
