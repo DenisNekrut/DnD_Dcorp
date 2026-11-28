@@ -768,7 +768,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (!token.concentrating || damageTaken <= 0) return token;
     if (token.hp <= 0) {
       addLog(token.name + ": концентрация прервана из-за потери сознания.", "danger");
-      return { ...token, concentrating: false };
+      return { ...token, concentrating: false, concentrationSpell: undefined, huntersMarkTargetId: undefined };
     }
     const dc = Math.max(10, Math.floor(damageTaken / 2));
     const abilityModifier = Number(token.abilityModifiers?.constitution ?? 0);
@@ -789,6 +789,20 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const updated = success ? token : { ...token, concentrating: false, concentrationSpell: undefined, huntersMarkTargetId: undefined };
     addLog(token.name + ": спасбросок Телосложения для концентрации — " + roll + (modifier >= 0 ? " + " : " - ") + Math.abs(modifier) + " = " + total + " против СЛ " + dc + " — " + (success ? "успех, концентрация сохранена." : "провал, концентрация прервана."), success ? "gold" : "danger");
     return updated;
+  };
+
+  const transferHuntersMark = () => {
+    if (!selected || !canEdit || layerLocks.figures || !attackTarget) return;
+    if (selected.concentrationSpell !== "hunter's mark" || !selected.concentrating || !selected.huntersMarkTargetId) return;
+    const oldTarget = tokens.find(token => token.id === selected.huntersMarkTargetId);
+    if (!oldTarget || oldTarget.hp > 0) {
+      addLog("Перенести Метку охотника можно только после того, как отмеченная цель потеряла все хиты.", "danger");
+      return;
+    }
+    if (selected.bonusActionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, bonusActionUsed: true, huntersMarkTargetId: attackTarget.id } : token));
+    addLog(selected.name + " переносит Метку охотника на " + attackTarget.name + " без траты новой ячейки.", "gold");
   };
 
   const castTrackedSpell = () => {
@@ -1839,6 +1853,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {(selected.className ?? "").toLocaleLowerCase().match(/следопыт|ranger/) && <div className="spell-slot-row">
                 <strong>Метка охотника</strong>
                 <span>{selected.concentrationSpell === "hunter's mark" && selected.huntersMarkTargetId ? "Цель: " + (tokens.find(token => token.id === selected.huntersMarkTargetId)?.name ?? "цель не найдена") : "Не активна"}</span>
+                {selected.concentrationSpell === "hunter's mark" && selected.huntersMarkTargetId && tokens.find(token => token.id === selected.huntersMarkTargetId)?.hp === 0 && <button type="button" className="secondary-button" onClick={transferHuntersMark} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || !attackTarget}>Перенести Метку на выбранную цель (бонусное действие)</button>}
                 <button type="button" className="secondary-button" onClick={castHuntersMark} disabled={!canEdit || layerLocks.figures || diceBusy || selected.bonusActionUsed || !attackTarget || (selected.spellSlots?.[1]?.max ?? 0) <= (selected.spellSlots?.[1]?.used ?? 0)}>Наложить на выбранную цель (бонусное действие, ячейка 1-го уровня)</button>
                 <small>При попадании оружием по отмеченной цели добавляется 1d6 урона; при критическом попадании — 2d6. Требуется концентрация.</small>
               </div>}
