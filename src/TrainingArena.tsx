@@ -10,11 +10,11 @@ type TrainingCharacter = {
 };
 type Props = { characters: TrainingCharacter[] };
 type TargetMode = "dummy" | "orc" | "skeleton" | "troll";
-const targetPresets:Record<TargetMode,{name:string;description:string;hp:number;ac:number;attackBonus:number;damage:string;aggressive:boolean;symbol:string}> = {
-  dummy:{name:"Тренировочный манекен",description:"Неподвижная цель · не атакует",hp:9999,ac:10,attackBonus:0,damage:"1к4",aggressive:false,symbol:"◎"},
-  orc:{name:"Агрессивный орк",description:"Враждебная цель · ближний бой",hp:30,ac:13,attackBonus:5,damage:"1к8+3",aggressive:true,symbol:"⚔"},
-  skeleton:{name:"Скелет-воин",description:"Нежить · проверка контроля",hp:18,ac:13,attackBonus:4,damage:"1к6+2",aggressive:true,symbol:"☠"},
-  troll:{name:"Тролль",description:"Крупный противник · много хитов",hp:84,ac:15,attackBonus:7,damage:"2к6+4",aggressive:true,symbol:"♜"}
+const targetPresets:Record<TargetMode,{name:string;description:string;hp:number;ac:number;attackBonus:number;damage:string;aggressive:boolean;symbol:string;abilities:Record<string,number>}> = {
+  dummy:{name:"Тренировочный манекен",description:"Неподвижная цель · не атакует",hp:9999,ac:10,attackBonus:0,damage:"1к4",aggressive:false,symbol:"◎",abilities:{str:10,dex:10,con:10,int:10,wis:10,cha:10}},
+  orc:{name:"Агрессивный орк",description:"Враждебная цель · ближний бой",hp:30,ac:13,attackBonus:5,damage:"1к8+3",aggressive:true,symbol:"⚔",abilities:{str:16,dex:12,con:16,int:7,wis:11,cha:10}},
+  skeleton:{name:"Скелет-воин",description:"Нежить · проверка контроля",hp:18,ac:13,attackBonus:4,damage:"1к6+2",aggressive:true,symbol:"☠",abilities:{str:10,dex:14,con:15,int:6,wis:8,cha:5}},
+  troll:{name:"Тролль",description:"Крупный противник · много хитов",hp:84,ac:15,attackBonus:7,damage:"2к6+4",aggressive:true,symbol:"♜",abilities:{str:18,dex:13,con:20,int:7,wis:9,cha:7}}
 };
 const abilityList = [{id:"str",name:"Сила"},{id:"dex",name:"Ловкость"},{id:"con",name:"Телосложение"},{id:"int",name:"Интеллект"},{id:"wis",name:"Мудрость"},{id:"cha",name:"Харизма"}];
 const mod = (score:number) => Math.floor(((Number.isFinite(score) ? score : 10) - 10) / 2);
@@ -78,7 +78,6 @@ export default function TrainingArena({characters}:Props) {
   const [showArea,setShowArea]=useState(true);
   const [areaSaveDc,setAreaSaveDc]=useState("12");
   const [areaSaveAbility,setAreaSaveAbility]=useState("dex");
-  const [targetSaveBonus,setTargetSaveBonus]=useState("0");
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -158,12 +157,12 @@ export default function TrainingArena({characters}:Props) {
     if(areaShape==="line")return forward>=0&&forward<=areaRadiusCells&&lateral<=0.55;
     return forward>=0&&forward<=areaRadiusCells&&lateral<=forward*0.58+0.5;
   };
+  const getTargetSaveBonus=(type:TargetMode,ability:string)=>mod(targetPresets[type].abilities[ability]??10);
   const attackDistance=distanceInMeters(heroPosition,targetPosition);
   const attackRangeMeters=Math.max(0,Number(attackRange)||0);
   const applyAreaEffect=()=>{
     if(!customDamageFormula.trim()){addLog("Укажи формулу тестового урона перед применением эффекта по зоне.");return;}
     const dc=Math.max(1,Math.min(30,Number(areaSaveDc)||12));
-    const saveBonus=Math.max(-20,Math.min(20,Number(targetSaveBonus)||0));
     const primaryAffected=targetPresets[target].aggressive&&targetHp>0&&isInSpellArea(targetPosition);
     const extraAffected=extraOpponents.filter(enemy=>enemy.hp>0&&isInSpellArea(enemy.position));
     if(!primaryAffected&&!extraAffected.length){addLog("В выбранной зоне нет живых противников. Манекен не получает урон.");return;}
@@ -171,14 +170,16 @@ export default function TrainingArena({characters}:Props) {
     const rolled=rollDamageFormula(customDamageFormula);
     if(rolled===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
     const updates=affected.map(enemy=>{
+      const enemyType=enemy.id==="primary"?target:extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc";
+      const saveBonus=getTargetSaveBonus(enemyType,areaSaveAbility);
       const saveRoll=d(20),total=saveRoll+saveBonus,success=total>=dc;
-      return {...enemy,saveRoll,total,success,damage:success?Math.floor(rolled/2):rolled};
+      return {...enemy,saveBonus,saveRoll,total,success,damage:success?Math.floor(rolled/2):rolled};
     });
     const primary=updates.find(item=>item.id==="primary");
     if(primary)setTargetHp(value=>Math.max(0,value-primary.damage));
     const extraDamage=new Map(updates.filter(item=>item.id!=="primary").map(item=>[Number(item.id),item.damage]));
     if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>extraDamage.has(enemy.id)?{...enemy,hp:Math.max(0,enemy.hp-(extraDamage.get(enemy.id)??0))}:enemy));
-    addLog("Зона ("+areaShape+", "+areaSize+" м), спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+saveBonus+" = "+item.total+(item.success?" (успех, половина урона)":" (провал)")+", "+item.damage+" урона").join("; ")+". Бонус спасброска цели задаётся вручную; сопротивления и иммунитеты не учитываются.");
+    addLog("Зона ("+areaShape+", "+areaSize+" м), спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+item.saveBonus+" = "+item.total+(item.success?" (успех, половина урона)":" (провал)")+", "+item.damage+" урона").join("; ")+". Бонус рассчитан автоматически по характеристике шаблона существа; сопротивления и иммунитеты не учитываются.");
   };
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
@@ -363,7 +364,7 @@ export default function TrainingArena({characters}:Props) {
           <div className="training-area-fields">
             <label>Сложность спасброска<input type="number" min="1" max="30" value={areaSaveDc} onChange={event=>setAreaSaveDc(event.target.value)}/></label>
             <label>Характеристика спасброска<select value={areaSaveAbility} onChange={event=>setAreaSaveAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label>Бонус спасброска цели<input type="number" min="-20" max="20" value={targetSaveBonus} onChange={event=>setTargetSaveBonus(event.target.value)}/></label>
+            <label>Бонусы целей<input value="Рассчитываются автоматически" readOnly/></label>
           </div>
           <div className="training-map-actions">
             <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
