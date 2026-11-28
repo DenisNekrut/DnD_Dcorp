@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -786,7 +786,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     const total = roll + modifier;
     const success = total >= dc;
-    const updated = success ? token : { ...token, concentrating: false };
+    const updated = success ? token : { ...token, concentrating: false, concentrationSpell: undefined, huntersMarkTargetId: undefined };
     addLog(token.name + ": спасбросок Телосложения для концентрации — " + roll + (modifier >= 0 ? " + " : " - ") + Math.abs(modifier) + " = " + total + " против СЛ " + dc + " — " + (success ? "успех, концентрация сохранена." : "провал, концентрация прервана."), success ? "gold" : "danger");
     return updated;
   };
@@ -814,7 +814,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       ...token,
       [spellResource]: true,
       ...(spellLevel > 0 && castingWithPact ? { pactMagic: { ...pact!, used: pact!.used + 1 } } : spellLevel > 0 ? { spellSlots: { ...(token.spellSlots ?? {}), [spellLevel]: { ...slot, used: slot.used + 1 } } } : {}),
-      ...(spellConcentration ? { concentrating: true } : {}),
+      ...(spellConcentration ? { concentrating: true, concentrationSpell: spellName.trim().toLocaleLowerCase() } : {}),
     } : token));
     addLog(selected.name + " накладывает «" + spellName.trim() + "» (" + (spellLevel === 0 ? "заговор" : spellLevel + "-й уровень") + "). Потрачено: " + resourceLabel + (spellLevel > 0 ? castingWithPact ? " и ячейка магии договора (" + pact!.level + "-й уровень)" : " и ячейка " + spellLevel + "-го уровня" : "") + (spellConcentration ? "; начата концентрация" : "") + ".", "gold");
     setSpellName("");
@@ -851,6 +851,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         bonusActionUsed: false,
         reactionUsed: false,
         concentrating: false,
+        concentrationSpell: undefined,
+        huntersMarkTargetId: undefined,
         exhaustionLevel: Math.max(0, (token.exhaustionLevel ?? 0) - 1),
         deathSaves: { successes: 0, failures: 0 },
       };
@@ -1289,6 +1291,23 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         addLog("Божественная кара не применена: требуется попадание рукопашной атакой и доступная ячейка заклинаний.", "muted");
       }
 
+      const markedBySelectedRanger = selected.huntersMarkTargetId === target.id && selected.concentrating && selected.concentrationSpell === "hunter's mark";
+      let huntersMarkRolls: number[] = [];
+      let huntersMarkDamage = 0;
+      if (markedBySelectedRanger) {
+        const markDice = critical ? 2 : 1;
+        if (remoteEnabled) {
+          const markResult = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: markDice, sides: 6, modifier: 0, mode: "normal" }),
+          });
+          huntersMarkRolls = markResult.rolls;
+          huntersMarkDamage = markResult.total;
+        } else {
+          huntersMarkRolls = Array.from({ length: markDice }, () => Math.floor(Math.random() * 6) + 1);
+          huntersMarkDamage = huntersMarkRolls.reduce((sum, value) => sum + value, 0);
+        }
+      }
       const rogueClass = (selected.className ?? "").toLocaleLowerCase();
       const isRogue = rogueClass.includes("плут") || rogueClass.includes("rogue");
       const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
@@ -1341,7 +1360,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const rageBonus = selected.raging && attackType === "melee" && attackAbility === "strength"
         ? (rageLevel >= 16 ? 4 : rageLevel >= 9 ? 3 : 2)
         : 0;
-      damageTotal = Math.max(0, damageTotal + rageBonus + sneakAttackDamage);
+      damageTotal = Math.max(0, damageTotal + rageBonus + sneakAttackDamage + huntersMarkDamage);
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
       const adjustedSmiteDamage = adjustDamageForTraits(target, divineSmiteDamage, "radiant");
       const appliedDamage = adjustedDamage.amount + adjustedSmiteDamage.amount;
@@ -1353,7 +1372,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         ? String(parsed.flatDamage)
         : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (sneakAttackRolls.length ? " + Скрытая атака " + sneakAttackRolls.join(" + ") : "") + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (divineSmiteRolls.length ? "; Божественная кара (излучение): " + divineSmiteRolls.join(" + ") + " = " + divineSmiteDamage + (adjustedSmiteDamage.note ? " (" + adjustedSmiteDamage.note + ")" : "") : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Итоговый урон: " + appliedDamage + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (sneakAttackRolls.length ? " + Скрытая атака " + sneakAttackRolls.join(" + ") : "") + (rageBonus ? " + ярость " + rageBonus : "") + (huntersMarkRolls.length ? " + Метка охотника " + huntersMarkRolls.join(" + ") + " = " + huntersMarkDamage : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (divineSmiteRolls.length ? "; Божественная кара (излучение): " + divineSmiteRolls.join(" + ") + " = " + divineSmiteDamage + (adjustedSmiteDamage.note ? " (" + adjustedSmiteDamage.note + ")" : "") : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Итоговый урон: " + appliedDamage + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
