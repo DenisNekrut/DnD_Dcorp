@@ -496,7 +496,8 @@ export default function TrainingArena({characters}:Props) {
             <select aria-label="Тип дополнительного противника" value={newOpponentType} onChange={event=>setNewOpponentType(event.target.value as Exclude<TargetMode,"dummy">)}><option value="orc">Орк</option><option value="skeleton">Скелет-воин</option><option value="troll">Тролль</option></select>
             <button onClick={addOpponent} disabled={extraOpponents.length>=3}>Добавить противника</button>
           </div>
-          <button className="training-danger" onClick={opponentTurn} disabled={heroHp<=0||(!targetPresets[target].aggressive||targetHp<=0)&&extraOpponents.every(enemy=>enemy.hp<=0)}>Ход противников: движение и атака</button>\n          {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
+          <button className="training-danger" onClick={opponentTurn} disabled={heroHp<=0}>{targetPresets[target].aggressive&&targetHp>0||extraOpponents.some(enemy=>enemy.hp>0)?"Ход противников: движение и атака":"Завершить раунд"}</button>
+          {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
             <span><b>{targetPresets[enemy.type].symbol} {targetPresets[enemy.type].name}</b><small>Клетка {enemy.position.x+1}, {enemy.position.y+1} · {enemy.hp} хитов</small></span>
             <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
             <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
