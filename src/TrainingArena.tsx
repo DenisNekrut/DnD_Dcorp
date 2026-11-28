@@ -200,6 +200,63 @@ export default function TrainingArena({characters}:Props) {
     setTempHp(value=>value-absorbed);setHeroHp(value=>Math.max(0,value-remaining));setLastDamage(damage);setRound(value=>value+1);
     addLog(`${preset.name} атакует: d20 ${die} + ${preset.attackBonus} = ${total} против КД ${ac} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
+  const opponentTurn = () => {
+    if(heroHp<=0) return;
+    type ActingEnemy={id:string;name:string;position:GridPoint;hp:number;attackBonus:number;damage:string;primary:boolean;extraId?:number};
+    const actors:ActingEnemy[]=[
+      ...(targetPresets[target].aggressive&&targetHp>0?[{id:"primary",name:targetPresets[target].name,position:targetPosition,hp:targetHp,attackBonus:targetAttackBonus,damage:targetDamageFormula,primary:true}]:[]),
+      ...extraOpponents.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name,position:enemy.position,hp:enemy.hp,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage,primary:false,extraId:enemy.id}))
+    ];
+    if(!actors.length){addLog("На поле нет активных противников.");return;}
+    let currentHeroHp=heroHp,currentTempHp=tempHp;
+    let nextTargetPosition=targetPosition;
+    let nextTargetHp=targetHp;
+    let nextExtras=extraOpponents.map(enemy=>({...enemy}));
+    const events:string[]=[];
+    const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}].filter(p=>p.x>=0&&p.x<GRID_COLS&&p.y>=0&&p.y<GRID_ROWS);
+    for(const actor of actors){
+      if(currentHeroHp<=0) break;
+      const livePosition=actor.primary?nextTargetPosition:nextExtras.find(enemy=>enemy.id===actor.extraId)?.position??actor.position;
+      const occupied=new Set<string>([
+        gridKey(heroPosition),
+        ...obstacles,
+        ...(actor.primary?nextExtras.filter(enemy=>enemy.hp>0).map(enemy=>gridKey(enemy.position)):[gridKey(nextTargetPosition),...nextExtras.filter(enemy=>enemy.id!==actor.extraId&&enemy.hp>0).map(enemy=>gridKey(enemy.position))])
+      ]);
+      const queue:{point:GridPoint;path:GridPoint[]}[]=[{point:livePosition,path:[]}];
+      const visited=new Set([gridKey(livePosition)]);
+      let path:GridPoint[]|null=null;
+      while(queue.length){
+        const current=queue.shift()!;
+        if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length>0){path=current.path;break;}
+        if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length===0){path=[];break;}
+        for(const next of neighbors(current.point)){
+          const key=gridKey(next);
+          if(visited.has(key)||occupied.has(key))continue;
+          visited.add(key);queue.push({point:next,path:[...current.path,next]});
+        }
+      }
+      let position=livePosition;
+      if(path&&path.length>0){
+        position=path[Math.min(5,path.length)-1];
+        if(actor.primary)nextTargetPosition=position;
+        else nextExtras=nextExtras.map(enemy=>enemy.id===actor.extraId?{...enemy,position}:enemy);
+        events.push(actor.name+" перемещается к герою.");
+      }else if(!path){
+        events.push(actor.name+" не может найти свободный путь к герою.");
+      }
+      if(distanceInMeters(position,heroPosition)<=CELL_METERS){
+        const die=d(20),total=die+actor.attackBonus,ac=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
+        const hit=die===20||(die!==1&&total>=ac),damage=hit?(rollDamageFormula(actor.damage)??0):0;
+        const absorbed=Math.min(currentTempHp,damage),remaining=damage-absorbed;
+        currentTempHp-=absorbed;currentHeroHp=Math.max(0,currentHeroHp-remaining);
+        events.push(actor.name+" атакует: d20 "+die+" + "+actor.attackBonus+" = "+total+" против КД "+ac+" — "+(hit?"попадание, "+damage+" урона; временные хиты поглотили "+absorbed:"промах")+".");
+      }
+    }
+    setTargetPosition(nextTargetPosition);setTargetHp(nextTargetHp);setExtraOpponents(nextExtras);
+    setHeroHp(currentHeroHp);setTempHp(currentTempHp);setLastDamage(Math.max(0,heroHp-currentHeroHp));
+    setRound(value=>value+1);
+    setLog(current=>[...events,"Ход противников завершён.",...current].slice(0,12));
+  };
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
   if(!hero) return <section className="training-page"><div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Проверь способности героев в безопасной тренировочной сцене.</p></div></div><div className="training-empty"><Swords size={32}/><h2>Пока нет персонажей</h2><p>Создай героя в разделе «Персонажи», и он появится здесь для тренировок.</p></div></section>;
   return <section className="training-page">
@@ -250,7 +307,7 @@ export default function TrainingArena({characters}:Props) {
             <select aria-label="Тип дополнительного противника" value={newOpponentType} onChange={event=>setNewOpponentType(event.target.value as Exclude<TargetMode,"dummy">)}><option value="orc">Орк</option><option value="skeleton">Скелет-воин</option><option value="troll">Тролль</option></select>
             <button onClick={addOpponent} disabled={extraOpponents.length>=3}>Добавить противника</button>
           </div>
-          {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
+          <button className="training-danger" onClick={opponentTurn} disabled={heroHp<=0||(!targetPresets[target].aggressive||targetHp<=0)&&extraOpponents.every(enemy=>enemy.hp<=0)}>Ход противников: движение и атака</button>\n          {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
             <span><b>{targetPresets[enemy.type].symbol} {targetPresets[enemy.type].name}</b><small>Клетка {enemy.position.x+1}, {enemy.position.y+1} · {enemy.hp} хитов</small></span>
             <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
             <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
