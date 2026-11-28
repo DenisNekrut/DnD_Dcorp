@@ -1185,6 +1185,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         total = kept + effectiveRollModifier;
       }
 
+      if (rollKind === "attack") setUseSneakAttack(false);
+
       if (rollKind === "attack" && selectedWeapon && (weaponUsesAmmo || weaponUsesLoading)) {
         recordEditorHistory();
         setTokens(items => items.map(token => token.id === selected.id ? {
