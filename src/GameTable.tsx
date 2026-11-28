@@ -194,6 +194,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [inspirationTargetId, setInspirationTargetId] = useState("");
   const [useBardicInspiration, setUseBardicInspiration] = useState(false);
   const [useSneakAttack, setUseSneakAttack] = useState(false);
+  const [useDivineSmite, setUseDivineSmite] = useState(false);
+  const [divineSmiteSlotLevel, setDivineSmiteSlotLevel] = useState(1);
   const [damageFormula, setDamageFormula] = useState("1d4");
   const [damageType, setDamageType] = useState<DamageType>("piercing");
   const [weaponOptions, setWeaponOptions] = useState<WeaponOption[]>(fallbackWeapons);
@@ -233,6 +235,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   useEffect(() => {
     setUseBardicInspiration(false);
     setUseSneakAttack(false);
+    setUseDivineSmite(false);
   }, [selected?.id, selected?.bardicInspirationDie]);
 
   useEffect(() => {
@@ -1253,6 +1256,34 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       );
       if (!hit) return;
 
+      let divineSmiteRolls: number[] = [];
+      let divineSmiteDamage = 0;
+      const paladinClass = (selected.className ?? "").toLocaleLowerCase();
+      const isPaladin = paladinClass.includes("паладин") || paladinClass.includes("paladin");
+      const smiteSlot = selected.spellSlots?.[divineSmiteSlotLevel] ?? { max: 0, used: 0 };
+      if (useDivineSmite && isPaladin && attackType === "melee" && smiteSlot.max > smiteSlot.used) {
+        const smiteDice = Math.min(5, 2 + Math.max(0, divineSmiteSlotLevel - 1)) * (critical ? 2 : 1);
+        if (remoteEnabled) {
+          const smiteResult = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: smiteDice, sides: 8, modifier: 0, mode: "normal" }),
+          });
+          divineSmiteRolls = smiteResult.rolls;
+          divineSmiteDamage = smiteResult.total;
+        } else {
+          divineSmiteRolls = Array.from({ length: smiteDice }, () => Math.floor(Math.random() * 8) + 1);
+          divineSmiteDamage = divineSmiteRolls.reduce((sum, value) => sum + value, 0);
+        }
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? {
+          ...token,
+          spellSlots: { ...(token.spellSlots ?? {}), [divineSmiteSlotLevel]: { ...smiteSlot, used: smiteSlot.used + 1 } },
+        } : token));
+        addLog(selected.name + " расходует ячейку " + divineSmiteSlotLevel + "-го уровня на Божественную кару.", "gold");
+      } else if (useDivineSmite) {
+        addLog("Божественная кара не применена: требуется попадание рукопашной атакой и доступная ячейка заклинаний.", "muted");
+      }
+
       const parsed = parseDamageFormula(damageFormula);
       if (!parsed) {
         addLog("Попадание подтверждено, но формула урона некорректна. Формат: 1d8+3 (от 1 до 10 костей).", "danger");
@@ -1312,7 +1343,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         : 0;
       damageTotal = Math.max(0, damageTotal + rageBonus + sneakAttackDamage);
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
-      const appliedDamage = adjustedDamage.amount;
+      const adjustedSmiteDamage = adjustDamageForTraits(target, divineSmiteDamage, "radiant");
+      const appliedDamage = adjustedDamage.amount + adjustedSmiteDamage.amount;
       recordEditorHistory();
       const damagedTarget = applyDamageToToken(target, appliedDamage, critical);
       const updatedTarget = await resolveConcentrationSave(damagedTarget, appliedDamage);
@@ -1321,7 +1353,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         ? String(parsed.flatDamage)
         : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (sneakAttackRolls.length ? " + Скрытая атака " + sneakAttackRolls.join(" + ") : "") + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (sneakAttackRolls.length ? " + Скрытая атака " + sneakAttackRolls.join(" + ") : "") + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (divineSmiteRolls.length ? "; Божественная кара (излучение): " + divineSmiteRolls.join(" + ") + " = " + divineSmiteDamage + (adjustedSmiteDamage.note ? " (" + adjustedSmiteDamage.note + ")" : "") : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Итоговый урон: " + appliedDamage + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -1670,6 +1702,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select></label>
                 <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useWeaponProficiency} onChange={event => setUseWeaponProficiency(event.target.checked)} disabled={!canEdit}/> Владение оружием (+{selected?.proficiencyBonus ?? 0})</label>
                 {(selected?.className ?? "").toLocaleLowerCase().match(/плут|rogue/) && <label className="weapon-proficiency-toggle"><input type="checkbox" checked={useSneakAttack} onChange={event => setUseSneakAttack(event.target.checked)} disabled={!canEdit || diceBusy || Boolean(selected?.sneakAttackUsedTurnKey === `${round}:${activeTokenId ?? selected.id}`)}/> Применить Скрытую атаку ({Math.ceil((selected?.classLevel ?? 1) / 2)}d6 при попадании)</label>}
+                {(selected?.className ?? "").toLocaleLowerCase().match(/паладин|paladin/) && <div className="weapon-proficiency-toggle"><label><input type="checkbox" checked={useDivineSmite} onChange={event => setUseDivineSmite(event.target.checked)} disabled={!canEdit || diceBusy || attackType !== "melee" || (selected.spellSlots?.[divineSmiteSlotLevel]?.max ?? 0) <= (selected.spellSlots?.[divineSmiteSlotLevel]?.used ?? 0)}/> Применить Божественную кару при попадании</label><label>Ячейка<select value={divineSmiteSlotLevel} onChange={event => setDivineSmiteSlotLevel(Number(event.target.value))} disabled={!canEdit || diceBusy}>{Array.from({length:9},(_,index)=>index+1).map(level=><option key={level} value={level}>{level}-й уровень · {Math.min(5,2+Math.max(0,level-1))}d8</option>)}</select></label><small>Тратит ячейку только после попадания рукопашной атакой. Урон излучением; при критическом попадании кости удваиваются.</small></div>}
                 <span className="attack-bonus-preview">Бонус атаки: {effectiveRollModifier >= 0 ? "+" : ""}{effectiveRollModifier}</span>
                 <label>Урон<input value={damageFormula} onChange={event => setDamageFormula(event.target.value)} placeholder="1d8+3" disabled={!canEdit} aria-label="Формула урона"/></label>
               </div>}
