@@ -1596,14 +1596,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         if (attackType === "melee") {
           const reach = selectedWeapon?.properties.includes("reach") ? 3 : 1.5;
           if (distanceMeters > reach) {
-            addLog("Цель вне досягаемости: " + distanceMeters + " фт. Максимум для этой атаки: " + reach + " м", "danger");
+            addLog("Цель вне досягаемости: " + distanceMeters + " м. Максимум для этой атаки: " + reach + " м", "danger");
             return;
           }
         } else {
           const normalRange = selectedWeapon?.rangeM?.normal ?? 9;
           const longRange = selectedWeapon?.rangeM?.long ?? normalRange;
           if (distanceMeters > longRange) {
-            addLog("Цель вне максимальной дальности: " + distanceMeters + " фт. Максимум: " + longRange + " м", "danger");
+            addLog("Цель вне максимальной дальности: " + distanceMeters + " м. Максимум: " + longRange + " м", "danger");
             return;
           }
           const rangeDisadvantage = distanceMeters > normalRange || distanceMeters <= 1.5;
@@ -1750,7 +1750,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
       const allyNearTarget = tokens.some(token => token.id !== selected.id && token.id !== target.id && (target.kind === "enemy" ? token.kind !== "enemy" : token.kind === "enemy")
         && getGridDistanceMeters(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) !== null
-        && (getGridDistanceMeters(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 5);
+        && (getGridDistanceMeters(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 1.5);
       const sneakAttackWeaponEligible = Boolean(selectedWeapon && (selectedWeapon.kind === "ranged" || selectedWeapon.properties.includes("finesse")));
       const sneakAttackEligible = isRogue && sneakAttackWeaponEligible && finalRollMode !== "disadvantage"
         && (finalRollMode === "advantage" || allyNearTarget)
