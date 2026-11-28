@@ -332,7 +332,7 @@ export default function TrainingArena({characters}:Props) {
       ...(targetPresets[target].aggressive&&nextTargetHp>0?[{id:"primary",name:targetPresets[target].name,position:targetPosition,hp:nextTargetHp,attackBonus:targetAttackBonus,damage:targetDamageFormula,primary:true}]:[]),
       ...nextExtras.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name,position:enemy.position,hp:enemy.hp,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage,primary:false,extraId:enemy.id}))
     ];
-    if(!actors.length){addLog("На поле нет активных противников.");return;}
+    if(!actors.length){setMovementUsedMeters(0);setActionUsed(false);setBonusActionUsed(false);setReactionUsed(false);setRound(value=>value+1);addLog("Раунд завершён: запас движения и действия героя восстановлены. На поле нет активных противников.");return;}
     let currentHeroHp=heroHp,currentTempHp=tempHp;
     let nextTargetPosition=targetPosition;
     const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}].filter(p=>p.x>=0&&p.x<GRID_COLS&&p.y>=0&&p.y<GRID_ROWS);
