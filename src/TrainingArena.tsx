@@ -188,10 +188,10 @@ export default function TrainingArena({characters}:Props) {
           }))}
         </div>
         <div className="training-map-controls">
-          <div><b>Герой:</b> клетка ${heroPosition.x+1}, ${heroPosition.y+1}</div>
-          <div><b>Цель:</b> клетка ${targetPosition.x+1}, ${targetPosition.y+1}</div>
-          <div><b>Расстояние:</b> ${distanceInMeters(heroPosition,targetPosition).toFixed(1)} м</div>
-          <div><b>Скорость за ход:</b> ${(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</div>
+          <div><b>Герой:</b> клетка {heroPosition.x+1}, {heroPosition.y+1}</div>
+          <div><b>Цель:</b> клетка {targetPosition.x+1}, {targetPosition.y+1}</div>
+          <div><b>Расстояние:</b> {distanceInMeters(heroPosition,targetPosition).toFixed(1)} м</div>
+          <div><b>Скорость за ход:</b> {(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</div>
         </div>
         <div className="training-map-actions">
           <button className={placingTarget?"selected":""} onClick={()=>setPlacingTarget(value=>!value)}>{placingTarget?"Отмена размещения":"Переместить цель"}</button>
