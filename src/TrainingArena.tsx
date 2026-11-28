@@ -346,15 +346,6 @@ export default function TrainingArena({characters}:Props) {
     setExtraOpponents(current=>[...current,{id:Date.now(),type:newOpponentType,hp:preset.hp,position:position!,regenerationSuppressed:false}]);
     addLog(`На поле добавлен противник: ${preset.name}.`);
   };
-  const attackWithExtraOpponent=(enemy:ExtraOpponent)=>{
-    if(enemy.hp<=0||heroHp<=0)return;
-    const preset=targetPresets[enemy.type],die=d(20),total=die+preset.attackBonus;
-    const ac=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
-    const hit=die===20||(die!==1&&total>=ac),damage=hit?(rollDamageFormula(preset.damage)??0):0;
-    const absorbed=Math.min(tempHp,damage),remaining=damage-absorbed;
-    setTempHp(value=>value-absorbed);setHeroHp(value=>Math.max(0,value-remaining));setLastDamage(damage);setRound(value=>value+1);
-    addLog(`${preset.name} атакует: d20 ${die} + ${preset.attackBonus} = ${total} против КД ${ac} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
-  };
   const opponentTurn = () => {
     if(heroHp<=0) return;
     type ActingEnemy={id:string;name:string;position:GridPoint;hp:number;attackBonus:number;damage:string;primary:boolean;extraId?:number};
@@ -507,7 +498,7 @@ export default function TrainingArena({characters}:Props) {
           <button className="training-danger" onClick={opponentTurn} disabled={heroHp<=0}>{targetPresets[target].aggressive&&targetHp>0||extraOpponents.some(enemy=>enemy.hp>0)?"Ход противников: движение и атака":"Завершить раунд"}</button>
           {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
             <span><b>{targetPresets[enemy.type].symbol} {targetPresets[enemy.type].name}</b><small>Клетка {enemy.position.x+1}, {enemy.position.y+1} · {enemy.hp} хитов</small></span>
-            <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
+            <small className="training-muted">Действует в общий ход противников</small>
             <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
           </div>)}
         </div>
