@@ -13,6 +13,16 @@ type TargetMode = "dummy" | "orc";
 const abilityList = [{id:"str",name:"Сила"},{id:"dex",name:"Ловкость"},{id:"con",name:"Телосложение"},{id:"int",name:"Интеллект"},{id:"wis",name:"Мудрость"},{id:"cha",name:"Харизма"}];
 const mod = (score:number) => Math.floor(((Number.isFinite(score) ? score : 10) - 10) / 2);
 const d = (sides:number) => Math.floor(Math.random()*sides)+1;
+const rollDamageFormula = (formula:string, fallbackModifier=0):number|null => {
+  const normalized=formula.trim().toLowerCase().replace(/к/g,"d").replace(/\s+/g,"");
+  const match=normalized.match(/^(\d{1,2})d(4|6|8|10|12|20)([+-]\d{1,3})?$/);
+  if(!match) return null;
+  const count=Number(match[1]), sides=Number(match[2]), modifier=match[3]?Number(match[3]):fallbackModifier;
+  if(count<1||count>10||modifier < -100||modifier>100) return null;
+  let total=modifier;
+  for(let i=0;i<count;i++) total+=d(sides);
+  return Math.max(0,total);
+};
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
 export default function TrainingArena({characters}:Props) {
@@ -30,6 +40,8 @@ export default function TrainingArena({characters}:Props) {
   },[hero?.id]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
+  const [targetArmorClass,setTargetArmorClass] = useState(13);
+  const [customDamageFormula,setCustomDamageFormula] = useState("");
   const [heroHp,setHeroHp] = useState(hero?.derived.maxHp ?? 1);
   const [tempHp,setTempHp] = useState(0);
   const [log,setLog] = useState<string[]>(["Тренировка готова. Все изменения существуют только в этой тренировочной сцене."]);
@@ -49,7 +61,7 @@ export default function TrainingArena({characters}:Props) {
   const hpMax = Math.max(1,hero?.derived.maxHp ?? 1);
   const armorClass = hero?.derived.armorClass ?? 10;
   const reset = (nextTarget:TargetMode=target) => {
-    setTarget(nextTarget); setTargetHp(nextTarget==="orc"?30:9999); setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
+    setTarget(nextTarget); setTargetHp(nextTarget==="orc"?30:9999); setTargetArmorClass(nextTarget==="orc"?13:10); setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
     setLog([nextTarget==="orc"?"Новый бой: агрессивный орк готов атаковать.":"Новая тренировка: манекен не атакует и не имеет лимита прочности."]);
   };
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
@@ -69,15 +81,18 @@ export default function TrainingArena({characters}:Props) {
     const attackAbility=kind==="Заклинание"?(spellAbilityByClass[hero.className]??"int"):"str";
     const abilityModifier=mod(Number(hero.abilityScores[attackAbility]??10));
     const die=d(20), bonus=abilityModifier+proficiency;
-    const targetAc=target==="orc"?13:10;
+    const targetAc=Math.max(1,Math.min(40,Number(targetArmorClass)||10));
     const hit=die===20 || (die!==1 && die+bonus>=targetAc);
     if(kind==="Заклинание") {
-      addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание":"промах")+". Урон не рассчитывается автоматически: формула конкретного заклинания должна быть указана в его карточке.");
+      const damage=hit && customDamageFormula.trim()?rollDamageFormula(customDamageFormula):null;
+      if(damage!==null && target==="orc") setTargetHp(current=>Math.max(0,current-damage));
+      addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание":"промах")+(damage!==null?", тестовый урон "+damage:". Урон не применён: укажи формулу конкретного заклинания в настройке тестового урона")+".");
       return;
     }
-    const damage=hit?Math.max(0,d(8)+abilityModifier):0;
+    const formula=customDamageFormula.trim()||"1d8";
+    const damage=hit?(rollDamageFormula(formula,abilityModifier)??0):0;
     if(target==="orc" && hit) setTargetHp(current=>Math.max(0,current-damage));
-    addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание, урон "+damage:"промах")+".");
+    addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание, урон "+damage+" ("+formula+")":"промах")+".");
   };
   const orcAttack = () => {
     if(target!=="orc" || targetHp<=0 || heroHp<=0) return;
@@ -103,6 +118,7 @@ export default function TrainingArena({characters}:Props) {
       <section className="training-panel training-combat">
         <div className="training-panel-title"><h2>Тренировочная площадка</h2><span>РАУНД {round}</span></div>
         <div className={`training-opponent ${target}`}><div className="opponent-emblem">{target==="dummy"?"◎":"⚔"}</div><div><strong>{target==="dummy"?"Тренировочный манекен":"Агрессивный орк"}</strong><span>{target==="dummy"?"Неподвижная цель · не атакует": "Враждебная цель · КД 13 · 30 хитов"}</span></div><div className="opponent-hp"><b>{target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
+        <label className="training-field training-target-ac">Класс защиты цели (КД)<input type="number" min="1" max="40" value={targetArmorClass} onChange={event=>setTargetArmorClass(Math.max(1,Math.min(40,Number(event.target.value)||1)))}/></label>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
         <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
         {target==="orc"&&<div className="training-orc-controls"><button className="training-danger" onClick={orcAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> Орк атакует героя</button><span>Атака орка: +5 к попаданию, урон 1к8+3</span></div>}
@@ -112,6 +128,9 @@ export default function TrainingArena({characters}:Props) {
         <label className="training-field">Характеристика<select value={ability} onChange={event=>setAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name} ({mod(Number(hero.abilityScores[item.id]??10))>=0?"+":""}{mod(Number(hero.abilityScores[item.id]??10))})</option>)}</select></label>
         <label className="training-field">Сложность проверки (СЛ)<input type="number" min="1" max="40" value={customDc} onChange={event=>setCustomDc(event.target.value)}/></label>
         <button className="training-primary" onClick={rollAbility}>Бросить проверку</button>
+        <div className="training-separator"/>
+        <label className="training-field">Формула тестового урона (например, 2к6+3)<input type="text" value={customDamageFormula} onChange={event=>setCustomDamageFormula(event.target.value)} placeholder="Пусто — без урона заклинанием"/></label>
+        <p className="training-muted">Для обычной атаки без формулы используется тестовый профиль 1к8 + модификатор Силы. Для заклинания урон применяется только после ввода формулы.</p>
         <div className="training-separator"/>
         <label className="training-field">Временные хиты для теста<input type="number" min="0" max="500" value={customBonus} onChange={event=>setCustomBonus(event.target.value)}/></label>
         <button className="training-secondary" onClick={useTempHp}>Применить временные хиты</button>
