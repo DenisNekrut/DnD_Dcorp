@@ -71,8 +71,8 @@ export const ARMOR = [
 export const ADVENTURING_GEAR = [
   { id: 'backpack', name: 'Рюкзак', cost: { amount: 2, currency: 'gp' }, weightLb: 5, category: 'container' },
   { id: 'bedroll', name: 'Спальный мешок', cost: { amount: 1, currency: 'gp' }, weightLb: 7, category: 'camping' },
-  { id: 'rope-hempen-50', name: 'Пеньковая верёвка (50 футов)', cost: { amount: 1, currency: 'gp' }, weightLb: 10, category: 'utility' },
-  { id: 'rope-silk-50', name: 'Шёлковая верёвка (50 футов)', cost: { amount: 10, currency: 'gp' }, weightLb: 5, category: 'utility' },
+  { id: 'rope-hempen-50', name: 'Пеньковая верёвка (15 м)', cost: { amount: 1, currency: 'gp' }, weightLb: 10, category: 'utility' },
+  { id: 'rope-silk-50', name: 'Шёлковая верёвка (15 м)', cost: { amount: 10, currency: 'gp' }, weightLb: 5, category: 'utility' },
   { id: 'torch', name: 'Факел', cost: { amount: 1, currency: 'cp' }, weightLb: 1, category: 'light' },
   { id: 'waterskin', name: 'Бурдюк', cost: { amount: 2, currency: 'sp' }, weightLb: 5, category: 'container' },
   { id: 'rations-day', name: 'Рацион (1 день)', cost: { amount: 5, currency: 'sp' }, weightLb: 2, category: 'food' },
