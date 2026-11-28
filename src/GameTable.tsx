@@ -1112,7 +1112,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(selected.name + ": недостаточно очков ци.", "danger");
       return;
     }
-    if (technique === "step-of-wind" && !stepMode) return;\n    if (technique === "flurry" && !selected.actionUsed) {
+    if (technique === "step-of-wind" && !stepMode) return;
+    if (technique === "flurry" && !selected.actionUsed) {
       addLog(selected.name + ": для «Шквала ударов» сначала необходимо совершить действие «Атака».", "danger");
       return;
     }
@@ -1126,7 +1127,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     setTokens(items => items.map(token => token.id !== selected.id ? token : {
       ...token,
       bonusActionUsed: true,
-      ...(technique === "patient-defense" ? { dodging: true } : {}),\n      ...(technique === "step-of-wind" ? { disengaging: stepMode === "disengage", dashActive: stepMode === "dash", jumpDistanceDoubled: true } : {}),
+      ...(technique === "patient-defense" ? { dodging: true } : {}),
+      ...(technique === "step-of-wind" ? { disengaging: stepMode === "disengage", dashActive: stepMode === "dash", jumpDistanceDoubled: true } : {}),
       classResources: (token.classResources ?? []).map(item => item.id === "auto-ki-points" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
     addLog(selected.name + " использует «" + names[technique] + "»: " + effects[technique] + ". Потрачено 1 очко ци.", "gold");
