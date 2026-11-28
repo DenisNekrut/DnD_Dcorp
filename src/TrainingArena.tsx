@@ -46,7 +46,8 @@ export default function TrainingArena({characters}:Props) {
   },[hero?.id]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
-  const [targetArmorClass,setTargetArmorClass] = useState(10);\n  const [targetAttackBonus,setTargetAttackBonus] = useState(5);\n  const [targetDamageFormula,setTargetDamageFormula] = useState("1к8+3");
+  const [targetArmorClass,setTargetArmorClass] = useState(10);
+  const [targetAttackBonus,setTargetAttackBonus] = useState(5);\n  const [targetDamageFormula,setTargetDamageFormula] = useState("1к8+3");
   const [customDamageFormula,setCustomDamageFormula] = useState("");
   const [heroHp,setHeroHp] = useState(hero?.derived.maxHp ?? 1);
   const [tempHp,setTempHp] = useState(0);
