@@ -84,3 +84,18 @@
 .training-movement .training-bar{margin:9px 0 7px}
 .training-movement .training-bar i{background:#75a7bd}
 .training-movement small{display:block;color:#a99d8b;font-size:10px;line-height:1.45}
+
+
+/* Training UI fixes: readable target cards and combat log below the two right panels */
+.training-targets button{grid-template-columns:minmax(0,1fr);align-items:start;gap:5px;min-width:0}
+.training-targets button b{display:block;min-width:0;line-height:1.35;overflow-wrap:anywhere}
+.training-targets button small{display:block;min-width:0;line-height:1.4;overflow-wrap:anywhere}
+.training-targets button svg{grid-row:auto}
+@media(min-width:1051px){
+  .training-tactical{grid-column:1/-1;grid-row:3}
+  .training-log{grid-column:2/4;grid-row:2;align-self:start}
+}
+@media(max-width:1050px){
+  .training-log{grid-column:1/-1;grid-row:auto}
+  .training-tactical{grid-column:1/-1;grid-row:auto}
+}
