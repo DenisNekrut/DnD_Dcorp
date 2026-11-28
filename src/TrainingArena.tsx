@@ -42,19 +42,41 @@ type ExtraOpponent={id:number;type:Exclude<TargetMode,"dummy">;hp:number;positio
 const gridKey=(point:GridPoint)=>`${point.x},${point.y}`;
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
+const TRAINING_CLASSES=["Варвар","Бард","Жрец","Друид","Воин","Монах","Паладин","Следопыт","Плут","Чародей","Колдун","Волшебник"];
+const TRAINING_HIT_DICE:Record<string,number>={Варвар:12,Бард:8,Жрец:8,Друид:8,Воин:10,Монах:8,Паладин:10,Следопыт:10,Плут:8,Чародей:6,Колдун:8,Волшебник:6};
+const TRAINING_FEATURES:Record<string,string[]>={
+  Варвар:["Ярость","Защита без доспехов"],Бард:["Вдохновение барда","Использование заклинаний"],Жрец:["Божественный домен","Использование заклинаний"],Друид:["Друидический язык","Использование заклинаний"],Воин:["Боевой стиль","Второе дыхание"],Монах:["Боевые искусства","Ки"],Паладин:["Божественное чувство","Наложение рук"],Следопыт:["Избранный враг","Исследователь природы"],Плут:["Компетентность","Скрытая атака","Воровской жаргон"],Чародей:["Источник магии","Метамагия"],Колдун:["Потусторонний покровитель","Магия договора"],Волшебник:["Магическое восстановление","Использование заклинаний"]
+};
+const TRAINING_SPELLCASTERS=["Бард","Жрец","Друид","Паладин","Следопыт","Чародей","Колдун","Волшебник"];
+const TRAINING_SPELL_ABILITY:Record<string,string>={Бард:"cha",Жрец:"wis",Друид:"wis",Паладин:"cha",Следопыт:"wis",Чародей:"cha",Колдун:"cha",Волшебник:"int"};
+const TRAINING_HEROES=["str","dex","con","int","wis","cha"];
+const trainingModifier=(score:number)=>Math.floor((score-10)/2);
+const makeTrainingHero=(className:string,level:number,scores:Record<string,number>):TrainingCharacter=>{
+  const hitDie=TRAINING_HIT_DICE[className]??8;
+  const con=trainingModifier(scores.con??10);
+  const maxHp=Math.max(1,hitDie+con+(level-1)*Math.max(1,Math.floor(hitDie/2)+1+con));
+  const spellcaster=TRAINING_SPELLCASTERS.includes(className);
+  return {id:"training-template",name:"Тренировочный "+className,className,level,abilityScores:scores,skillProficiencies:[],rawData:{features:TRAINING_FEATURES[className]??[],spells:spellcaster?["Тест заклинательной атаки"]:[],attacks:["Обычная атака"]},derived:{maxHp,armorClass:10+trainingModifier(scores.dex??10),speed:30}};
+};
+
 export default function TrainingArena({characters}:Props) {
-  const [heroId,setHeroId] = useState<string>(characters[0] ? String(characters[0].id) : "");
-  const hero = characters.find(item=>String(item.id)===heroId) ?? characters[0];
+  const [heroId,setHeroId] = useState<string>(characters[0] ? String(characters[0].id) : "template");
+  const [heroSource,setHeroSource]=useState<"saved"|"template">(characters[0]?"saved":"template");
+  const [trainingClass,setTrainingClass]=useState("Воин");
+  const [trainingLevel,setTrainingLevel]=useState(1);
+  const [trainingScores,setTrainingScores]=useState<Record<string,number>>({str:15,dex:14,con:13,int:12,wis:10,cha:8});
+  const templateHero=useMemo(()=>makeTrainingHero(trainingClass,trainingLevel,trainingScores),[trainingClass,trainingLevel,trainingScores]);
+  const hero = heroSource==="template"?templateHero:(characters.find(item=>String(item.id)===heroId)??characters[0]);
   useEffect(()=>{
     if(!hero) return;
-    setHeroId(String(hero.id));
+    if(heroSource==="saved")setHeroId(String(hero.id));
     setHeroHp(Math.max(1,hero.derived.maxHp));
     setTempHp(0);
     setTargetHp(targetPresets[target].hp);
     setRound(1);
     setLastDamage(0);
     setLog(["Выбран герой: "+hero.name+". Показатели тренировочной сцены сброшены."]);
-  },[hero?.id]);
+  },[hero?.id,heroSource,trainingClass,trainingLevel,trainingScores]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
   const [targetRegenerationSuppressed,setTargetRegenerationSuppressed] = useState(false);
@@ -345,7 +367,12 @@ export default function TrainingArena({characters}:Props) {
     <div className="training-layout">
       <section className="training-panel training-controls">
         <div className="training-panel-title"><h2>Участник тренировки</h2><span>ГЕРОЙ</span></div>
-        <label className="training-field">Персонаж<select value={heroId} onChange={event=>{setHeroId(event.target.value);const next=characters.find(item=>String(item.id)===event.target.value);setHeroHp(next?.derived.maxHp??1);setTempHp(0);setLog(["Выбран новый герой. Тренировочные показатели сброшены."]);}}>{characters.map(item=><option key={item.id} value={String(item.id)}>{item.name} · {item.className} {item.level} ур.</option>)}</select></label>
+        <label className="training-field">Источник героя<select value={heroSource} onChange={event=>{setHeroSource(event.target.value as "saved"|"template");if(event.target.value==="template")setHeroId("template");else if(characters[0])setHeroId(String(characters[0].id));}}><option value="template">Каталог классов — создать героя для теста</option><option value="saved" disabled={!characters.length}>Мои созданные персонажи</option></select></label>
+        {heroSource==="saved"?<label className="training-field">Персонаж<select value={heroId} onChange={event=>{setHeroId(event.target.value);const next=characters.find(item=>String(item.id)===event.target.value);if(next){setHeroHp(next.derived.maxHp);setTempHp(0);setLog(["Выбран персонаж: "+next.name+"."]);}}}>{characters.map(item=><option key={item.id} value={String(item.id)}>{item.name} · {item.className} {item.level} ур.</option>)}</select></label>:<>
+          <label className="training-field">Класс героя<select value={trainingClass} onChange={event=>setTrainingClass(event.target.value)}>{TRAINING_CLASSES.map(name=><option key={name} value={name}>{name}</option>)}</select></label>
+          <label className="training-field">Уровень героя<input type="number" min="1" max="20" value={trainingLevel} onChange={event=>setTrainingLevel(Math.max(1,Math.min(20,Number(event.target.value)||1)))}/></label>
+          <div className="training-template-abilities"><strong>Характеристики тренировочного героя</strong><div>{TRAINING_HEROES.map(key=><label key={key}>{abilityList.find(item=>item.id===key)?.name}<input type="number" min="1" max="30" value={trainingScores[key]} onChange={event=>setTrainingScores(current=>({...current,[key]:Math.max(1,Math.min(30,Number(event.target.value)||1))}))}/></label>)}</div><small>Профиль временный: он не создаёт персонажа и не сохраняется в коллекции.</small></div>
+        </>}</>
         <div className="training-hero-stats"><div><span>Уровень</span><strong>{hero.level}</strong></div><div><span>Класс защиты</span><strong>{armorClass}</strong></div><div><span>Скорость</span><strong>{Number((hero.derived.speed * 0.3).toFixed(1))} м</strong></div></div>
         <div className="training-panel-title"><h2>Тип испытания</h2></div>
         <div className="training-targets">{(Object.keys(targetPresets) as TargetMode[]).map(key=><button key={key} className={target===key?"selected":""} onClick={()=>reset(key)}><b>{targetPresets[key].symbol} {targetPresets[key].name}</b><small>{key==="dummy"?"Проверка атак и урона":key==="skeleton"?"Нежить и контроль":key==="troll"?"Выносливость и высокий запас хитов":"Бой и получение урона"}</small></button>)}</div>
