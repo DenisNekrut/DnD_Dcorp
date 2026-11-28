@@ -1027,6 +1027,84 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(selected.name + " вдохновляет " + inspirationTarget.name + ": передана кость d" + die + ". Она добавляется к одной проверке характеристики, атаке или спасброску по выбору получателя.", "gold");
   };
 
+  const performMonkFlurry = async () => {
+    if (!selected || !attackTarget || !canEdit || layerLocks.figures || diceBusy || !selected.actionUsed || selected.bonusActionUsed || selected.hp <= 0 || (selected.conditions ?? []).includes("incapacitated")) return;
+    const className = (selected.className ?? "").toLocaleLowerCase();
+    if (!className.includes("монах") && !className.includes("monk")) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-ki-points");
+    if (!resource || resource.used >= resource.max) {
+      addLog(selected.name + ": недостаточно очков ци для «Шквала ударов».", "danger");
+      return;
+    }
+    const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceFeet !== null && distanceFeet > 5) {
+      addLog("Для безоружных атак «Шквала ударов» цель должна находиться в пределах 5 футов.", "danger");
+      return;
+    }
+    const level = selected.classLevel ?? 1;
+    const dieSides = level >= 17 ? 10 : level >= 11 ? 8 : level >= 5 ? 6 : 4;
+    const abilityModifier = Math.max(Number(selected.abilityModifiers?.strength ?? 0), Number(selected.abilityModifiers?.dexterity ?? 0));
+    const attackModifier = abilityModifier + Number(selected.proficiencyBonus ?? 0);
+    setDiceBusy(true);
+    try {
+      const results: { roll: number; total: number; damageRolls: number[]; damage: number; critical: boolean; hit: boolean }[] = [];
+      for (let index = 0; index < 2; index += 1) {
+        let roll: number;
+        if (remoteEnabled) {
+          const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+          });
+          roll = result.rolls[0];
+        } else {
+          roll = Math.floor(Math.random() * 20) + 1;
+        }
+        const total = roll + attackModifier;
+        const critical = roll === 20;
+        const hit = roll !== 1 && (critical || total >= Math.max(0, Number(attackTarget.armorClass ?? 10)));
+        let damageRolls: number[] = [];
+        let damage = 0;
+        if (hit) {
+          const count = critical ? 2 : 1;
+          if (remoteEnabled) {
+            const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+              method: "POST",
+              body: JSON.stringify({ count, sides: dieSides, modifier: abilityModifier, mode: "normal" }),
+            });
+            damageRolls = result.rolls;
+            damage = result.total;
+          } else {
+            damageRolls = Array.from({ length: count }, () => Math.floor(Math.random() * dieSides) + 1);
+            damage = damageRolls.reduce((sum, value) => sum + value, 0) + abilityModifier;
+          }
+        }
+        results.push({ roll, total, damageRolls, damage: Math.max(0, damage), critical, hit });
+      }
+      recordEditorHistory();
+      setTokens(items => items.map(token => {
+        if (token.id === selected.id) return {
+          ...token,
+          bonusActionUsed: true,
+          classResources: (token.classResources ?? []).map(item => item.id === "auto-ki-points" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+        };
+        if (token.id !== attackTarget.id) return token;
+        return results.reduce((current, result) => {
+          if (!result.hit) return current;
+          const adjusted = adjustDamageForTraits(current, result.damage, "bludgeoning");
+          return applyDamageToToken(current, adjusted.amount, result.critical);
+        }, token);
+      }));
+      results.forEach((result, index) => {
+        addLog(selected.name + " — «Шквал ударов», атака " + (index + 1) + ": d20 " + result.roll + " + " + attackModifier + " = " + result.total + " против КД " + Number(attackTarget.armorClass ?? 10) + " — " + (result.hit ? (result.critical ? "критическое попадание" : "попадание") + "; урон " + result.damageRolls.join(" + ") + (abilityModifier >= 0 ? " + " : " - ") + Math.abs(abilityModifier) + " = " + result.damage + " дробящего урона" : "промах") + ".", result.hit ? "gold" : "danger");
+      });
+      addLog(selected.name + " завершает «Шквал ударов»: потрачено 1 очко ци и бонусное действие.", "gold");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось выполнить «Шквал ударов».");
+    } finally {
+      setDiceBusy(false);
+    }
+  };
+
   const useMonkKiTechnique = (technique: "flurry" | "patient-defense" | "step-of-wind") => {
     if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-ki-points");
@@ -1843,11 +1921,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               {(selected.classResources ?? []).some(resource => resource.id === "auto-ki-points") && <div className="combat-economy">
                 <div className="combat-economy-heading"><strong>Техники монаха · очки ци</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0} доступно</small></div>
                 <div className="combat-economy-actions">
-                  <button type="button" onClick={() => useMonkKiTechnique("flurry")} disabled={!canEdit || diceBusy || !selected.actionUsed || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шквал ударов</button>
+                  <button type="button" onClick={performMonkFlurry} disabled={!canEdit || diceBusy || !selected.actionUsed || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шквал ударов</button>
                   <button type="button" onClick={() => useMonkKiTechnique("patient-defense")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Терпеливая оборона</button>
                   <button type="button" onClick={() => useMonkKiTechnique("step-of-wind")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра</button>
                 </div>
-                <small>Каждая техника расходует 1 очко ци и бонусное действие. «Терпеливая оборона» теперь даёт помеху атакам против монаха и преимущество к спасброскам Ловкости до начала его следующего хода. Автоматическое разрешение «Шквала ударов» и перемещения «Шагом ветра» будет следующим этапом.</small>
+                <small>«Шквал ударов» автоматически выполняет две безоружные атаки по выбранной цели в пределах 5 футов. «Терпеливая оборона» даёт уклонение до начала следующего хода. «Шаг ветра» пока отмечает расход ресурса; автоматическое перемещение будет добавлено отдельно.</small>
               </div>}
 
               {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
