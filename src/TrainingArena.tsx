@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dumbbell, Shield, Swords, Heart, RotateCcw, Dice5, Activity, Target } from "lucide-react";
 
 type TrainingCharacter = {
@@ -18,6 +18,16 @@ const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(i
 export default function TrainingArena({characters}:Props) {
   const [heroId,setHeroId] = useState<string>(characters[0] ? String(characters[0].id) : "");
   const hero = characters.find(item=>String(item.id)===heroId) ?? characters[0];
+  useEffect(()=>{
+    if(!hero) return;
+    setHeroId(String(hero.id));
+    setHeroHp(Math.max(1,hero.derived.maxHp));
+    setTempHp(0);
+    setTargetHp(target==="orc"?30:9999);
+    setRound(1);
+    setLastDamage(0);
+    setLog(["Выбран герой: "+hero.name+". Показатели тренировочной сцены сброшены."]);
+  },[hero?.id]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
   const [heroHp,setHeroHp] = useState(hero?.derived.maxHp ?? 1);
@@ -49,12 +59,25 @@ export default function TrainingArena({characters}:Props) {
     addLog(`${abilityList.find(item=>item.id===ability)?.name}: d20 (${die}) ${bonus>=0?"+":""}${bonus} = ${total} против СЛ ${dc} — ${total>=dc?"успех":"неудача"}.`);
   };
   const testAction = (name:string,kind:string) => {
-    if(!hero) return;
-    const die=d(20), bonus=mod(Number(hero.abilityScores.str??10))+(Math.floor((hero.level-1)/4)+2);
-    const hit=die===20 || (die!==1 && die+bonus >= (target==="orc"?13:10));
-    const damage=hit ? d(8)+Math.max(0,mod(Number(hero.abilityScores.str??10))) : 0;
+    if(!hero || heroHp<=0 || (target==="orc" && targetHp<=0)) return;
+    const proficiency=Math.floor((Math.max(1,Math.min(20,hero.level))-1)/4)+2;
+    if(kind==="Особенность") {
+      addLog("Особенность активирована для проверки: «"+name+"». Тренировочная сцена не расходует ресурсы листа персонажа.");
+      return;
+    }
+    const spellAbilityByClass:Record<string,string>={"Бард":"cha","Жрец":"wis","Друид":"wis","Паладин":"cha","Следопыт":"wis","Чародей":"cha","Колдун":"cha","Волшебник":"int"};
+    const attackAbility=kind==="Заклинание"?(spellAbilityByClass[hero.className]??"int"):"str";
+    const abilityModifier=mod(Number(hero.abilityScores[attackAbility]??10));
+    const die=d(20), bonus=abilityModifier+proficiency;
+    const targetAc=target==="orc"?13:10;
+    const hit=die===20 || (die!==1 && die+bonus>=targetAc);
+    if(kind==="Заклинание") {
+      addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание":"промах")+". Урон не рассчитывается автоматически: формула конкретного заклинания должна быть указана в его карточке.");
+      return;
+    }
+    const damage=hit?Math.max(0,d(8)+abilityModifier):0;
     if(target==="orc" && hit) setTargetHp(current=>Math.max(0,current-damage));
-    addLog(`${kind}: «${name}» — d20 ${die} + ${bonus} = ${die+bonus}; ${hit?"попадание":"промах"}${hit?`, урон ${damage}`:""}.`);
+    addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание, урон "+damage:"промах")+".");
   };
   const orcAttack = () => {
     if(target!=="orc" || targetHp<=0 || heroHp<=0) return;
@@ -81,7 +104,7 @@ export default function TrainingArena({characters}:Props) {
         <div className="training-panel-title"><h2>Тренировочная площадка</h2><span>РАУНД {round}</span></div>
         <div className={`training-opponent ${target}`}><div className="opponent-emblem">{target==="dummy"?"◎":"⚔"}</div><div><strong>{target==="dummy"?"Тренировочный манекен":"Агрессивный орк"}</strong><span>{target==="dummy"?"Неподвижная цель · не атакует": "Враждебная цель · КД 13 · 30 хитов"}</span></div><div className="opponent-hp"><b>{target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
-        <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности, заклинания и атаки из листа героя появятся здесь, когда они будут заполнены.</p>}</div>
+        <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
         {target==="orc"&&<div className="training-orc-controls"><button className="training-danger" onClick={orcAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> Орк атакует героя</button><span>Атака орка: +5 к попаданию, урон 1к8+3</span></div>}
       </section>
       <section className="training-panel training-tools">
