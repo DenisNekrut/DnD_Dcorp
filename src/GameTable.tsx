@@ -2171,8 +2171,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               }} disabled={!canEdit || layerLocks.figures}/> Это нежить (для «Изгнания нежити»)</label>
               <label className="weapon-proficiency-toggle"><input type="checkbox" checked={Boolean(selected.turned)} onChange={event => {
                 recordEditorHistory();
-                setTokens(items => items.map(token => token.id === selected.id ? { ...token, turned: event.target.checked } : token));
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, turned: event.target.checked, turnedUntilRound: event.target.checked ? token.turnedUntilRound : undefined, turnedByTokenId: event.target.checked ? token.turnedByTokenId : undefined } : token));
               }} disabled={!canEdit || layerLocks.figures}/> Сейчас изгнана (снять вручную)</label>
+              {selected.turned && <div className="combat-rule-note">
+                <strong>Эффект «Изгнание нежити»</strong>
+                <small>Источник: {tokens.find(token => token.id === selected.turnedByTokenId)?.name ?? "не указан"}.</small>
+                <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
+                <small>В свой ход существо должно перемещаться как можно дальше от источника и не может добровольно приближаться к нему. Реакции запрещены. Если отступить некуда, оно использует действие Уклонение.</small>
+                <small>Перемещение на карте остаётся под контролем Мастера; это напоминание правил, а не автоматическое управление фигурой.</small>
+              </div>}
               {selected.isUndead && <label>Показатель опасности (ПО)<input type="number" min="0" max="30" step="0.125" value={selected.challengeRating ?? ""} onChange={event => {
                 const value = event.target.value === "" ? undefined : Math.max(0, Number(event.target.value));
                 recordEditorHistory();
