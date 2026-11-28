@@ -165,13 +165,16 @@ export default function TrainingArena({characters}:Props) {
     const label=abilityList.find(item=>item.id===ability)?.name??ability;
     addLog(`${rollType==="save"?"Спасбросок":"Проверка"}: ${label}: d20 (${die}) ${bonus>=0?"+":""}${bonus}${proficient?" (включая бонус мастерства +"+proficiency+")":""} = ${total} против СЛ ${dc} — ${total>=dc?"успех":"неудача"}.`);
   };
-  const testAction = (name:string,kind:string) => {
+  const testAction = (name:string,kind:string,metadataCost:ActionCost|null=null) => {
     if(!hero || heroHp<=0 || (targetPresets[target].aggressive && targetHp<=0)) return;
-    const alreadyUsed=selectedActionCost==="action"?actionUsed:selectedActionCost==="bonus"?bonusActionUsed:selectedActionCost==="reaction"?reactionUsed:false;
+    const inferredCost=metadataCost??(name==="Обычная атака"?"action":inferExplicitActionCost(name));
+    const effectiveCost=selectedActionCost==="auto"?inferredCost:selectedActionCost;
+    if(effectiveCost===null){addLog("Для «"+name+"» стоимость действия неизвестна. Выбери её вручную или добавь actionCost в данные способности.");return;}
+    const alreadyUsed=effectiveCost==="action"?actionUsed:effectiveCost==="bonus"?bonusActionUsed:effectiveCost==="reaction"?reactionUsed:false;
     if(alreadyUsed){addLog("Этот тип действия уже использован в текущем раунде. Дождись следующего раунда или выбери другой доступный тип.");return;}
-    if(selectedActionCost==="action")setActionUsed(true);
-    if(selectedActionCost==="bonus")setBonusActionUsed(true);
-    if(selectedActionCost==="reaction")setReactionUsed(true);
+    if(effectiveCost==="action")setActionUsed(true);
+    if(effectiveCost==="bonus")setBonusActionUsed(true);
+    if(effectiveCost==="reaction")setReactionUsed(true);
     const proficiency=Math.floor((Math.max(1,Math.min(20,hero.level))-1)/4)+2;
     if(kind==="Особенность") {
       addLog("Особенность активирована для проверки: «"+name+"». Тренировочная сцена не расходует ресурсы листа персонажа.");
