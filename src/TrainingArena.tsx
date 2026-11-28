@@ -10,6 +10,12 @@ type TrainingCharacter = {
 };
 type Props = { characters: TrainingCharacter[] };
 type TargetMode = "dummy" | "orc" | "skeleton" | "troll";
+type DamageType="acid"|"bludgeoning"|"cold"|"fire"|"force"|"lightning"|"necrotic"|"piercing"|"poison"|"psychic"|"radiant"|"slashing"|"thunder";
+type DefenseMode="none"|"resistance"|"immunity"|"vulnerability";
+const damageTypes:{id:DamageType;name:string}[]=[
+{id:"acid",name:"Кислота"},{id:"bludgeoning",name:"Дробящий"},{id:"cold",name:"Холод"},{id:"fire",name:"Огонь"},{id:"force",name:"Силовой"},{id:"lightning",name:"Электричество"},{id:"necrotic",name:"Некротический"},{id:"piercing",name:"Колющий"},{id:"poison",name:"Яд"},{id:"psychic",name:"Психический"},{id:"radiant",name:"Излучение"},{id:"slashing",name:"Рубящий"},{id:"thunder",name:"Громовой"}
+];
+const defenseNames:Record<DefenseMode,string>={none:"Нет",resistance:"Сопротивление",immunity:"Иммунитет",vulnerability:"Уязвимость"};
 const targetPresets:Record<TargetMode,{name:string;description:string;hp:number;ac:number;attackBonus:number;damage:string;aggressive:boolean;symbol:string;abilities:Record<string,number>}> = {
   dummy:{name:"Тренировочный манекен",description:"Неподвижная цель · не атакует",hp:9999,ac:10,attackBonus:0,damage:"1к4",aggressive:false,symbol:"◎",abilities:{str:10,dex:10,con:10,int:10,wis:10,cha:10}},
   orc:{name:"Агрессивный орк",description:"Враждебная цель · ближний бой",hp:30,ac:13,attackBonus:5,damage:"1к8+3",aggressive:true,symbol:"⚔",abilities:{str:16,dex:12,con:16,int:7,wis:11,cha:10}},
@@ -78,6 +84,11 @@ export default function TrainingArena({characters}:Props) {
   const [showArea,setShowArea]=useState(true);
   const [areaSaveDc,setAreaSaveDc]=useState("12");
   const [areaSaveAbility,setAreaSaveAbility]=useState("dex");
+  const [damageType,setDamageType]=useState<DamageType>("fire");
+  const [defenseTargetType,setDefenseTargetType]=useState<Exclude<TargetMode,"dummy">>("orc");
+  const [damageDefenses,setDamageDefenses]=useState<Record<Exclude<TargetMode,"dummy">,Partial<Record<DamageType,DefenseMode>>>>({
+    orc:{},skeleton:{bludgeoning:"vulnerability",poison:"immunity"},troll:{}
+  });
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -163,6 +174,13 @@ export default function TrainingArena({characters}:Props) {
   const applyAreaEffect=()=>{
     if(!customDamageFormula.trim()){addLog("Укажи формулу тестового урона перед применением эффекта по зоне.");return;}
     const dc=Math.max(1,Math.min(30,Number(areaSaveDc)||12));
+    const defenseFor=(type:Exclude<TargetMode,"dummy">):DefenseMode=>damageDefenses[type]?.[damageType]??"none";
+    const applyDefenses=(damage:number,defense:DefenseMode)=>{
+      if(defense==="immunity")return 0;
+      if(defense==="resistance")return Math.floor(damage/2);
+      if(defense==="vulnerability")return damage*2;
+      return damage;
+    };
     const primaryAffected=targetPresets[target].aggressive&&targetHp>0&&isInSpellArea(targetPosition);
     const extraAffected=extraOpponents.filter(enemy=>enemy.hp>0&&isInSpellArea(enemy.position));
     if(!primaryAffected&&!extraAffected.length){addLog("В выбранной зоне нет живых противников. Манекен не получает урон.");return;}
@@ -170,16 +188,18 @@ export default function TrainingArena({characters}:Props) {
     const rolled=rollDamageFormula(customDamageFormula);
     if(rolled===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
     const updates=affected.map(enemy=>{
-      const enemyType=enemy.id==="primary"?target:extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc";
+      const enemyType:Exclude<TargetMode,"dummy">=enemy.id==="primary"?(target==="dummy"?"orc":target):(extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc");
       const saveBonus=getTargetSaveBonus(enemyType,areaSaveAbility);
       const saveRoll=d(20),total=saveRoll+saveBonus,success=total>=dc;
-      return {...enemy,saveBonus,saveRoll,total,success,damage:success?Math.floor(rolled/2):rolled};
+      const afterSave=success?Math.floor(rolled/2):rolled;
+      const defense=defenseFor(enemyType);
+      return {...enemy,saveBonus,saveRoll,total,success,defense,damage:applyDefenses(afterSave,defense)};
     });
     const primary=updates.find(item=>item.id==="primary");
     if(primary)setTargetHp(value=>Math.max(0,value-primary.damage));
     const extraDamage=new Map(updates.filter(item=>item.id!=="primary").map(item=>[Number(item.id),item.damage]));
     if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>extraDamage.has(enemy.id)?{...enemy,hp:Math.max(0,enemy.hp-(extraDamage.get(enemy.id)??0))}:enemy));
-    addLog("Зона ("+areaShape+", "+areaSize+" м), спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+item.saveBonus+" = "+item.total+(item.success?" (успех, половина урона)":" (провал)")+", "+item.damage+" урона").join("; ")+". Бонус рассчитан автоматически по характеристике шаблона существа; сопротивления и иммунитеты не учитываются.");
+    addLog("Зона ("+areaShape+", "+areaSize+" м), тип урона: "+(damageTypes.find(item=>item.id===damageType)?.name??damageType)+", спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+item.saveBonus+" = "+item.total+(item.success?" (успех)":" (провал)")+", "+defenseNames[item.defense]+"; "+item.damage+" урона").join("; ")+". Сначала применена половина урона за успешный спасбросок, затем защита от выбранного типа урона.");
   };
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
@@ -366,6 +386,12 @@ export default function TrainingArena({characters}:Props) {
             <label>Характеристика спасброска<select value={areaSaveAbility} onChange={event=>setAreaSaveAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Бонусы целей<input value="Рассчитываются автоматически" readOnly/></label>
           </div>
+          <div className="training-area-fields">
+            <label>Тип тестового урона<select value={damageType} onChange={event=>setDamageType(event.target.value as DamageType)}>{damageTypes.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Настроить защиту существа<select value={defenseTargetType} onChange={event=>setDefenseTargetType(event.target.value as Exclude<TargetMode,"dummy">)}><option value="orc">Орк</option><option value="skeleton">Скелет-воин</option><option value="troll">Тролль</option></select></label>
+            <label>Защита от типа урона<select value={damageDefenses[defenseTargetType]?.[damageType]??"none"} onChange={event=>setDamageDefenses(current=>({...current,[defenseTargetType]:{...current[defenseTargetType],[damageType]:event.target.value as DefenseMode}}))}>{Object.entries(defenseNames).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>
+          </div>
+          <p className="training-muted">Защита настраивается отдельно для каждого шаблона существа и типа урона. Скелет по умолчанию уязвим к дробящему урону и имеет иммунитет к яду.</p>
           <div className="training-map-actions">
             <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
           </div>
