@@ -76,6 +76,9 @@ export default function TrainingArena({characters}:Props) {
   const [areaSize,setAreaSize]=useState("6");
   const [attackRange,setAttackRange]=useState("9");
   const [showArea,setShowArea]=useState(true);
+  const [areaSaveDc,setAreaSaveDc]=useState("12");
+  const [areaSaveAbility,setAreaSaveAbility]=useState("dex");
+  const [targetSaveBonus,setTargetSaveBonus]=useState("0");
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -159,28 +162,24 @@ export default function TrainingArena({characters}:Props) {
   const attackRangeMeters=Math.max(0,Number(attackRange)||0);
   const applyAreaEffect=()=>{
     if(!customDamageFormula.trim()){addLog("Укажи формулу тестового урона перед применением эффекта по зоне.");return;}
+    const dc=Math.max(1,Math.min(30,Number(areaSaveDc)||12));
+    const saveBonus=Math.max(-20,Math.min(20,Number(targetSaveBonus)||0));
     const primaryAffected=targetPresets[target].aggressive&&targetHp>0&&isInSpellArea(targetPosition);
     const extraAffected=extraOpponents.filter(enemy=>enemy.hp>0&&isInSpellArea(enemy.position));
     if(!primaryAffected&&!extraAffected.length){addLog("В выбранной зоне нет живых противников. Манекен не получает урон.");return;}
-    const results:string[]=[];
-    if(primaryAffected){
-      const damage=rollDamageFormula(customDamageFormula);
-      if(damage===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
-      setTargetHp(value=>Math.max(0,value-damage));
-      results.push(targetPresets[target].name+": "+damage+" урона");
-    }
-    const extraDamage=new Map<number,number>();
-    for(const enemy of extraAffected){
-      const damage=rollDamageFormula(customDamageFormula);
-      if(damage===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
-      extraDamage.set(enemy.id,damage);
-      results.push(targetPresets[enemy.type].name+": "+damage+" урона");
-    }
+    const affected=[...(primaryAffected?[{id:"primary",name:targetPresets[target].name}]:[]),...extraAffected.map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name}))];
+    const rolled=rollDamageFormula(customDamageFormula);
+    if(rolled===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
+    const updates=affected.map(enemy=>{
+      const saveRoll=d(20),total=saveRoll+saveBonus,success=total>=dc;
+      return {...enemy,saveRoll,total,success,damage:success?Math.floor(rolled/2):rolled};
+    });
+    const primary=updates.find(item=>item.id==="primary");
+    if(primary)setTargetHp(value=>Math.max(0,value-primary.damage));
+    const extraDamage=new Map(updates.filter(item=>item.id!=="primary").map(item=>[Number(item.id),item.damage]));
     if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>extraDamage.has(enemy.id)?{...enemy,hp:Math.max(0,enemy.hp-(extraDamage.get(enemy.id)??0))}:enemy));
-    addLog("Тестовый эффект по зоне ("+areaShape+", "+areaSize+" м): "+results.join("; ")+". Спасброски и сопротивления в этом режиме не рассчитываются.");
+    addLog("Зона ("+areaShape+", "+areaSize+" м), спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+saveBonus+" = "+item.total+(item.success?" (успех, половина урона)":" (провал)")+", "+item.damage+" урона").join("; ")+". Бонус спасброска цели задаётся вручную; сопротивления и иммунитеты не учитываются.");
   };
-
-
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
     const queue:[GridPoint,number][]=[[heroPosition,0]], visited=new Set([gridKey(heroPosition)]);
@@ -360,6 +359,11 @@ export default function TrainingArena({characters}:Props) {
             <label>Дальность атаки, м<input type="number" min="0" max="100" step="1" value={attackRange} onChange={event=>setAttackRange(event.target.value)}/></label>
             <label>Форма зоны<select value={areaShape} onChange={event=>setAreaShape(event.target.value as typeof areaShape)}><option value="radius">Радиус</option><option value="square">Квадрат</option><option value="line">Линия</option><option value="cone">Конус</option></select></label>
             <label>Размер зоны, м<input type="number" min="1.5" max="18" step="1.5" value={areaSize} onChange={event=>setAreaSize(event.target.value)}/></label>
+          </div>
+          <div className="training-area-fields">
+            <label>Сложность спасброска<input type="number" min="1" max="30" value={areaSaveDc} onChange={event=>setAreaSaveDc(event.target.value)}/></label>
+            <label>Характеристика спасброска<select value={areaSaveAbility} onChange={event=>setAreaSaveAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Бонус спасброска цели<input type="number" min="-20" max="20" value={targetSaveBonus} onChange={event=>setTargetSaveBonus(event.target.value)}/></label>
           </div>
           <div className="training-map-actions">
             <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
