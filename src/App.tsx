@@ -5,6 +5,7 @@ import TrainingArena from "./TrainingArena";
 import CampaignMembersPanel from "./CampaignMembersPanel";
 import AdminPanel from "./AdminPanel";
 import "./styles/guest.css";
+import "./styles/training.css";
 import "./styles/character-sheet.css";
 import {
   BookOpen, ChevronDown, Compass, Dice5, Dumbbell, LayoutDashboard, Menu, Plus,
