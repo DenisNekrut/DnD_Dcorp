@@ -515,6 +515,8 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
   ]) as Record<typeof sheetListFields[number]["key"] | typeof sheetBiographyFields[number]["key"],string>;
   const [editing,setEditing] = useState(false);
   const [textDraft,setTextDraft] = useState(createTextDraft);
+  const createActionCostDraft = () => (data.actionCosts && typeof data.actionCosts === "object" ? data.actionCosts : {}) as Record<string,Record<string,string>>;
+  const [actionCostDraft,setActionCostDraft] = useState(createActionCostDraft);
   const savedCurrency = (data.currency ?? {}) as Partial<Record<CurrencyKey,number>>;
   const createCurrencyDraft = () => Object.fromEntries(currencyKeys.map(key=>[key,String(savedCurrency[key] ?? 0)])) as Record<CurrencyKey,string>;
   const [currencyDraft,setCurrencyDraft] = useState(createCurrencyDraft);
@@ -522,6 +524,7 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
   const [detailsFormError,setDetailsFormError] = useState("");
   const resetDetailsDraft = () => {
     setTextDraft(createTextDraft());
+    setActionCostDraft(createActionCostDraft());
     setCurrencyDraft(createCurrencyDraft());
     setInspirationDraft(data.inspiration === true);
     setDetailsFormError("");
@@ -537,6 +540,7 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
     const patch:Record<string,unknown> = {
       ...Object.fromEntries(sheetListFields.map(field=>[field.key,textDraft[field.key].split(/\r?\n/).map(value=>value.trim()).filter(Boolean)])),
       ...Object.fromEntries(sheetBiographyFields.map(field=>[field.key,textDraft[field.key].trim()])),
+      actionCosts: Object.fromEntries(["features","attacks","spells"].map(key=>[key,Object.fromEntries(Object.entries(actionCostDraft[key] ?? {}).filter(([name,cost])=>textDraft[key as keyof typeof textDraft].split(/\r?\n/).map(value=>value.trim()).includes(name) && ["action","bonus","reaction","free"].includes(cost)))])),
       currency,
       inspiration: inspirationDraft,
     };
@@ -588,7 +592,7 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
       </div>
       {editing ? <form className="sheet-details-editor" onSubmit={submitDetails}>
         <div className="sheet-editor-grid">
-          {sheetListFields.map(field=><label key={field.key}>{field.label}<textarea rows={3} value={textDraft[field.key]} onChange={event=>setTextDraft(current=>({...current,[field.key]:event.target.value}))} placeholder="Каждый пункт — с новой строки"/></label>)}
+          {sheetListFields.map(field=><div className="sheet-action-field" key={field.key}><label>{field.label}<textarea rows={3} value={textDraft[field.key]} onChange={event=>setTextDraft(current=>({...current,[field.key]:event.target.value}))} placeholder="Каждый пункт — с новой строки"/></label>{(["features","attacks","spells"] as const).includes(field.key as "features"|"attacks"|"spells") && <div className="sheet-action-costs">{textDraft[field.key].split(/\r?\n/).map(value=>value.trim()).filter(Boolean).map(name=><label key={name}><span>{name}</span><select aria-label={"Стоимость действия: "+name} value={actionCostDraft[field.key]?.[name] ?? "auto"} onChange={event=>setActionCostDraft(current=>({...current,[field.key]:{...(current[field.key] ?? {}),[name]:event.target.value}}))}><option value="auto">Не указано — выбрать в тренировке</option><option value="action">Действие</option><option value="bonus">Бонусное действие</option><option value="reaction">Реакция</option><option value="free">Без расхода</option></select></label>))}</div>}</div>)}
           {sheetBiographyFields.map(field=><label key={field.key}>{field.label}<textarea rows={2} value={textDraft[field.key]} onChange={event=>setTextDraft(current=>({...current,[field.key]:event.target.value}))} placeholder={field.label}/></label>)}
         </div>
         <div className="sheet-editor-subheading">Монеты</div>
