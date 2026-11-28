@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -564,7 +564,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addAutomaticResource("auto-bardic-inspiration", "Вдохновение барда", inspirationUses, level >= 5 ? "short" : "long");
     }
     classResources.push(...autoResources);
-    const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
+    const token: Token = { id: newId(), name: character.name, kind: "hero", classLevel: level, className, x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
@@ -603,7 +603,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     recordEditorHistory();
     setTokens(items => items.map(token => token.id === selected.id ? {
-      ...token, classResources: (token.classResources ?? []).map(resource => resource.recovery === rest ? { ...resource, used: 0 } : resource),
+      ...token, classResources: (token.classResources ?? []).map(resource => resource.recovery !== rest ? resource : resource.id === "auto-second-wind" && rest === "short" && (token.classLevel ?? 1) >= 17 ? { ...resource, used: Math.max(0, resource.used - 1) } : { ...resource, used: 0 }),
     } : token));
     addLog(selected.name + ": восстановлены ресурсы класса: " + recoverable.map(resource => resource.name).join(", ") + ".", "gold");
   };
@@ -875,6 +875,38 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const updated = await resolveConcentrationSave(damaged, adjusted.amount);
     setTokens(items => items.map(token => token.id === selected.id ? updated : token));
     addLog("Урон " + selected.name + ": " + hpAdjustment + " " + damageType + (adjusted.note ? " (" + adjusted.note + ")" : "") + ". Хиты: " + updated.hp + "/" + updated.maxHp + ".", "danger");
+  };
+
+  const useSecondWind = async () => {
+    if (!selected || !canEdit || layerLocks.figures || diceBusy || selected.hp <= 0 || selected.hp >= selected.maxHp) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-second-wind");
+    if (!resource || resource.used >= resource.max) return;
+    setDiceBusy(true);
+    try {
+      let dieRoll: number;
+      if (remoteEnabled) {
+        const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+          method: "POST",
+          body: JSON.stringify({ count: 1, sides: 10, modifier: 0, mode: "normal" }),
+        });
+        dieRoll = result.rolls[0];
+      } else {
+        dieRoll = Math.floor(Math.random() * 10) + 1;
+      }
+      const healing = dieRoll + Math.max(1, selected.classLevel ?? 1);
+      const nextHp = Math.min(selected.maxHp, selected.hp + healing);
+      recordEditorHistory();
+      setTokens(items => items.map(token => token.id !== selected.id ? token : {
+        ...token,
+        hp: nextHp,
+        classResources: (token.classResources ?? []).map(item => item.id === "auto-second-wind" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+      }));
+      addLog(selected.name + ": «Второе дыхание» — d10 (" + dieRoll + ") + уровень воина (" + (selected.classLevel ?? 1) + "); восстановлено " + (nextHp - selected.hp) + " хитов. Осталось использований: " + (resource.max - resource.used - 1) + ".", "gold");
+    } catch (error) {
+      addLog("Не удалось выполнить «Второе дыхание»: " + (error instanceof Error ? error.message : "ошибка броска"), "danger");
+    } finally {
+      setDiceBusy(false);
+    }
   };
 
   const applyHealing = () => {
@@ -1425,6 +1457,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 {diceBusy ? "Бросок…" : "Потратить кость хитов"}
               </button>
               <small>За один бросок тратится одна кость. Можно повторять во время короткого отдыха, пока остаются кости и не восстановлены все хиты.</small>
+            </div>}
+            {(selected.classResources ?? []).some(resource => resource.id === "auto-second-wind") && <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Второе дыхание</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0))} использований доступно</small></div>
+              <button type="button" className="secondary-button" onClick={useSecondWind} disabled={!canEdit || layerLocks.figures || diceBusy || selected.hp <= 0 || selected.hp >= selected.maxHp || ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0)}>{diceBusy ? "Бросок…" : "Использовать Второе дыхание (d10 + уровень воина)"}</button>
+              <small>Бонусное действие. После короткого отдыха на 17-м уровне и выше возвращается одно потраченное использование.</small>
             </div>}
             <div className="hp-management">
               <label>Количество<input type="number" min="1" max="999" value={hpAdjustment} onChange={event => setHpAdjustment(Math.max(1, Math.min(999, Number(event.target.value) || 1)))} disabled={!canEdit || layerLocks.figures}/></label>
