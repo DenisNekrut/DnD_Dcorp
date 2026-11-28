@@ -51,3 +51,29 @@
 .training-template-abilities label{display:flex;flex-direction:column;gap:5px;color:#c9bdab;font-size:10px}
 .training-template-abilities input{min-width:0;width:100%;border:1px solid #5b4b38;background:#191714;color:#f1e7d8;border-radius:7px;padding:8px;font:inherit}
 .training-template-abilities small{display:block;margin-top:9px;color:#a99d8b;font-size:10px;line-height:1.45}
+
+/* Training arena: balanced desktop layout and compact tactical map */
+@media(min-width:1051px){
+  .training-layout{grid-template-columns:minmax(230px,.82fr) minmax(320px,1.25fr) minmax(230px,.82fr);gap:14px}
+  .training-tools{grid-column:3;grid-row:1}
+}
+.training-tactical{grid-column:1/-1}
+.training-tactical-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.training-map-column,.training-map-settings{min-width:0}
+.training-map-column .training-grid{width:100%;max-width:100%;gap:3px;padding:8px}
+.training-map-column .training-cell{font-size:clamp(10px,1.1vw,15px)}
+.training-map-settings{display:grid;gap:12px}
+.training-map-settings .training-extra-opponents,.training-map-settings .training-area-tools{margin:0}
+.training-map-settings .training-area-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.training-map-settings .training-map-controls{margin:0}
+.training-map-settings>.training-map-actions,.training-map-settings>p{margin-top:0}
+@media(max-width:1050px){
+  .training-tactical-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+  .training-layout{grid-template-columns:minmax(220px,.8fr) minmax(0,1.2fr)}
+  .training-tools{grid-column:1/-1;grid-row:auto}
+}
+@media(max-width:700px){
+  .training-tactical-body{grid-template-columns:1fr}
+  .training-map-column .training-grid{max-width:100%}
+  .training-map-settings .training-area-fields{grid-template-columns:1fr}
+}
