@@ -72,6 +72,7 @@ export default function TrainingArena({characters}:Props) {
     if(heroSource==="saved")setHeroId(String(hero.id));
     setHeroHp(Math.max(1,hero.derived.maxHp));
     setTempHp(0);
+    setMovementUsedMeters(0);
     setTargetHp(targetPresets[target].hp);
     setRound(1);
     setLastDamage(0);
@@ -93,6 +94,7 @@ export default function TrainingArena({characters}:Props) {
   const [customDc,setCustomDc] = useState("12");
   const [round,setRound] = useState(1);
   const [lastDamage,setLastDamage] = useState(0);
+  const [movementUsedMeters,setMovementUsedMeters]=useState(0);
   const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});
   const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});
   const [placingTarget,setPlacingTarget]=useState(false);
@@ -125,7 +127,7 @@ export default function TrainingArena({characters}:Props) {
     const preset=targetPresets[nextTarget];
     setTarget(nextTarget); setTargetHp(preset.hp); setTargetRegenerationSuppressed(false); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
-    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
+    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0); setMovementUsedMeters(0);
     setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false); setExtraOpponents([]);
     setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
@@ -244,12 +246,14 @@ export default function TrainingArena({characters}:Props) {
         visited.add(key);queue.push([next,steps+1]);
       }
     }
-    const maxCells=Math.floor((Number(hero.derived.speed||0)*0.3)/CELL_METERS);
+    const movementLimitMeters=Math.max(0,Number(hero.derived.speed||0)*0.3);
+    const movementRemainingMeters=Math.max(0,movementLimitMeters-movementUsedMeters);
+    const pathMeters=pathLength===null?0:pathLength*CELL_METERS;
     if(pathLength===null){addLog("Путь перекрыт препятствиями или занят целью.");return;}
     if(pathLength===0)return;
-    if(pathLength>maxCells){addLog(`Недостаточно скорости: путь ${(pathLength*CELL_METERS).toFixed(1)} м, доступно ${(maxCells*CELL_METERS).toFixed(1)} м за ход.`);return;}
-    setHeroPosition(destination);setRound(value=>value+1);
-    addLog(`Герой переместился на ${(pathLength*CELL_METERS).toFixed(1)} м. Остаток скорости: ${Math.max(0,Number(hero.derived.speed||0)*0.3-pathLength*CELL_METERS).toFixed(1)} м.`);
+    if(pathMeters>movementRemainingMeters){addLog(`Недостаточно оставшегося перемещения: путь ${pathMeters.toFixed(1)} м, доступно ${movementRemainingMeters.toFixed(1)} м из ${movementLimitMeters.toFixed(1)} м за ход.`);return;}
+    setHeroPosition(destination);setMovementUsedMeters(value=>Math.min(movementLimitMeters,value+pathMeters));
+    addLog(`Герой переместился на ${pathMeters.toFixed(1)} м. Использовано перемещения: ${(movementUsedMeters+pathMeters).toFixed(1)} / ${movementLimitMeters.toFixed(1)} м; осталось ${Math.max(0,movementRemainingMeters-pathMeters).toFixed(1)} м.`);
   };
   const handleGridCell=(point:GridPoint)=>{
     const key=gridKey(point),occupied=key===gridKey(heroPosition)||key===gridKey(targetPosition)||extraOpponents.some(enemy=>gridKey(enemy.position)===key);
@@ -357,6 +361,7 @@ export default function TrainingArena({characters}:Props) {
     }
     setTargetPosition(nextTargetPosition);setTargetHp(nextTargetHp);setExtraOpponents(nextExtras);
     setHeroHp(currentHeroHp);setTempHp(currentTempHp);setLastDamage(Math.max(0,heroHp-currentHeroHp));
+    setMovementUsedMeters(0);
     setRound(value=>value+1);
     setLog(current=>[...events,"Ход противников завершён.",...current].slice(0,12));
   };
@@ -386,6 +391,7 @@ export default function TrainingArena({characters}:Props) {
           <label className="training-field training-target-ac">Класс защиты цели (КД)<input type="number" min="1" max="40" value={targetArmorClass} onChange={event=>setTargetArmorClass(Math.max(1,Math.min(40,Number(event.target.value)||1)))}/></label>
         </div>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
+        <div className="training-movement"><div><span>Перемещение за ход</span><strong>{Math.max(0,Number(hero.derived.speed||0)*0.3-movementUsedMeters).toFixed(1)} / {(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</strong></div><div className="training-bar"><i style={{width:`${Number(hero.derived.speed||0)>0?Math.min(100,movementUsedMeters/(Number(hero.derived.speed||0)*0.3)*100):0}%`}}/></div><small>Потраченный запас учитывается между несколькими перемещениями и восстанавливается после хода противников.</small></div>
         <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
         {targetPresets[target].aggressive&&<div className="training-orc-controls">
           <div className="training-opponent-settings">

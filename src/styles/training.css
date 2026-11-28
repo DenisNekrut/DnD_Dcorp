@@ -77,3 +77,10 @@
   .training-map-column .training-grid{max-width:100%}
   .training-map-settings .training-area-fields{grid-template-columns:1fr}
 }
+
+.training-movement{margin:14px 0;padding:11px 12px;border:1px solid #554735;border-radius:9px;background:#1d1a16}
+.training-movement>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#c9bdab;font-size:11px}
+.training-movement strong{color:#e7d6bd;font-size:13px;font-variant-numeric:tabular-nums}
+.training-movement .training-bar{margin:9px 0 7px}
+.training-movement .training-bar i{background:#75a7bd}
+.training-movement small{display:block;color:#a99d8b;font-size:10px;line-height:1.45}
