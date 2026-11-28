@@ -603,9 +603,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
     recordEditorHistory();
     setTokens(items => items.map(token => {
-      if (token.id === selected.id) return { ...token, actionUsed: true, classResources: (token.classResources ?? []).map(resource => resource.id === "auto-lay-on-hands" ? { ...resource, used: resource.used + amount } : resource) };
-      if (token.id === target.id) return { ...token, hp: Math.min(token.maxHp, token.hp + amount) };
-      return token;
+      const isPaladin = token.id === selected.id;
+      const isHealingTarget = token.id === target.id;
+      if (!isPaladin && !isHealingTarget) return token;
+      return {
+        ...token,
+        ...(isPaladin ? {
+          actionUsed: true,
+          classResources: (token.classResources ?? []).map(resource => resource.id === "auto-lay-on-hands" ? { ...resource, used: resource.used + amount } : resource),
+        } : {}),
+        ...(isHealingTarget ? { hp: Math.min(token.maxHp, token.hp + amount) } : {}),
+      };
     }));
     addLog(selected.name + " использует Возложение рук на " + target.name + ": восстановлено " + amount + " хитов. Остаток запаса: " + (pool.max - pool.used - amount) + ".", "gold");
     setLayOnHandsAmount(1);
