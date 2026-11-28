@@ -18,3 +18,8 @@
 .training-map-actions button{border:1px solid #66543d;border-radius:8px;padding:9px 12px;background:#30271d;color:#e7d6bd;cursor:pointer}
 .training-map-actions button.selected{border-color:#c49b5b;background:#493822}
 @media(max-width:700px){.training-grid{gap:3px;padding:6px}.training-map-controls{grid-template-columns:1fr 1fr}.training-cell{border-radius:3px}}
+
+.training-map-legend .legend-cover{background:#9c8b54}
+.training-cell.cover-cell{background:repeating-linear-gradient(45deg,#77683b,#77683b 4px,#51482f 4px,#51482f 8px);border-color:#bba45e;color:#fff0bd}
+.terrain-tools{margin:0 0 10px}
+.terrain-tools button{font-size:11px}

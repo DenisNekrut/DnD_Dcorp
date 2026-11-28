@@ -66,6 +66,9 @@ export default function TrainingArena({characters}:Props) {
   const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});
   const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});
   const [placingTarget,setPlacingTarget]=useState(false);
+  const [obstacles,setObstacles]=useState<string[]>(BLOCKED_CELLS);
+  const [coverCells,setCoverCells]=useState<string[]>([]);
+  const [terrainMode,setTerrainMode]=useState<"move"|"obstacle"|"cover">("move");
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -100,7 +103,7 @@ export default function TrainingArena({characters}:Props) {
     const attackAbility=kind==="Заклинание"?(spellAbilityByClass[hero.className]??"int"):"str";
     const abilityModifier=mod(Number(hero.abilityScores[attackAbility]??10));
     const die=d(20), bonus=abilityModifier+proficiency;
-    const targetAc=Math.max(1,Math.min(40,Number(targetArmorClass)||10));
+    const targetAc=Math.max(1,Math.min(40,Number(targetArmorClass)||10))+(coverCells.includes(gridKey(targetPosition))?2:0);
     const hit=die===20 || (die!==1 && die+bonus>=targetAc);
     if(kind==="Заклинание") {
       const damage=hit && customDamageFormula.trim()?rollDamageFormula(customDamageFormula):null;
@@ -117,16 +120,17 @@ export default function TrainingArena({characters}:Props) {
     const preset=targetPresets[target];
     if(!preset.aggressive || targetHp<=0 || heroHp<=0) return;
     const die=d(20), total=die+targetAttackBonus;
-    const hit=die===20 || (die!==1 && total>=armorClass);
+    const effectiveArmorClass=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
+    const hit=die===20 || (die!==1 && total>=effectiveArmorClass);
     const damage=hit?(rollDamageFormula(targetDamageFormula)??0):0;
     const absorbed=Math.min(tempHp,damage), remaining=damage-absorbed;
     setTempHp(value=>value-absorbed); setHeroHp(value=>Math.max(0,value-remaining)); setLastDamage(damage);
     setRound(value=>value+1);
-    addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${armorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
+    addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${effectiveArmorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
   const moveHeroTo=(destination:GridPoint)=>{
-    if(BLOCKED_CELLS.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition)) return;
+    if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition)) return;
     const queue:[GridPoint,number][]=[[heroPosition,0]], visited=new Set([gridKey(heroPosition)]);
     let pathLength:number|null=null;
     while(queue.length){
@@ -134,7 +138,7 @@ export default function TrainingArena({characters}:Props) {
       if(gridKey(point)===gridKey(destination)){pathLength=steps;break;}
       for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}]){
         const key=gridKey(next);
-        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||BLOCKED_CELLS.includes(key)||key===gridKey(targetPosition)) continue;
+        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||obstacles.includes(key)||key===gridKey(targetPosition)) continue;
         visited.add(key);queue.push([next,steps+1]);
       }
     }
@@ -146,8 +150,22 @@ export default function TrainingArena({characters}:Props) {
     addLog(`Герой переместился на ${(pathLength*CELL_METERS).toFixed(1)} м. Остаток скорости: ${Math.max(0,Number(hero.derived.speed||0)*0.3-pathLength*CELL_METERS).toFixed(1)} м.`);
   };
   const handleGridCell=(point:GridPoint)=>{
+    const key=gridKey(point),occupied=key===gridKey(heroPosition)||key===gridKey(targetPosition);
+    if(terrainMode==="obstacle"||terrainMode==="cover"){
+      if(occupied){addLog("Нельзя менять тип клетки, занятой героем или целью.");return;}
+      if(terrainMode==="obstacle"){
+        setObstacles(current=>current.includes(key)?current.filter(item=>item!==key):[...current,key]);
+        setCoverCells(current=>current.filter(item=>item!==key));
+        addLog("Препятствие переключено.");
+      }else{
+        setCoverCells(current=>current.includes(key)?current.filter(item=>item!==key):[...current,key]);
+        setObstacles(current=>current.filter(item=>item!==key));
+        addLog("Укрытие переключено. Оно даёт +2 к КД находящейся на нём цели.");
+      }
+      return;
+    }
     if(placingTarget){
-      if(BLOCKED_CELLS.includes(gridKey(point))||gridKey(point)===gridKey(heroPosition)){addLog("Нельзя разместить противника на препятствии или под героем.");return;}
+      if(obstacles.includes(key)||occupied){addLog("Нельзя разместить противника на препятствии или занятой клетке.");return;}
       setTargetPosition(point);setPlacingTarget(false);addLog(`Позиция цели изменена: клетка ${point.x+1}, ${point.y+1}.`);return;
     }
     moveHeroTo(point);
@@ -184,11 +202,16 @@ export default function TrainingArena({characters}:Props) {
       </section>
       <section className="training-panel training-tactical">
         <div className="training-panel-title"><h2>Тактическое поле</h2><span>КЛЕТКА 1,5 М</span></div>
-        <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Цель</span><span><i className="legend-block"/> Препятствие</span></div>
+        <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Цель</span><span><i className="legend-block"/> Препятствие</span><span><i className="legend-cover"/> Укрытие (+2 КД)</span></div>
+        <div className="training-map-actions terrain-tools">
+          <button className={terrainMode==="move"?"selected":""} onClick={()=>{setTerrainMode("move");setPlacingTarget(false);}}>Перемещение</button>
+          <button className={terrainMode==="obstacle"?"selected":""} onClick={()=>{setTerrainMode("obstacle");setPlacingTarget(false);}}>Рисовать препятствия</button>
+          <button className={terrainMode==="cover"?"selected":""} onClick={()=>{setTerrainMode("cover");setPlacingTarget(false);}}>Расставить укрытия</button>
+        </div>
         <div className="training-grid" role="grid" aria-label="Тактическое поле 9 на 7 клеток">
           {Array.from({length:GRID_ROWS},(_,y)=>Array.from({length:GRID_COLS},(_,x)=>{
-            const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),blocked=BLOCKED_CELLS.includes(key);
-            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${blocked?", препятствие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${blocked?" blocked-cell":""}`} disabled={blocked||(isHero&&!placingTarget)} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:blocked?"▦":""}</button>;
+            const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),blocked=obstacles.includes(key),cover=coverCells.includes(key);
+            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:blocked?"▦":cover?"▧":""}</button>;
           }))}
         </div>
         <div className="training-map-controls">
@@ -199,9 +222,9 @@ export default function TrainingArena({characters}:Props) {
         </div>
         <div className="training-map-actions">
           <button className={placingTarget?"selected":""} onClick={()=>setPlacingTarget(value=>!value)}>{placingTarget?"Отмена размещения":"Переместить цель"}</button>
-          <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);addLog("Позиции на тактическом поле сброшены.");}}>Сбросить позиции</button>
+          <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);setTerrainMode("move");setObstacles(BLOCKED_CELLS);setCoverCells([]);addLog("Поле и позиции сброшены.");}}>Сбросить поле</button>
         </div>
-        <p className="training-muted">Нажми свободную клетку, чтобы переместить героя. Путь ищется с обходом препятствий; перемещение ограничено скоростью героя. Для перестановки противника включи режим «Переместить цель».</p>
+        <p className="training-muted">В режиме перемещения нажми свободную клетку. В режимах редактирования нажимай клетки, чтобы добавлять или убирать препятствия и укрытия. Укрытие даёт +2 к КД находящегося на нём участника.</p>
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
