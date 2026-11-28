@@ -93,7 +93,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
   if (flags.disadvantage) return "disadvantage";
   return "normal";
 };
-type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
+type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
 type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
@@ -564,9 +564,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const rawClassResources = Array.isArray(data.classResources) ? data.classResources as Record<string, unknown>[] : [];
     const classResources: ClassResource[] = rawClassResources.map((resource, index) => ({ id: String(resource.id ?? `resource-${index}`), name: String(resource.name ?? "Ресурс класса"), max: Math.max(0, Math.min(99, Number(resource.max ?? resource.total ?? 1))), used: Math.max(0, Math.min(99, Number(resource.used ?? 0))), recovery: resource.recovery === "long" || resource.recovery === "manual" ? resource.recovery : "short" }));
     const autoResources: ClassResource[] = [];
-    const addAutomaticResource = (id: string, name: string, max: number, recovery: ClassResource["recovery"]) => {
+    const addAutomaticResource = (id: string, name: string, max: number, recovery: ClassResource["recovery"], unlimited = false) => {
       if (max < 1 || classResources.some(resource => resource.id === id || resource.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return;
-      autoResources.push({ id, name, max, used: 0, recovery });
+      autoResources.push({ id, name, max, used: 0, recovery, ...(unlimited ? { unlimited: true } : {}) });
     };
     if (className.includes("воин") || className.includes("fighter")) {
       addAutomaticResource("auto-second-wind", "Второе дыхание", level >= 17 ? 2 : 1, "short");
@@ -591,7 +591,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addAutomaticResource("auto-channel-divinity", "Канал божественности", channelDivinityUses, "short");
     }
     if ((className.includes("друид") || className.includes("druid")) && level >= 2) {
-      addAutomaticResource("auto-wild-shape", "Облик зверя", level >= 20 ? 99 : 2, "short");
+      addAutomaticResource("auto-wild-shape", "Облик зверя", level >= 20 ? 1 : 2, "short", level >= 20);
     }
     classResources.push(...autoResources);
     const token: Token = { id: newId(), name: character.name, kind: "hero", classLevel: level, className, x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
@@ -699,7 +699,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const level = selected.classLevel ?? 1;
     if ((!className.includes("друид") && !className.includes("druid")) || level < 2) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-wild-shape");
-    if (!resource || resource.used >= resource.max) {
+    if (!resource || (!resource.unlimited && resource.used >= resource.max)) {
       addLog(selected.name + ": не осталось применений «Облика зверя».", "danger");
       return;
     }
@@ -721,7 +721,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       armorClass: form.ac,
       wildShape: { beastName, originalHp: token.hp, originalMaxHp: token.maxHp, originalArmorClass: token.armorClass },
       bonusActionUsed: true,
-      classResources: (token.classResources ?? []).map(item => item.id === "auto-wild-shape" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+      classResources: (token.classResources ?? []).map(item => item.id === "auto-wild-shape" && !item.unlimited ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
     addLog(selected.name + " принимает облик: " + beastName + " (ПО " + form.cr + ", " + form.hp + " хитов, КД " + form.ac + "). Потрачено применение «Облика зверя» и бонусное действие.", "gold");
   };
@@ -2128,7 +2128,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               </div>}
 
               {(selected.classResources ?? []).some(resource => resource.id === "auto-wild-shape") && <div className="combat-economy">
-                <div className="combat-economy-heading"><strong>Облик зверя</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0} применений</small></div>
+                <div className="combat-economy-heading"><strong>Облик зверя</strong><small>{(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited ? "∞ применений (без ограничений)" : `${Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0))} / ${(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0} применений`}</small></div>
                 {selected.wildShape ? <>
                   <small>Текущая форма: {selected.wildShape.beastName}. Хиты формы: {selected.hp}/{selected.maxHp}; КД: {selected.armorClass ?? "—"}. При потере всех хитов друид автоматически возвращается в исходный облик, а остаток урона переносится на его обычные хиты.</small>
                   <div className="combat-economy-actions">
@@ -2144,9 +2144,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <button type="button" className="secondary-button" onClick={revertWildShape} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>Вернуться в исходный облик (бонусное действие)</button>
                 </> : <>
                   <div className="combat-economy-actions">
-                    <button type="button" onClick={() => useWildShape("Волк")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Волк · ПО 1/4 · уровень 2+</button>
-                    <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 4 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
-                    <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 8 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Бурый медведь · ПО 1 · уровень 8+</button>
+                    <button type="button" onClick={() => useWildShape("Волк")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Волк · ПО 1/4 · уровень 2+</button>
+                    <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 4 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
+                    <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 8 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Бурый медведь · ПО 1 · уровень 8+</button>
                   </div>
                   <small>Превращение и добровольный возврат используют бонусное действие. Доступны только формы в пределах базового ограничения ПО; скорость, особые действия и атаки зверя пока не автоматизированы.</small>
                 </>}
