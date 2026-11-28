@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -1105,14 +1105,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
-  const useMonkKiTechnique = (technique: "flurry" | "patient-defense" | "step-of-wind") => {
+  const useMonkKiTechnique = (technique: "flurry" | "patient-defense" | "step-of-wind", stepMode?: "dash" | "disengage") => {
     if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-ki-points");
     if (!resource || resource.used >= resource.max) {
       addLog(selected.name + ": недостаточно очков ци.", "danger");
       return;
     }
-    if (technique === "flurry" && !selected.actionUsed) {
+    if (technique === "step-of-wind" && !stepMode) return;\n    if (technique === "flurry" && !selected.actionUsed) {
       addLog(selected.name + ": для «Шквала ударов» сначала необходимо совершить действие «Атака».", "danger");
       return;
     }
@@ -1120,13 +1120,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const effects = {
       flurry: "после действия «Атака» получает две безоружные атаки бонусным действием",
       "patient-defense": "совершает действие «Уклонение» бонусным действием",
-      "step-of-wind": "совершает «Отход» или «Рывок» бонусным действием; дистанция прыжка удвоена до конца хода",
+      "step-of-wind": stepMode === "dash" ? "совершает «Рывок» бонусным действием; дистанция прыжка удвоена до конца хода" : "совершает «Отход» бонусным действием; дистанция прыжка удвоена до конца хода",
     };
     recordEditorHistory();
     setTokens(items => items.map(token => token.id !== selected.id ? token : {
       ...token,
       bonusActionUsed: true,
-      ...(technique === "patient-defense" ? { dodging: true } : {}),
+      ...(technique === "patient-defense" ? { dodging: true } : {}),\n      ...(technique === "step-of-wind" ? { disengaging: stepMode === "disengage", dashActive: stepMode === "dash", jumpDistanceDoubled: true } : {}),
       classResources: (token.classResources ?? []).map(item => item.id === "auto-ki-points" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
     addLog(selected.name + " использует «" + names[technique] + "»: " + effects[technique] + ". Потрачено 1 очко ци.", "gold");
@@ -1543,7 +1543,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (nextIndex >= initiative.length) {
       const first = initiative[0];
       setActiveTokenId(first.id);
-      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false } : token));
+      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false, disengaging: false, dashActive: false, jumpDistanceDoubled: false } : token));
       setRound(value => value + 1);
       addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
     } else {
@@ -1574,7 +1574,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const first = initiative[0];
     setRound(1);
     setActiveTokenId(first.id);
-    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], sneakAttackUsedTurnKey: undefined, actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false })));
+    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], sneakAttackUsedTurnKey: undefined, actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false, disengaging: false, dashActive: false, jumpDistanceDoubled: false })));
     addLog(`Инициатива сброшена. Раунд 1: ход ${first.name}.`, "gold");
   };
 
@@ -1923,9 +1923,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <div className="combat-economy-actions">
                   <button type="button" onClick={performMonkFlurry} disabled={!canEdit || diceBusy || !selected.actionUsed || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шквал ударов</button>
                   <button type="button" onClick={() => useMonkKiTechnique("patient-defense")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Терпеливая оборона</button>
-                  <button type="button" onClick={() => useMonkKiTechnique("step-of-wind")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра</button>
+                  <button type="button" onClick={() => useMonkKiTechnique("step-of-wind", "dash")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра: Рывок</button>\n                  <button type="button" onClick={() => useMonkKiTechnique("step-of-wind", "disengage")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра: Отход</button>
                 </div>
-                <small>«Шквал ударов» автоматически выполняет две безоружные атаки по выбранной цели в пределах 5 футов. «Терпеливая оборона» даёт уклонение до начала следующего хода. «Шаг ветра» пока отмечает расход ресурса; автоматическое перемещение будет добавлено отдельно.</small>
+                <small>«Шквал ударов» автоматически выполняет две безоружные атаки по выбранной цели в пределах 5 футов. «Терпеливая оборона» даёт уклонение до начала следующего хода. «Шаг ветра» позволяет выбрать «Рывок» или «Отход»; выбранный эффект и удвоение дистанции прыжка отмечаются до начала следующего хода.</small>\n                {(selected.disengaging || selected.dashActive || selected.jumpDistanceDoubled) && <small>Активный эффект: {selected.disengaging ? "Отход" : selected.dashActive ? "Рывок" : "Шаг ветра"}{selected.jumpDistanceDoubled ? " · дистанция прыжка удвоена" : ""}. Действует до начала следующего хода.</small>}
               </div>}
 
               {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
