@@ -470,7 +470,7 @@ export default function TrainingArena({characters}:Props) {
         <div className="training-panel-title"><h2>Тактическое поле</h2><span>КЛЕТКА 1,5 М</span></div>
         <div className="training-tactical-body">
           <div className="training-map-column">
-        <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Цель</span><span><i className="legend-block"/> Препятствие</span><span><i className="legend-cover"/> Укрытие (+2 КД)</span></div>
+        <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Основная цель</span><span><i className="legend-extra"/> Доп. противник</span><span><i className="legend-block"/> Препятствие</span><span><i className="legend-cover"/> Укрытие (+2 КД)</span><span><i className="legend-area"/> Область эффекта</span></div>
         <div className="training-map-actions terrain-tools">
           <button className={terrainMode==="move"?"selected":""} onClick={()=>{setTerrainMode("move");setPlacingTarget(false);}}>Перемещение</button>
           <button className={terrainMode==="obstacle"?"selected":""} onClick={()=>{setTerrainMode("obstacle");setPlacingTarget(false);}}>Рисовать препятствия</button>
