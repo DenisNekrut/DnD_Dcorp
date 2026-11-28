@@ -793,7 +793,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           classResources: (token.classResources ?? []).map(item => item.id === "auto-channel-divinity" ? { ...item, used: item.used + 1 } : item),
         };
         if (destroyedIds.has(token.id)) return { ...token, hp: 0, destroyed: true, turned: false, turnedUntilRound: undefined, turnedByTokenId: undefined };
-        return failedIds.has(token.id) ? { ...token, turned: true, turnedUntilRound: round + 10, turnedByTokenId: selected.id, reactionUsed: true } : token;
+        return failedIds.has(token.id) ? { ...token, turned: true, turnedUntilRound: round + 10, turnedByTokenId: selected.id } : token;
       }));
       addLog(selected.name + " использует «Изгнание нежити» (СЛ " + dc + "). " +
         results.map(result => result.target.name + ": d20 " + result.die + " + " +
