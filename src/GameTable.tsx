@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -713,12 +713,14 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`Локальный бросок d20: ${value}.`, value === 20 ? "gold" : "muted");
   };
   const adjustDamageForTraits = (token: Token, amount: number, type: DamageType) => {
-    const resistant = (token.damageResistances ?? []).includes(type);
+    const physicalDamage = type === "bludgeoning" || type === "piercing" || type === "slashing";
+    const ragingResistance = Boolean(token.raging && physicalDamage);
+    const resistant = (token.damageResistances ?? []).includes(type) || ragingResistance;
     const vulnerable = (token.damageVulnerabilities ?? []).includes(type);
     const immune = (token.damageImmunities ?? []).includes(type);
     if (immune) return { amount: 0, note: "иммунитет" };
     if (resistant && vulnerable) return { amount, note: "сопротивление и уязвимость взаимно отменяются" };
-    if (resistant) return { amount: Math.floor(amount / 2), note: "сопротивление: половина урона" };
+    if (resistant) return { amount: Math.floor(amount / 2), note: ragingResistance ? "ярость: сопротивление физическому урону" : "сопротивление: половина урона" };
     if (vulnerable) return { amount: amount * 2, note: "уязвимость: двойной урон" };
     return { amount, note: "" };
   };
@@ -829,6 +831,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         spellSlots: Object.fromEntries(Object.entries(token.spellSlots ?? {}).map(([level, slot]) => [level, { ...slot, used: 0 }])),
         pactMagic: token.pactMagic ? { ...token.pactMagic, used: 0 } : undefined,
         classResources: (token.classResources ?? []).map(resource => resource.recovery === "manual" ? resource : { ...resource, used: 0 }),
+        raging: false,
         actionUsed: false,
         bonusActionUsed: false,
         reactionUsed: false,
@@ -908,6 +911,27 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     } finally {
       setDiceBusy(false);
     }
+  };
+
+  const useRage = () => {
+    if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || selected.raging) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-rage");
+    if (!resource || resource.used >= resource.max) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id ? token : {
+      ...token,
+      raging: true,
+      bonusActionUsed: true,
+      classResources: (token.classResources ?? []).map(item => item.id === "auto-rage" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+    }));
+    addLog(selected.name + ": начинает ярость. Сопротивление дробящему, колющему и рубящему урону; дополнительный урон рукопашными атаками Силой +" + (selected.classLevel >= 16 ? 4 : selected.classLevel >= 9 ? 3 : 2) + ".", "gold");
+  };
+
+  const endRage = () => {
+    if (!selected || !canEdit || layerLocks.figures || !selected.raging) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? { ...token, raging: false } : token));
+    addLog(selected.name + ": ярость завершена.", "muted");
   };
 
   const applyHealing = () => {
@@ -1170,7 +1194,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         damageRolls = Array.from({ length: damageCount }, () => Math.floor(Math.random() * parsed.sides) + 1);
         damageTotal = damageRolls.reduce((sum, value) => sum + value, 0) + parsed.modifier;
       }
-      damageTotal = Math.max(0, damageTotal);
+      const rageBonus = selected.raging && attackType === "melee" && attackAbility === "strength"
+        ? (selected.classLevel >= 16 ? 4 : selected.classLevel >= 9 ? 3 : 2)
+        : 0;
+      damageTotal = Math.max(0, damageTotal + rageBonus);
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
       const appliedDamage = adjustedDamage.amount;
       recordEditorHistory();
@@ -1181,7 +1208,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         ? String(parsed.flatDamage)
         : damageRolls.join(" + ") + (parsed.modifier ? (parsed.modifier > 0 ? " + " : " - ") + Math.abs(parsed.modifier) : "");
       addLog(
-        "Урон " + target.name + " (" + damageType + "): " + damageExpression + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
+        "Урон " + target.name + " (" + damageType + "): " + damageExpression + (rageBonus ? " + ярость " + rageBonus : "") + " = " + damageTotal + (adjustedDamage.note ? " (" + adjustedDamage.note + ")" : "") + (critical ? (parsed.flatDamage !== undefined ? " (критическое попадание)" : " (критический урон: кости удвоены)") : "") + ". Хиты: " + updatedTarget.hp + "/" + updatedTarget.maxHp + (updatedTarget.temporaryHp ? ", временные хиты: " + updatedTarget.temporaryHp : "") + ".",
         "danger",
       );
     } catch (error) {
@@ -1458,6 +1485,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 {diceBusy ? "Бросок…" : "Потратить кость хитов"}
               </button>
               <small>За один бросок тратится одна кость. Можно повторять во время короткого отдыха, пока остаются кости и не восстановлены все хиты.</small>
+            </div>}
+            {(selected.classResources ?? []).some(resource => resource.id === "auto-rage") && <div className="combat-economy">
+              <div className="combat-economy-heading"><strong>Ярость</strong><small>{selected.raging ? "Активна" : Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0)) + " использований доступно"}</small></div>
+              {selected.raging ? <button type="button" className="secondary-button" onClick={endRage} disabled={!canEdit || layerLocks.figures}>Завершить ярость</button> : <button type="button" className="secondary-button" onClick={useRage} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0)}>Начать ярость (бонусное действие)</button>}
+              <small>Пока ярость активна: сопротивление дробящему, колющему и рубящему урону; +2 к урону рукопашным атакам Силой (+3 с 9-го уровня, +4 с 16-го). Завершай ярость вручную по окончании её действия.</small>
             </div>}
             {(selected.classResources ?? []).some(resource => resource.id === "auto-second-wind") && <div className="combat-economy">
               <div className="combat-economy-heading"><strong>Второе дыхание</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0))} использований доступно</small></div>
