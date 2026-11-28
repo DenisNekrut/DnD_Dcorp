@@ -32,6 +32,7 @@ const rollDamageFormula = (formula:string, fallbackModifier=0):number|null => {
 const GRID_COLS=9, GRID_ROWS=7, CELL_METERS=1.5;
 const BLOCKED_CELLS=["3,1","3,2","3,3","5,4","6,4","7,4"];
 type GridPoint={x:number;y:number};
+type ExtraOpponent={id:number;type:Exclude<TargetMode,"dummy">;hp:number;position:GridPoint};
 const gridKey=(point:GridPoint)=>`${point.x},${point.y}`;
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
@@ -69,6 +70,8 @@ export default function TrainingArena({characters}:Props) {
   const [obstacles,setObstacles]=useState<string[]>(BLOCKED_CELLS);
   const [coverCells,setCoverCells]=useState<string[]>([]);
   const [terrainMode,setTerrainMode]=useState<"move"|"obstacle"|"cover">("move");
+  const [extraOpponents,setExtraOpponents]=useState<ExtraOpponent[]>([]);
+  const [newOpponentType,setNewOpponentType]=useState<Exclude<TargetMode,"dummy">>("orc");
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -83,7 +86,7 @@ export default function TrainingArena({characters}:Props) {
     setTarget(nextTarget); setTargetHp(preset.hp); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
     setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
-    setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false);
+    setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false); setExtraOpponents([]);
     setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
@@ -103,18 +106,26 @@ export default function TrainingArena({characters}:Props) {
     const attackAbility=kind==="Заклинание"?(spellAbilityByClass[hero.className]??"int"):"str";
     const abilityModifier=mod(Number(hero.abilityScores[attackAbility]??10));
     const die=d(20), bonus=abilityModifier+proficiency;
-    const targetAc=Math.max(1,Math.min(40,Number(targetArmorClass)||10))+(coverCells.includes(gridKey(targetPosition))?2:0);
+    const primaryDistance=distanceInMeters(heroPosition,targetPosition);
+    const nearestExtra=[...extraOpponents].filter(enemy=>enemy.hp>0).sort((a,b)=>distanceInMeters(heroPosition,a.position)-distanceInMeters(heroPosition,b.position))[0];
+    const useExtra=!!nearestExtra&&nearestExtra.hp>0&&distanceInMeters(heroPosition,nearestExtra.position)<primaryDistance;
+    const targetName=useExtra?targetPresets[nearestExtra!.type].name:targetPresets[target].name;
+    const targetAc=useExtra?targetPresets[nearestExtra!.type].ac+(coverCells.includes(gridKey(nearestExtra!.position))?2:0):Math.max(1,Math.min(40,Number(targetArmorClass)||10))+(coverCells.includes(gridKey(targetPosition))?2:0);
+    const applyDamage=(amount:number)=>{
+      if(useExtra&&nearestExtra){setExtraOpponents(current=>current.map(enemy=>enemy.id===nearestExtra.id?{...enemy,hp:Math.max(0,enemy.hp-amount)}:enemy));}
+      else if(targetPresets[target].aggressive){setTargetHp(current=>Math.max(0,current-amount));}
+    };
     const hit=die===20 || (die!==1 && die+bonus>=targetAc);
     if(kind==="Заклинание") {
       const damage=hit && customDamageFormula.trim()?rollDamageFormula(customDamageFormula):null;
-      if(damage!==null && targetPresets[target].aggressive) setTargetHp(current=>Math.max(0,current-damage));
-      addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание":"промах")+(damage!==null?", тестовый урон "+damage:". Урон не применён: укажи формулу конкретного заклинания в настройке тестового урона")+".");
+      if(damage!==null) applyDamage(damage);
+      addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" ("+targetName+") — "+(hit?"попадание":"промах")+(damage!==null?", тестовый урон "+damage:". Урон не применён: укажи формулу конкретного заклинания в настройке тестового урона")+".");
       return;
     }
     const formula=customDamageFormula.trim()||"1d8";
     const damage=hit?(rollDamageFormula(formula,abilityModifier)??0):0;
-    if(targetPresets[target].aggressive && hit) setTargetHp(current=>Math.max(0,current-damage));
-    addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание, урон "+damage+" ("+formula+")":"промах")+".");
+    if(hit) applyDamage(damage);
+    addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" ("+targetName+") — "+(hit?"попадание, урон "+damage+" ("+formula+")":"промах")+".");
   };
   const opponentAttack = () => {
     const preset=targetPresets[target];
@@ -130,7 +141,7 @@ export default function TrainingArena({characters}:Props) {
   };
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
   const moveHeroTo=(destination:GridPoint)=>{
-    if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition)) return;
+    if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
     const queue:[GridPoint,number][]=[[heroPosition,0]], visited=new Set([gridKey(heroPosition)]);
     let pathLength:number|null=null;
     while(queue.length){
@@ -138,7 +149,7 @@ export default function TrainingArena({characters}:Props) {
       if(gridKey(point)===gridKey(destination)){pathLength=steps;break;}
       for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}]){
         const key=gridKey(next);
-        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||obstacles.includes(key)||key===gridKey(targetPosition)) continue;
+        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||obstacles.includes(key)||key===gridKey(targetPosition)||extraOpponents.some(enemy=>gridKey(enemy.position)===key)) continue;
         visited.add(key);queue.push([next,steps+1]);
       }
     }
@@ -150,7 +161,7 @@ export default function TrainingArena({characters}:Props) {
     addLog(`Герой переместился на ${(pathLength*CELL_METERS).toFixed(1)} м. Остаток скорости: ${Math.max(0,Number(hero.derived.speed||0)*0.3-pathLength*CELL_METERS).toFixed(1)} м.`);
   };
   const handleGridCell=(point:GridPoint)=>{
-    const key=gridKey(point),occupied=key===gridKey(heroPosition)||key===gridKey(targetPosition);
+    const key=gridKey(point),occupied=key===gridKey(heroPosition)||key===gridKey(targetPosition)||extraOpponents.some(enemy=>gridKey(enemy.position)===key);
     if(terrainMode==="obstacle"||terrainMode==="cover"){
       if(occupied){addLog("Нельзя менять тип клетки, занятой героем или целью.");return;}
       if(terrainMode==="obstacle"){
@@ -169,6 +180,25 @@ export default function TrainingArena({characters}:Props) {
       setTargetPosition(point);setPlacingTarget(false);addLog(`Позиция цели изменена: клетка ${point.x+1}, ${point.y+1}.`);return;
     }
     moveHeroTo(point);
+  };
+  const addOpponent=()=>{
+    if(extraOpponents.length>=3){addLog("В этой версии можно добавить не более трёх дополнительных противников.");return;}
+    const occupied=new Set([gridKey(heroPosition),gridKey(targetPosition),...extraOpponents.map(enemy=>gridKey(enemy.position)),...obstacles]);
+    let position:GridPoint|undefined;
+    for(let y=0;y<GRID_ROWS&&!position;y++)for(let x=0;x<GRID_COLS&&!position;x++)if(!occupied.has(`${x},${y}`))position={x,y};
+    if(!position){addLog("На поле нет свободной клетки для нового противника.");return;}
+    const preset=targetPresets[newOpponentType];
+    setExtraOpponents(current=>[...current,{id:Date.now(),type:newOpponentType,hp:preset.hp,position:position!}]);
+    addLog(`На поле добавлен противник: ${preset.name}.`);
+  };
+  const attackWithExtraOpponent=(enemy:ExtraOpponent)=>{
+    if(enemy.hp<=0||heroHp<=0)return;
+    const preset=targetPresets[enemy.type],die=d(20),total=die+preset.attackBonus;
+    const ac=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
+    const hit=die===20||(die!==1&&total>=ac),damage=hit?(rollDamageFormula(preset.damage)??0):0;
+    const absorbed=Math.min(tempHp,damage),remaining=damage-absorbed;
+    setTempHp(value=>value-absorbed);setHeroHp(value=>Math.max(0,value-remaining));setLastDamage(damage);setRound(value=>value+1);
+    addLog(`${preset.name} атакует: d20 ${die} + ${preset.attackBonus} = ${total} против КД ${ac} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
   if(!hero) return <section className="training-page"><div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Проверь способности героев в безопасной тренировочной сцене.</p></div></div><div className="training-empty"><Swords size={32}/><h2>Пока нет персонажей</h2><p>Создай героя в разделе «Персонажи», и он появится здесь для тренировок.</p></div></section>;
@@ -210,9 +240,21 @@ export default function TrainingArena({characters}:Props) {
         </div>
         <div className="training-grid" role="grid" aria-label="Тактическое поле 9 на 7 клеток">
           {Array.from({length:GRID_ROWS},(_,y)=>Array.from({length:GRID_COLS},(_,x)=>{
-            const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),blocked=obstacles.includes(key),cover=coverCells.includes(key);
-            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:blocked?"▦":cover?"▧":""}</button>;
+            const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),extra=extraOpponents.find(enemy=>gridKey(enemy.position)===key),blocked=obstacles.includes(key),cover=coverCells.includes(key);
+            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":""}</button>;
           }))}
+        </div>
+        <div className="training-extra-opponents">
+          <div className="training-panel-title"><h3>Дополнительные противники</h3><span>{extraOpponents.length}/3</span></div>
+          <div className="training-map-actions">
+            <select aria-label="Тип дополнительного противника" value={newOpponentType} onChange={event=>setNewOpponentType(event.target.value as Exclude<TargetMode,"dummy">)}><option value="orc">Орк</option><option value="skeleton">Скелет-воин</option><option value="troll">Тролль</option></select>
+            <button onClick={addOpponent} disabled={extraOpponents.length>=3}>Добавить противника</button>
+          </div>
+          {extraOpponents.length===0?<p className="training-muted">Дополнительных противников пока нет.</p>:extraOpponents.map(enemy=><div className="training-extra-row" key={enemy.id}>
+            <span><b>{targetPresets[enemy.type].symbol} {targetPresets[enemy.type].name}</b><small>Клетка {enemy.position.x+1}, {enemy.position.y+1} · {enemy.hp} хитов</small></span>
+            <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
+            <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
+          </div>)}
         </div>
         <div className="training-map-controls">
           <div><b>Герой:</b> клетка {heroPosition.x+1}, {heroPosition.y+1}</div>
@@ -222,7 +264,7 @@ export default function TrainingArena({characters}:Props) {
         </div>
         <div className="training-map-actions">
           <button className={placingTarget?"selected":""} onClick={()=>setPlacingTarget(value=>!value)}>{placingTarget?"Отмена размещения":"Переместить цель"}</button>
-          <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);setTerrainMode("move");setObstacles(BLOCKED_CELLS);setCoverCells([]);addLog("Поле и позиции сброшены.");}}>Сбросить поле</button>
+          <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);setTerrainMode("move");setObstacles(BLOCKED_CELLS);setCoverCells([]);setExtraOpponents([]);addLog("Поле и позиции сброшены.");}}>Сбросить поле</button>
         </div>
         <p className="training-muted">В режиме перемещения нажми свободную клетку. В режимах редактирования нажимай клетки, чтобы добавлять или убирать препятствия и укрытия. Укрытие даёт +2 к КД находящегося на нём участника.</p>
       </section>

@@ -23,3 +23,12 @@
 .training-cell.cover-cell{background:repeating-linear-gradient(45deg,#77683b,#77683b 4px,#51482f 4px,#51482f 8px);border-color:#bba45e;color:#fff0bd}
 .terrain-tools{margin:0 0 10px}
 .terrain-tools button{font-size:11px}
+
+.training-cell.extra-target-cell{background:#5b4930;border-color:#c49b5b;color:#fff0d9}
+.training-extra-opponents{margin:14px 0;padding:12px;border:1px solid #554735;border-radius:9px;background:#1d1a16}
+.training-extra-row{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:9px 0;border-top:1px solid #40372b}
+.training-extra-row span{display:grid;gap:3px;color:#e7d6bd;font-size:12px}
+.training-extra-row small{color:#aa9c88;font-size:10px}
+.training-extra-row button,.training-extra-opponents .training-map-actions button,.training-extra-opponents select{border:1px solid #66543d;border-radius:7px;padding:7px 9px;background:#30271d;color:#e7d6bd;font-size:11px}
+.training-extra-opponents button:disabled{opacity:.45}
+.training-extra-opponents .training-panel-title{margin-bottom:8px}
