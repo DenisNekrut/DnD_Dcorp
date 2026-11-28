@@ -97,6 +97,10 @@ export default function TrainingArena({characters}:Props) {
   const [round,setRound] = useState(1);
   const [lastDamage,setLastDamage] = useState(0);
   const [movementUsedMeters,setMovementUsedMeters]=useState(0);
+  const [selectedActionCost,setSelectedActionCost]=useState<"action"|"bonus"|"reaction"|"free">("action");
+  const [actionUsed,setActionUsed]=useState(false);
+  const [bonusActionUsed,setBonusActionUsed]=useState(false);
+  const [reactionUsed,setReactionUsed]=useState(false);
   const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});
   const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});
   const [placingTarget,setPlacingTarget]=useState(false);
@@ -129,7 +133,7 @@ export default function TrainingArena({characters}:Props) {
     const preset=targetPresets[nextTarget];
     setTarget(nextTarget); setTargetHp(preset.hp); setTargetRegenerationSuppressed(false); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
-    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0); setMovementUsedMeters(0);
+    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0); setMovementUsedMeters(0); setActionUsed(false); setBonusActionUsed(false); setReactionUsed(false);
     setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false); setExtraOpponents([]);
     setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
@@ -145,6 +149,11 @@ export default function TrainingArena({characters}:Props) {
   };
   const testAction = (name:string,kind:string) => {
     if(!hero || heroHp<=0 || (targetPresets[target].aggressive && targetHp<=0)) return;
+    const alreadyUsed=selectedActionCost==="action"?actionUsed:selectedActionCost==="bonus"?bonusActionUsed:selectedActionCost==="reaction"?reactionUsed:false;
+    if(alreadyUsed){addLog("Этот тип действия уже использован в текущем раунде. Дождись следующего раунда или выбери другой доступный тип.");return;}
+    if(selectedActionCost==="action")setActionUsed(true);
+    if(selectedActionCost==="bonus")setBonusActionUsed(true);
+    if(selectedActionCost==="reaction")setReactionUsed(true);
     const proficiency=Math.floor((Math.max(1,Math.min(20,hero.level))-1)/4)+2;
     if(kind==="Особенность") {
       addLog("Особенность активирована для проверки: «"+name+"». Тренировочная сцена не расходует ресурсы листа персонажа.");
@@ -323,7 +332,7 @@ export default function TrainingArena({characters}:Props) {
       ...(targetPresets[target].aggressive&&nextTargetHp>0?[{id:"primary",name:targetPresets[target].name,position:targetPosition,hp:nextTargetHp,attackBonus:targetAttackBonus,damage:targetDamageFormula,primary:true}]:[]),
       ...nextExtras.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name,position:enemy.position,hp:enemy.hp,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage,primary:false,extraId:enemy.id}))
     ];
-    if(!actors.length){addLog("На поле нет активных противников.");return;}
+    if(!actors.length){setMovementUsedMeters(0);setActionUsed(false);setBonusActionUsed(false);setReactionUsed(false);setRound(value=>value+1);addLog("Раунд завершён: запас движения и действия героя восстановлены. На поле нет активных противников.");return;}
     let currentHeroHp=heroHp,currentTempHp=tempHp;
     let nextTargetPosition=targetPosition;
     const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}].filter(p=>p.x>=0&&p.x<GRID_COLS&&p.y>=0&&p.y<GRID_ROWS);
@@ -368,6 +377,7 @@ export default function TrainingArena({characters}:Props) {
     setTargetPosition(nextTargetPosition);setTargetHp(nextTargetHp);setExtraOpponents(nextExtras);
     setHeroHp(currentHeroHp);setTempHp(currentTempHp);setLastDamage(Math.max(0,heroHp-currentHeroHp));
     setMovementUsedMeters(0);
+    setActionUsed(false);setBonusActionUsed(false);setReactionUsed(false);
     setRound(value=>value+1);
     setLog(current=>[...events,"Ход противников завершён.",...current].slice(0,12));
   };
@@ -398,7 +408,7 @@ export default function TrainingArena({characters}:Props) {
         </div>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
         <div className="training-movement"><div><span>Перемещение за ход</span><strong>{Math.max(0,Number(hero.derived.speed||0)*0.3-movementUsedMeters).toFixed(1)} / {(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</strong></div><div className="training-bar"><i style={{width:`${Number(hero.derived.speed||0)>0?Math.min(100,movementUsedMeters/(Number(hero.derived.speed||0)*0.3)*100):0}%`}}/></div><small>Потраченный запас учитывается между несколькими перемещениями и восстанавливается после хода противников.</small></div>
-        <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
+        <div className="training-actions"><h3>Действия героя</h3><label className="training-field">Тип расхода действия<select value={selectedActionCost} onChange={event=>setSelectedActionCost(event.target.value as "action"|"bonus"|"reaction"|"free")}><option value="action">Действие</option><option value="bonus">Бонусное действие</option><option value="reaction">Реакция</option><option value="free">Без расхода</option></select></label><div className="training-resource-status"><span>Действие: {actionUsed?"использовано":"доступно"}</span><span>Бонусное: {bonusActionUsed?"использовано":"доступно"}</span><span>Реакция: {reactionUsed?"использована":"доступна"}</span></div><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
         {targetPresets[target].aggressive&&<div className="training-orc-controls">
           <div className="training-opponent-settings">
             <label className="training-field">Бонус атаки<input type="number" min="-5" max="20" value={targetAttackBonus} onChange={event=>setTargetAttackBonus(Math.max(-5,Math.min(20,Number(event.target.value)||0)))}/></label>
