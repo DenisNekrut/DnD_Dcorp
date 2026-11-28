@@ -139,6 +139,55 @@ export default function TrainingArena({characters}:Props) {
     setRound(value=>value+1);
     addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${effectiveArmorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
+  const runEnemyTurn=()=>{
+    if(heroHp<=0){addLog("Герой выведен из строя. Ход противников невозможен.");return;}
+    type MovingEnemy={id:string;type:Exclude<TargetMode,"dummy">;hp:number;position:GridPoint;primary:boolean;attackBonus:number;damage:string};
+    const enemies:MovingEnemy[]=[
+      ...(targetPresets[target].aggressive&&targetHp>0?[{id:"primary",type:target as Exclude<TargetMode,"dummy">,hp:targetHp,position:targetPosition,primary:true,attackBonus:targetAttackBonus,damage:targetDamageFormula}]:[]),
+      ...extraOpponents.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),type:enemy.type,hp:enemy.hp,position:enemy.position,primary:false,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage}))
+    ];
+    if(!enemies.length){addLog("На поле нет активных противников.");return;}
+    let occupied=enemies.map(enemy=>gridKey(enemy.position));
+    let nextHeroHp=heroHp,nextTempHp=tempHp,lastIncoming=0;
+    const updatedPositions=new Map<string,GridPoint>();
+    const events:string[]=[];
+    for(const enemy of enemies){
+      occupied=occupied.filter(key=>key!==gridKey(enemy.position));
+      const start=enemy.position,queue:GridPoint[]=[start],parents=new Map<string,string|null>([[gridKey(start),null]]);
+      let destination:GridPoint|undefined;
+      while(queue.length&&!destination){
+        const point=queue.shift()!,key=gridKey(point);
+        if(distanceInMeters(point,heroPosition)<=CELL_METERS&&key!==gridKey(heroPosition)){destination=point;break;}
+        for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}]){
+          const nextKey=gridKey(next);
+          if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||parents.has(nextKey)||obstacles.includes(nextKey)||occupied.includes(nextKey)||nextKey===gridKey(heroPosition))continue;
+          parents.set(nextKey,key);queue.push(next);
+        }
+      }
+      let path:GridPoint[]=[];
+      if(destination){
+        let key=gridKey(destination);
+        while(key!==gridKey(start)){
+          const [x,y]=key.split(",").map(Number);path.unshift({x,y});
+          key=parents.get(key)??gridKey(start);
+        }
+      }
+      const moved=path.slice(0,4);
+      const position=moved.length?moved[moved.length-1]:start;
+      updatedPositions.set(enemy.id,position);occupied.push(gridKey(position));
+      if(moved.length)events.push(`${targetPresets[enemy.type].name} переместился на ${(moved.length*CELL_METERS).toFixed(1)} м`);
+      if(distanceInMeters(position,heroPosition)<=CELL_METERS){
+        const die=d(20),total=die+enemy.attackBonus,ac=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
+        const hit=die===20||(die!==1&&total>=ac),damage=hit?(rollDamageFormula(enemy.damage)??0):0;
+        const absorbed=Math.min(nextTempHp,damage);nextTempHp-=absorbed;nextHeroHp=Math.max(0,nextHeroHp-(damage-absorbed));lastIncoming=damage;
+        events.push(`${targetPresets[enemy.type].name}: d20 ${die} + ${enemy.attackBonus} = ${total} против КД ${ac} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}`);
+      }
+    }
+    setTargetPosition(updatedPositions.get("primary")??targetPosition);
+    setExtraOpponents(current=>current.map(enemy=>({...enemy,position:updatedPositions.get(String(enemy.id))??enemy.position})));
+    setHeroHp(nextHeroHp);setTempHp(nextTempHp);setLastDamage(lastIncoming);setRound(value=>value+1);
+    addLog("Ход противников: "+events.join("; ")+".");
+  };
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
@@ -255,6 +304,10 @@ export default function TrainingArena({characters}:Props) {
             <button onClick={()=>attackWithExtraOpponent(enemy)} disabled={enemy.hp<=0||heroHp<=0}>Атаковать</button>
             <button onClick={()=>setExtraOpponents(current=>current.filter(item=>item.id!==enemy.id))}>Убрать</button>
           </div>)}
+        </div>
+        <div className="training-enemy-turn">
+          <button className="training-danger" onClick={runEnemyTurn} disabled={heroHp<=0||(!targetPresets[target].aggressive&&extraOpponents.every(enemy=>enemy.hp<=0))}>Ход противников — перемещение и атака</button>
+          <p className="training-muted">Живые противники приближаются к герою по свободному пути (до 6 м за ход) и атакуют, если оказываются рядом. Укрытие повышает КД героя на 2.</p>
         </div>
         <div className="training-map-controls">
           <div><b>Герой:</b> клетка {heroPosition.x+1}, {heroPosition.y+1}</div>
