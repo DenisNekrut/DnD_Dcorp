@@ -223,18 +223,6 @@ export default function TrainingArena({characters}:Props) {
     if(hit) applyDamage(damage);
     addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" ("+targetName+") — "+(hit?"попадание, урон "+damage+" ("+formula+")":"промах")+".");
   };
-  const opponentAttack = () => {
-    const preset=targetPresets[target];
-    if(!preset.aggressive || targetHp<=0 || heroHp<=0) return;
-    const die=d(20), total=die+targetAttackBonus;
-    const effectiveArmorClass=armorClass+(coverCells.includes(gridKey(heroPosition))?2:0);
-    const hit=die===20 || (die!==1 && total>=effectiveArmorClass);
-    const damage=hit?(rollDamageFormula(targetDamageFormula)??0):0;
-    const absorbed=Math.min(tempHp,damage), remaining=damage-absorbed;
-    setTempHp(value=>value-absorbed); setHeroHp(value=>Math.max(0,value-remaining)); setLastDamage(damage);
-    setRound(value=>value+1);
-    addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${effectiveArmorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
-  };
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y))*CELL_METERS;
   const areaRadiusCells=Math.max(1,Math.min(12,Math.ceil((Number(areaSize)||0)/CELL_METERS)));
   const isInSpellArea=(point:GridPoint)=>{
@@ -458,7 +446,7 @@ export default function TrainingArena({characters}:Props) {
             <label className="training-field">Бонус атаки<input type="number" min="-5" max="20" value={targetAttackBonus} onChange={event=>setTargetAttackBonus(Math.max(-5,Math.min(20,Number(event.target.value)||0)))}/></label>
             <label className="training-field">Урон противника<input type="text" value={targetDamageFormula} onChange={event=>setTargetDamageFormula(event.target.value)} placeholder="1к8+3"/></label>
           </div>
-          <button className="training-danger" onClick={opponentAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> {targetPresets[target].name} атакует героя</button>
+          
         </div>}
       </section>
       <section className="training-command-section training-tools">
