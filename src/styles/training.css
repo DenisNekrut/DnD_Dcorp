@@ -691,3 +691,72 @@
     transition: none !important;
   }
 }
+
+
+/* Motion pass 1: restrained feedback for tactical movement and area changes */
+.training-cell {
+  transition:
+    transform .18s ease,
+    filter .18s ease,
+    box-shadow .18s ease,
+    background-color .18s ease,
+    border-color .18s ease;
+}
+
+.training-cell.hero-cell {
+  animation: training-hero-arrive .24s ease-out both;
+}
+
+.training-cell.target-cell,
+.training-cell.extra-target-cell {
+  animation: training-target-arrive .22s ease-out both;
+}
+
+.training-cell.spell-area-cell {
+  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.training-cell:not(:disabled):active {
+  transform: scale(.94);
+  filter: brightness(1.18);
+}
+
+.training-combat .training-bar i,
+.training-movement .training-bar i {
+  transition: width .32s cubic-bezier(.2, .75, .25, 1), background-color .2s ease;
+}
+
+.training-combat .opponent-emblem {
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+}
+
+.training-combat .training-opponent:hover .opponent-emblem {
+  transform: translateY(-1px) scale(1.035);
+  filter: brightness(1.08);
+}
+
+@keyframes training-hero-arrive {
+  0% { transform: scale(.78); filter: brightness(1.45); }
+  65% { transform: scale(1.06); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes training-target-arrive {
+  0% { transform: scale(.84); filter: brightness(1.35); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-cell.hero-cell,
+  .training-cell.target-cell,
+  .training-cell.extra-target-cell {
+    animation: none !important;
+  }
+
+  .training-cell,
+  .training-combat .training-bar i,
+  .training-movement .training-bar i,
+  .training-combat .opponent-emblem {
+    transition: none !important;
+  }
+}
