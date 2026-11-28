@@ -2174,17 +2174,36 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 setTokens(items => items.map(token => token.id === selected.id ? { ...token, turned: event.target.checked, turnedUntilRound: event.target.checked ? token.turnedUntilRound : undefined, turnedByTokenId: event.target.checked ? token.turnedByTokenId : undefined } : token));
               }} disabled={!canEdit || layerLocks.figures}/> Сейчас изгнана (снять вручную)</label>
               {selected.turned && <div className="combat-rule-note">
-                <strong>Эффект «Изгнание нежити»</strong>
-                <small>Источник: {tokens.find(token => token.id === selected.turnedByTokenId)?.name ?? "не указан"}.</small>
-                <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
-                <small>В свой ход существо должно перемещаться как можно дальше от источника и не может добровольно приближаться к нему. Реакции запрещены. Если отступить некуда, оно использует действие Уклонение.</small>
+                {(() => {
+                  const source = tokens.find(token => token.id === selected.turnedByTokenId);
+                  const distance = source ? getGridDistanceFeet(selected, source, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) : null;
+                  const dx = source ? selected.x - source.x : 0;
+                  const dy = source ? selected.y - source.y : 0;
+                  const horizontal = dx > 1 ? "восток" : dx < -1 ? "запад" : "";
+                  const vertical = dy > 1 ? "юг" : dy < -1 ? "север" : "";
+                  const direction = vertical && horizontal ? vertical + " и " + horizontal : vertical || horizontal || "определить направление нельзя";
+                  return <>
+                    <strong>Эффект «Изгнание нежити»</strong>
+                    <small>Источник: {source?.name ?? "не указан"}.</small>
+                    <small>Ориентир для Мастера: {source ? `отступать в сторону ${direction}; расстояние до источника — ${distance === null ? "не удалось рассчитать" : distance + " фут."}.` : "источник не найден — проверьте привязку к жрецу."}</small>
+                    {distance !== null && <small>{distance <= 30 ? "Нежить находится в пределах 30 футов от источника: не допускайте её добровольного приближения." : "Нежить уже дальше 30 футов от источника."}</small>}
+                    <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
+                    <small>В свой ход существо должно двигаться как можно дальше от источника. Для действия оно может использовать только Рывок или попытаться освободиться от эффекта, мешающего двигаться. Реакции запрещены. Если двигаться некуда — Уклонение.</small>
+                  </>;
+                })()}
+                <button type="button" className="secondary-button" onClick={() => {
+                  if (!selected || selected.actionUsed || !canEdit || layerLocks.figures) return;
+                  recordEditorHistory();
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true, dodging: false } : token));
+                  addLog(selected.name + " использует действие «Рывок» из-за изгнания и пытается удалиться от источника.", "gold");
+                }} disabled={!canEdit || layerLocks.figures || selected.actionUsed || selected.hp <= 0}>Отметить действие «Рывок»</button>
                 <button type="button" className="secondary-button" onClick={() => {
                   if (!selected || selected.actionUsed || !canEdit || layerLocks.figures) return;
                   recordEditorHistory();
                   setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true, dodging: true } : token));
                   addLog(selected.name + " не может отступить и использует действие «Уклонение» из-за изгнания.", "gold");
-                }} disabled={!canEdit || layerLocks.figures || selected.actionUsed || selected.hp <= 0}>Отметить действие «Уклонение»</button>
-                <small>Перемещение на карте остаётся под контролем Мастера; кнопку Уклонения используй, если отступить действительно некуда.</small>
+                }} disabled={!canEdit || layerLocks.figures || selected.actionUsed || selected.hp <= 0}>Отметить действие «Уклонение» (если двигаться некуда)</button>
+                <small>Направление и расстояние — подсказка по координатам фигур, а не автоматическое перемещение. Мастер проверяет препятствия и выполняет перемещение вручную.</small>
               </div>}
               {selected.isUndead && <label>Показатель опасности (ПО)<input type="number" min="0" max="30" step="0.125" value={selected.challengeRating ?? ""} onChange={event => {
                 const value = event.target.value === "" ? undefined : Math.max(0, Number(event.target.value));
