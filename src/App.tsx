@@ -568,7 +568,7 @@ function CharacterSheet({character,currentHp,temporaryHp,onCurrentHpChange,onTem
     <div className="sheet-combat-strip">
       <div><span>Класс доспеха</span><strong>{character.derived.armorClass}</strong></div>
       <div><span>Инициатива</span><strong>{signedBonus(character.derived.initiative)}</strong></div>
-      <div><span>Скорость</span><strong>{character.derived.speed} фт.</strong></div>
+      <div><span>Скорость</span><strong>{Number((character.derived.speed * 0.3).toFixed(1))} м</strong></div>
       <div><span>Пассивное восприятие</span><strong>{Number(data.passivePerception ?? character.derived.passivePerception)}</strong></div>
     </div>
     <form className="sheet-hp-form" onSubmit={onSave}>
