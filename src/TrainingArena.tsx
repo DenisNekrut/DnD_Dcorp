@@ -397,6 +397,8 @@ export default function TrainingArena({characters}:Props) {
       </section>
       <section className="training-panel training-tactical">
         <div className="training-panel-title"><h2>Тактическое поле</h2><span>КЛЕТКА 1,5 М</span></div>
+        <div className="training-tactical-body">
+          <div className="training-map-column">
         <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Цель</span><span><i className="legend-block"/> Препятствие</span><span><i className="legend-cover"/> Укрытие (+2 КД)</span></div>
         <div className="training-map-actions terrain-tools">
           <button className={terrainMode==="move"?"selected":""} onClick={()=>{setTerrainMode("move");setPlacingTarget(false);}}>Перемещение</button>
@@ -409,6 +411,8 @@ export default function TrainingArena({characters}:Props) {
             return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}${isInSpellArea(point)?" spell-area-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":isInSpellArea(point)?"·":""}</button>;
           }))}
         </div>
+          </div>
+          <div className="training-map-settings">
         <div className="training-extra-opponents">
           <div className="training-panel-title"><h3>Дополнительные противники</h3><span>{extraOpponents.length}/3</span></div>
           <div className="training-map-actions">
@@ -456,6 +460,8 @@ export default function TrainingArena({characters}:Props) {
           <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);setTerrainMode("move");setObstacles(BLOCKED_CELLS);setCoverCells([]);setExtraOpponents([]);addLog("Поле и позиции сброшены.");}}>Сбросить поле</button>
         </div>
         <p className="training-muted">В режиме перемещения нажми свободную клетку. В режимах редактирования нажимай клетки, чтобы добавлять или убирать препятствия и укрытия. Укрытие даёт +2 к КД находящегося на нём участника.</p>
+          </div>
+        </div>
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
