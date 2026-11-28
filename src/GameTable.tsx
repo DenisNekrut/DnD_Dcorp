@@ -230,6 +230,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   }, [chatMessages.length]);
 
   useEffect(() => {
+    setUseBardicInspiration(false);
+  }, [selected?.id, selected?.bardicInspirationDie]);
+
+  useEffect(() => {
     if (!selected || !selectedWeapon) {
       setUseWeaponProficiency(false);
       return;
