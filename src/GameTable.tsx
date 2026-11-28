@@ -2178,7 +2178,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <small>Источник: {tokens.find(token => token.id === selected.turnedByTokenId)?.name ?? "не указан"}.</small>
                 <small>{selected.turnedUntilRound !== undefined ? `Осталось раундов по счётчику: ${Math.max(0, selected.turnedUntilRound - round)}.` : "Вне инициативы: Мастеру нужно отслеживать длительность до 1 минуты."}</small>
                 <small>В свой ход существо должно перемещаться как можно дальше от источника и не может добровольно приближаться к нему. Реакции запрещены. Если отступить некуда, оно использует действие Уклонение.</small>
-                <small>Перемещение на карте остаётся под контролем Мастера; это напоминание правил, а не автоматическое управление фигурой.</small>
+                <button type="button" className="secondary-button" onClick={() => {
+                  if (!selected || selected.actionUsed || !canEdit || layerLocks.figures) return;
+                  recordEditorHistory();
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true, dodging: true } : token));
+                  addLog(selected.name + " не может отступить и использует действие «Уклонение» из-за изгнания.", "gold");
+                }} disabled={!canEdit || layerLocks.figures || selected.actionUsed || selected.hp <= 0}>Отметить действие «Уклонение»</button>
+                <small>Перемещение на карте остаётся под контролем Мастера; кнопку Уклонения используй, если отступить действительно некуда.</small>
               </div>}
               {selected.isUndead && <label>Показатель опасности (ПО)<input type="number" min="0" max="30" step="0.125" value={selected.challengeRating ?? ""} onChange={event => {
                 const value = event.target.value === "" ? undefined : Math.max(0, Number(event.target.value));
