@@ -96,7 +96,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
-type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; turnedUntilRound?: number; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; turnedUntilRound?: number; turnedByTokenId?: string; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -748,7 +748,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(selected.name + ": нет доступных применений «Канала божественности».", "danger");
       return;
     }
-    const undeadTargets = tokens.filter(token => token.id !== selected.id && token.isUndead && token.hp > 0);
+    const undeadTargets = tokens.filter(token => token.id !== selected.id && token.isUndead && token.hp > 0 && !token.destroyed);
     if (!undeadTargets.length) {
       addLog("Изгнание нежити: на карте нет отмеченных противников-нежити.", "danger");
       return;
@@ -792,8 +792,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           actionUsed: true,
           classResources: (token.classResources ?? []).map(item => item.id === "auto-channel-divinity" ? { ...item, used: item.used + 1 } : item),
         };
-        if (destroyedIds.has(token.id)) return { ...token, hp: 0, destroyed: true, turned: false };
-        return failedIds.has(token.id) ? { ...token, turned: true, turnedUntilRound: round + 10 } : token;
+        if (destroyedIds.has(token.id)) return { ...token, hp: 0, destroyed: true, turned: false, turnedUntilRound: undefined, turnedByTokenId: undefined };
+        return failedIds.has(token.id) ? { ...token, turned: true, turnedUntilRound: round + 10, turnedByTokenId: selected.id, reactionUsed: true } : token;
       }));
       addLog(selected.name + " использует «Изгнание нежити» (СЛ " + dc + "). " +
         results.map(result => result.target.name + ": d20 " + result.die + " + " +
@@ -1071,6 +1071,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   const castTrackedSpell = () => {
     if (!selected || !canEdit || layerLocks.figures || !spellName.trim()) return;
+    if (spellResource === "reactionUsed" && selected.turned) {
+      addLog(selected.name + ": изгнанная нежить не может накладывать заклинания как реакцию.", "danger");
+      return;
+    }
     if ((selected.conditions ?? []).includes("incapacitated")) {
       addLog(selected.name + ": недееспособное существо не может накладывать заклинания.", "danger");
       return;
@@ -1812,7 +1816,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false, disengaging: false, dashActive: false, jumpDistanceDoubled: false } : token));
       const nextRound = round + 1;
       setRound(nextRound);
-      setTokens(items => items.map(token => token.turned && token.turnedUntilRound !== undefined && token.turnedUntilRound <= nextRound ? { ...token, turned: false, turnedUntilRound: undefined } : token));
+      setTokens(items => items.map(token => token.turned && token.turnedUntilRound !== undefined && token.turnedUntilRound <= nextRound ? { ...token, turned: false, turnedUntilRound: undefined, turnedByTokenId: undefined } : token));
       addLog(`Раунд ${nextRound}: ход ${first.name}.`, "gold");
     } else {
       const next = initiative[nextIndex];
@@ -1848,6 +1852,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   const toggleCombatResource = (resource: "actionUsed" | "bonusActionUsed" | "reactionUsed") => {
     if (!selected || !canEdit || layerLocks.figures) return;
+    if (resource === "reactionUsed" && selected.turned) {
+      addLog(selected.name + ": изгнанная нежить не может совершать реакции.", "danger");
+      return;
+    }
     if ((selected.conditions ?? []).includes("incapacitated")) {
       addLog(selected.name + " недееспособен и не может использовать действия или реакции.", "danger");
       return;
@@ -2033,7 +2041,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <div className="combat-economy-buttons">
                 <button type="button" className={selected.actionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("actionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.actionUsed ? "Действие: использовано" : "Действие: доступно"}</button>
                 <button type="button" className={selected.bonusActionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("bonusActionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.bonusActionUsed ? "Бонус: использовано" : "Бонус: доступно"}</button>
-                <button type="button" className={selected.reactionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("reactionUsed")} disabled={!canEdit || layerLocks.figures || (selected.conditions ?? []).includes("incapacitated")}>{selected.reactionUsed ? "Реакция: использована" : "Реакция: доступна"}</button>
+                <button type="button" className={selected.reactionUsed ? "resource-used" : ""} onClick={() => toggleCombatResource("reactionUsed")} disabled={!canEdit || layerLocks.figures || selected.turned || (selected.conditions ?? []).includes("incapacitated")}>{selected.turned ? "Реакция: запрещена (изгнание)" : selected.reactionUsed ? "Реакция: использована" : "Реакция: доступна"}</button>
               </div>
             </div>
             <div className="combat-economy">
