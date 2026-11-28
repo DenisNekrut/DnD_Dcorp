@@ -361,7 +361,6 @@ export default function TrainingArena({characters}:Props) {
     setLog(current=>[...events,"Ход противников завершён.",...current].slice(0,12));
   };
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
-  if(!hero) return <section className="training-page"><div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Проверь способности героев в безопасной тренировочной сцене.</p></div></div><div className="training-empty"><Swords size={32}/><h2>Пока нет персонажей</h2><p>Создай героя в разделе «Персонажи», и он появится здесь для тренировок.</p></div></section>;
   return <section className="training-page">
     <div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Выбери героя, испытание и проверь его возможности. Результаты не меняют лист персонажа.</p></div></div>
     <div className="training-layout">
@@ -372,7 +371,7 @@ export default function TrainingArena({characters}:Props) {
           <label className="training-field">Класс героя<select value={trainingClass} onChange={event=>setTrainingClass(event.target.value)}>{TRAINING_CLASSES.map(name=><option key={name} value={name}>{name}</option>)}</select></label>
           <label className="training-field">Уровень героя<input type="number" min="1" max="20" value={trainingLevel} onChange={event=>setTrainingLevel(Math.max(1,Math.min(20,Number(event.target.value)||1)))}/></label>
           <div className="training-template-abilities"><strong>Характеристики тренировочного героя</strong><div>{TRAINING_HEROES.map(key=><label key={key}>{abilityList.find(item=>item.id===key)?.name}<input type="number" min="1" max="30" value={trainingScores[key]} onChange={event=>setTrainingScores(current=>({...current,[key]:Math.max(1,Math.min(30,Number(event.target.value)||1))}))}/></label>)}</div><small>Профиль временный: он не создаёт персонажа и не сохраняется в коллекции.</small></div>
-        </>}</>
+        </>}
         <div className="training-hero-stats"><div><span>Уровень</span><strong>{hero.level}</strong></div><div><span>Класс защиты</span><strong>{armorClass}</strong></div><div><span>Скорость</span><strong>{Number((hero.derived.speed * 0.3).toFixed(1))} м</strong></div></div>
         <div className="training-panel-title"><h2>Тип испытания</h2></div>
         <div className="training-targets">{(Object.keys(targetPresets) as TargetMode[]).map(key=><button key={key} className={target===key?"selected":""} onClick={()=>reset(key)}><b>{targetPresets[key].symbol} {targetPresets[key].name}</b><small>{key==="dummy"?"Проверка атак и урона":key==="skeleton"?"Нежить и контроль":key==="troll"?"Выносливость и высокий запас хитов":"Бой и получение урона"}</small></button>)}</div>
