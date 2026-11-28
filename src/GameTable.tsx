@@ -736,7 +736,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const currentSaves = token.deathSaves ?? { successes: 0, failures: 0 };
       const successes = currentSaves.successes >= 3 ? 0 : currentSaves.successes;
       const failures = Math.min(3, currentSaves.failures + (critical ? 2 : 1));
-      return { ...token, temporaryHp: nextTemporaryHp, deathSaves: token.kind === "hero" ? { successes, failures } : token.deathSaves };
+      return { ...token, temporaryHp: nextTemporaryHp, raging: false, deathSaves: token.kind === "hero" ? { successes, failures } : token.deathSaves };
     }
     const nextHp = Math.max(0, token.hp - remaining);
     const overflow = Math.max(0, remaining - token.hp);
@@ -745,6 +745,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       ...token,
       hp: nextHp,
       temporaryHp: nextTemporaryHp,
+      ...(nextHp === 0 ? { raging: false } : {}),
       ...(token.kind === "hero" ? { deathSaves: massiveDamage ? { successes: 0, failures: 3 } : { successes: 0, failures: 0 } } : {}),
     };
   };
@@ -1284,7 +1285,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const condition = conditionCatalog.find(item => item.id === conditionId);
     recordEditorHistory();
     setTokens(items => items.map(token => token.id === selected.id
-      ? { ...token, conditions: [...(token.conditions ?? []), conditionId] }
+      ? { ...token, conditions: [...(token.conditions ?? []), conditionId], ...(conditionId === "incapacitated" || conditionId === "unconscious" ? { raging: false } : {}) }
       : token));
     setConditionToAdd(conditionCatalog.find(item => !current.includes(item.id) && item.id !== conditionId)?.id ?? conditionId);
     addLog(`${selected.name}: состояние «${condition?.label ?? conditionId}» применено.`, "gold");
