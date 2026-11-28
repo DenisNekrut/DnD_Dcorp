@@ -53,11 +53,14 @@ const inferExplicitActionCost = (name:string):ActionCost|null => {
 const actionCostLabel:Record<ActionCost,string>={action:"Действие",bonus:"Бонусное действие",reaction:"Реакция",free:"Без расхода"};
 const normalizeActionCost=(value:unknown):ActionCost|null=>value==="action"||value==="bonus"||value==="reaction"||value==="free"?value:null;
 const readActionEntries=(value:unknown,kind:string,costMap:unknown={})=>Array.isArray(value)?value.flatMap(item=>{
-  if(typeof item==="string") return item.trim()?[{name:item.trim(),kind,actionCost:null as ActionCost|null}]:[];
+  const costs=costMap&&typeof costMap==="object"?costMap as Record<string,unknown>:{};
+  if(typeof item==="string") {
+    const name=item.trim();
+    return name?[{name,kind,actionCost:normalizeActionCost(costs[name])}]:[];
+  }
   if(!item||typeof item!=="object") return [];
   const entry=item as Record<string,unknown>;
   const name=typeof entry.name==="string"?entry.name.trim():typeof entry.title==="string"?entry.title.trim():"";
-  const costs=costMap&&typeof costMap==="object"?costMap as Record<string,unknown>:{};
   return name?[{name,kind,actionCost:normalizeActionCost(entry.actionCost)??normalizeActionCost(costs[name])}]:[];
 }):[];
 
