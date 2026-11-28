@@ -232,6 +232,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   useEffect(() => {
     setUseBardicInspiration(false);
+    setUseSneakAttack(false);
   }, [selected?.id, selected?.bardicInspirationDie]);
 
   useEffect(() => {
@@ -1242,7 +1243,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const rogueClass = (selected.className ?? "").toLocaleLowerCase();
       const isRogue = rogueClass.includes("плут") || rogueClass.includes("rogue");
       const sneakAttackTurnKey = `${round}:${activeTokenId ?? selected.id}`;
-      const allyNearTarget = tokens.some(token => token.id !== selected.id && token.id !== target.id && token.kind !== "enemy"
+      const allyNearTarget = tokens.some(token => token.id !== selected.id && token.id !== target.id && (target.kind === "enemy" ? token.kind !== "enemy" : token.kind === "enemy")
         && getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) !== null
         && (getGridDistanceFeet(token, target, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38) ?? Infinity) <= 5);
       const sneakAttackWeaponEligible = Boolean(selectedWeapon && (selectedWeapon.kind === "ranged" || selectedWeapon.properties.includes("finesse")));
