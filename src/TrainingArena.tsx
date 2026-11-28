@@ -62,7 +62,10 @@ export default function TrainingArena({characters}:Props) {
   const [customBonus,setCustomBonus] = useState("0");
   const [customDc,setCustomDc] = useState("12");
   const [round,setRound] = useState(1);
-  const [lastDamage,setLastDamage] = useState(0);\n  const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});\n  const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});\n  const [placingTarget,setPlacingTarget]=useState(false);
+  const [lastDamage,setLastDamage] = useState(0);
+  const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});
+  const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});
+  const [placingTarget,setPlacingTarget]=useState(false);
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -76,7 +79,8 @@ export default function TrainingArena({characters}:Props) {
     const preset=targetPresets[nextTarget];
     setTarget(nextTarget); setTargetHp(preset.hp); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
-    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);\n    setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false);
+    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
+    setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false);
     setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
