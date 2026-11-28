@@ -9,7 +9,13 @@ type TrainingCharacter = {
   derived: { maxHp: number; armorClass: number; speed: number };
 };
 type Props = { characters: TrainingCharacter[] };
-type TargetMode = "dummy" | "orc";
+type TargetMode = "dummy" | "orc" | "skeleton" | "troll";
+const targetPresets:Record<TargetMode,{name:string;description:string;hp:number;ac:number;attackBonus:number;damage:string;aggressive:boolean;symbol:string}> = {
+  dummy:{name:"Тренировочный манекен",description:"Неподвижная цель · не атакует",hp:9999,ac:10,attackBonus:0,damage:"1к4",aggressive:false,symbol:"◎"},
+  orc:{name:"Агрессивный орк",description:"Враждебная цель · ближний бой",hp:30,ac:13,attackBonus:5,damage:"1к8+3",aggressive:true,symbol:"⚔"},
+  skeleton:{name:"Скелет-воин",description:"Нежить · проверка контроля",hp:18,ac:13,attackBonus:4,damage:"1к6+2",aggressive:true,symbol:"☠"},
+  troll:{name:"Тролль",description:"Крупный противник · много хитов",hp:84,ac:15,attackBonus:7,damage:"2к6+4",aggressive:true,symbol:"♜"}
+};
 const abilityList = [{id:"str",name:"Сила"},{id:"dex",name:"Ловкость"},{id:"con",name:"Телосложение"},{id:"int",name:"Интеллект"},{id:"wis",name:"Мудрость"},{id:"cha",name:"Харизма"}];
 const mod = (score:number) => Math.floor(((Number.isFinite(score) ? score : 10) - 10) / 2);
 const d = (sides:number) => Math.floor(Math.random()*sides)+1;
@@ -33,14 +39,14 @@ export default function TrainingArena({characters}:Props) {
     setHeroId(String(hero.id));
     setHeroHp(Math.max(1,hero.derived.maxHp));
     setTempHp(0);
-    setTargetHp(target==="orc"?30:9999);
+    setTargetHp(targetPresets[target].hp);
     setRound(1);
     setLastDamage(0);
     setLog(["Выбран герой: "+hero.name+". Показатели тренировочной сцены сброшены."]);
   },[hero?.id]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
-  const [targetArmorClass,setTargetArmorClass] = useState(13);
+  const [targetArmorClass,setTargetArmorClass] = useState(10);\n  const [targetAttackBonus,setTargetAttackBonus] = useState(5);\n  const [targetDamageFormula,setTargetDamageFormula] = useState("1к8+3");
   const [customDamageFormula,setCustomDamageFormula] = useState("");
   const [heroHp,setHeroHp] = useState(hero?.derived.maxHp ?? 1);
   const [tempHp,setTempHp] = useState(0);
@@ -71,7 +77,7 @@ export default function TrainingArena({characters}:Props) {
     addLog(`${abilityList.find(item=>item.id===ability)?.name}: d20 (${die}) ${bonus>=0?"+":""}${bonus} = ${total} против СЛ ${dc} — ${total>=dc?"успех":"неудача"}.`);
   };
   const testAction = (name:string,kind:string) => {
-    if(!hero || heroHp<=0 || (target==="orc" && targetHp<=0)) return;
+    if(!hero || heroHp<=0 || (targetPresets[target].aggressive && targetHp<=0)) return;
     const proficiency=Math.floor((Math.max(1,Math.min(20,hero.level))-1)/4)+2;
     if(kind==="Особенность") {
       addLog("Особенность активирована для проверки: «"+name+"». Тренировочная сцена не расходует ресурсы листа персонажа.");
@@ -100,7 +106,7 @@ export default function TrainingArena({characters}:Props) {
     const absorbed=Math.min(tempHp,damage), remaining=damage-absorbed;
     setTempHp(value=>value-absorbed); setHeroHp(value=>Math.max(0,value-remaining)); setLastDamage(damage);
     setRound(value=>value+1);
-    addLog(`Орк атакует: d20 ${die} + 5 = ${total} против КД ${armorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
+    addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${armorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
   if(!hero) return <section className="training-page"><div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Проверь способности героев в безопасной тренировочной сцене.</p></div></div><div className="training-empty"><Swords size={32}/><h2>Пока нет персонажей</h2><p>Создай героя в разделе «Персонажи», и он появится здесь для тренировок.</p></div></section>;
@@ -112,16 +118,16 @@ export default function TrainingArena({characters}:Props) {
         <label className="training-field">Персонаж<select value={heroId} onChange={event=>{setHeroId(event.target.value);const next=characters.find(item=>String(item.id)===event.target.value);setHeroHp(next?.derived.maxHp??1);setTempHp(0);setLog(["Выбран новый герой. Тренировочные показатели сброшены."]);}}>{characters.map(item=><option key={item.id} value={String(item.id)}>{item.name} · {item.className} {item.level} ур.</option>)}</select></label>
         <div className="training-hero-stats"><div><span>Уровень</span><strong>{hero.level}</strong></div><div><span>Класс защиты</span><strong>{armorClass}</strong></div><div><span>Скорость</span><strong>{Number((hero.derived.speed * 0.3).toFixed(1))} м</strong></div></div>
         <div className="training-panel-title"><h2>Тип испытания</h2></div>
-        <div className="training-targets"><button className={target==="dummy"?"selected":""} onClick={()=>reset("dummy")}><Target size={19}/><b>Манекен</b><small>Проверка атак и урона</small></button><button className={target==="orc"?"selected":""} onClick={()=>reset("orc")}><Swords size={19}/><b>Агрессивный орк</b><small>Бой и получение урона</small></button></div>
+        <div className="training-targets">{(Object.keys(targetPresets) as TargetMode[]).map(key=><button key={key} className={target===key?"selected":""} onClick={()=>reset(key)}><b>{targetPresets[key].symbol} {targetPresets[key].name}</b><small>{key==="dummy"?"Проверка атак и урона":key==="skeleton"?"Нежить и контроль":key==="troll"?"Выносливость и высокий запас хитов":"Бой и получение урона"}</small></button>)}</div>
         <button className="training-reset" onClick={()=>reset()}><RotateCcw size={15}/> Сбросить тренировку</button>
       </section>
       <section className="training-panel training-combat">
         <div className="training-panel-title"><h2>Тренировочная площадка</h2><span>РАУНД {round}</span></div>
-        <div className={`training-opponent ${target}`}><div className="opponent-emblem">{target==="dummy"?"◎":"⚔"}</div><div><strong>{target==="dummy"?"Тренировочный манекен":"Агрессивный орк"}</strong><span>{target==="dummy"?"Неподвижная цель · не атакует": "Враждебная цель · КД 13 · 30 хитов"}</span></div><div className="opponent-hp"><b>{target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
+        <div className={`training-opponent ${target}`}><div className="opponent-emblem">{targetPresets[target].symbol}</div><div><strong>{targetPresets[target].name}</strong><span>{targetPresets[target].description}</span></div><div className="opponent-hp"><b>{!targetPresets[target].aggressive && target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
         <label className="training-field training-target-ac">Класс защиты цели (КД)<input type="number" min="1" max="40" value={targetArmorClass} onChange={event=>setTargetArmorClass(Math.max(1,Math.min(40,Number(event.target.value)||1)))}/></label>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
         <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
-        {target==="orc"&&<div className="training-orc-controls"><button className="training-danger" onClick={orcAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> Орк атакует героя</button><span>Атака орка: +5 к попаданию, урон 1к8+3</span></div>}
+        {targetPresets[target].aggressive&&<div className="training-orc-controls"><button className="training-danger" onClick={orcAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> Орк атакует героя</button><span>Атака орка: +5 к попаданию, урон 1к8+3</span></div>}
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
