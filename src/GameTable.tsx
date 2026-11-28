@@ -211,6 +211,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [classResourceName, setClassResourceName] = useState("");
   const [classResourceMax, setClassResourceMax] = useState(1);
   const [classResourceRecovery, setClassResourceRecovery] = useState<ClassResource["recovery"]>("short");
+  const [layOnHandsTargetId, setLayOnHandsTargetId] = useState("");
+  const [layOnHandsAmount, setLayOnHandsAmount] = useState(1);
   const dirtyRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const inFlightStateRef = useRef<TableState | null>(null);
@@ -580,11 +582,33 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if ((className.includes("монах") || className.includes("monk")) && level >= 2) {
       addAutomaticResource("auto-ki-points", "Очки ци", level, "short");
     }
+    if (className.includes("паладин") || className.includes("paladin")) {
+      addAutomaticResource("auto-lay-on-hands", "Запас возложения рук", level * 5, "long");
+    }
     classResources.push(...autoResources);
     const token: Token = { id: newId(), name: character.name, kind: "hero", classLevel: level, className, x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
     recordEditorHistory();
     setTokens(items => [...items, token]);
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
+  };
+
+  const useLayOnHands = () => {
+    if (!selected || !canEdit || layerLocks.figures || selected.actionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
+    const pool = (selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands");
+    const target = tokens.find(token => token.id === layOnHandsTargetId);
+    const amount = Math.floor(Number(layOnHandsAmount));
+    if (!pool || !target || target.kind === "enemy" || target.hp <= 0 || target.hp >= target.maxHp || !Number.isFinite(amount) || amount < 1 || amount > pool.max - pool.used || amount > target.maxHp - target.hp) {
+      addLog("Возложение рук: проверь цель и количество восстанавливаемых хитов.", "danger");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => {
+      if (token.id === selected.id) return { ...token, actionUsed: true, classResources: (token.classResources ?? []).map(resource => resource.id === "auto-lay-on-hands" ? { ...resource, used: resource.used + amount } : resource) };
+      if (token.id === target.id) return { ...token, hp: Math.min(token.maxHp, token.hp + amount) };
+      return token;
+    }));
+    addLog(selected.name + " использует Возложение рук на " + target.name + ": восстановлено " + amount + " хитов. Остаток запаса: " + (pool.max - pool.used - amount) + ".", "gold");
+    setLayOnHandsAmount(1);
   };
 
   const addClassResource = (event: React.FormEvent<HTMLFormElement>) => {
@@ -1918,6 +1942,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select></label>
                 <button type="button" className="secondary-button" onClick={grantBardicInspiration} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || !inspirationTarget || inspirationTarget.bardicInspirationDie !== undefined || ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0)}>Передать Вдохновение (бонусное действие)</button>
                 <small>Кость: d{(selected.classLevel ?? 1) >= 15 ? 12 : (selected.classLevel ?? 1) >= 10 ? 10 : (selected.classLevel ?? 1) >= 5 ? 8 : 6}. Дальность — 60 футов. Вдохновение восстанавливается после короткого отдыха с 5-го уровня барда.</small>
+              </div>}
+
+              {(selected.classResources ?? []).some(resource => resource.id === "auto-lay-on-hands") && <div className="combat-economy">
+                <div className="combat-economy-heading"><strong>Возложение рук</strong><small>Запас: {Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.max ?? 0} хитов</small></div>
+                <label>Цель<select value={layOnHandsTargetId} onChange={event => setLayOnHandsTargetId(event.target.value)} disabled={!canEdit || layerLocks.figures || selected.actionUsed}>
+                  <option value="">Выбери союзника</option>
+                  {tokens.filter(token => token.kind !== "enemy" && token.hp > 0 && token.hp < token.maxHp).map(token => <option key={token.id} value={token.id}>{token.name} · {token.hp}/{token.maxHp} хитов</option>)}
+                </select></label>
+                <label>Восстановить хитов<input type="number" min="1" max={Math.max(1, Math.min(((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.used ?? 0), (tokens.find(token => token.id === layOnHandsTargetId)?.maxHp ?? 0) - (tokens.find(token => token.id === layOnHandsTargetId)?.hp ?? 0)))} value={layOnHandsAmount} onChange={event => setLayOnHandsAmount(Math.max(1, Number(event.target.value) || 1))} disabled={!canEdit || layerLocks.figures || selected.actionUsed || !layOnHandsTargetId}/></label>
+                <button type="button" onClick={useLayOnHands} disabled={!canEdit || layerLocks.figures || selected.actionUsed || !layOnHandsTargetId}>Применить Возложение рук (действие)</button>
+                <small>Паладин восстанавливает выбранное количество хитов из запаса 5 × уровень. Запас полностью восстанавливается после длительного отдыха.</small>
               </div>}
 
               {(selected.classResources ?? []).some(resource => resource.id === "auto-ki-points") && <div className="combat-economy">
