@@ -1821,7 +1821,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     } else {
       const next = initiative[nextIndex];
       setActiveTokenId(next.id);
-      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false } : token));
+      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false, dashActive: false } : token));
       addLog(`Ход переходит к ${next.name}.`, "gold");
     }
   };
@@ -2194,7 +2194,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <button type="button" className="secondary-button" onClick={() => {
                   if (!selected || selected.actionUsed || !canEdit || layerLocks.figures) return;
                   recordEditorHistory();
-                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true, dodging: false } : token));
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true, dodging: false, dashActive: true } : token));
                   addLog(selected.name + " использует действие «Рывок» из-за изгнания и пытается удалиться от источника.", "gold");
                 }} disabled={!canEdit || layerLocks.figures || selected.actionUsed || selected.hp <= 0}>Отметить действие «Рывок»</button>
                 <button type="button" className="secondary-button" onClick={() => {
