@@ -300,9 +300,11 @@ export default function TrainingArena({characters}:Props) {
     while(queue.length){
       const [point,steps]=queue.shift()!;
       if(gridKey(point)===gridKey(destination)){pathLength=steps;break;}
-      for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}]){
-        const key=gridKey(next);
-        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||obstacles.includes(key)||key===gridKey(targetPosition)||extraOpponents.some(enemy=>gridKey(enemy.position)===key)) continue;
+      for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1},{x:point.x+1,y:point.y+1},{x:point.x+1,y:point.y-1},{x:point.x-1,y:point.y+1},{x:point.x-1,y:point.y-1}]){
+        const key=gridKey(next),dx=next.x-point.x,dy=next.y-point.y;
+        const blocked=(cell:GridPoint)=>obstacles.includes(gridKey(cell))||gridKey(cell)===gridKey(targetPosition)||extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(cell));
+        const cutsBlockedCorner=dx!==0&&dy!==0&&(blocked({x:point.x+dx,y:point.y})||blocked({x:point.x,y:point.y+dy}));
+        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||blocked(next)||cutsBlockedCorner) continue;
         visited.add(key);queue.push([next,steps+1]);
       }
     }
@@ -371,7 +373,11 @@ export default function TrainingArena({characters}:Props) {
     if(!actors.length){setMovementUsedMeters(0);setActionUsed(false);setBonusActionUsed(false);setReactionUsed(false);setRound(value=>value+1);addLog("Раунд завершён: запас движения и действия героя восстановлены. На поле нет активных противников.");return;}
     let currentHeroHp=heroHp,currentTempHp=tempHp;
     let nextTargetPosition=targetPosition;
-    const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}].filter(p=>p.x>=0&&p.x<GRID_COLS&&p.y>=0&&p.y<GRID_ROWS);
+    const neighbors=(point:GridPoint,occupied:Set<string>):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1},{x:point.x+1,y:point.y+1},{x:point.x+1,y:point.y-1},{x:point.x-1,y:point.y+1},{x:point.x-1,y:point.y-1}].filter(next=>{
+      if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS)return false;
+      const dx=next.x-point.x,dy=next.y-point.y;
+      return !(dx!==0&&dy!==0&&(occupied.has(gridKey({x:point.x+dx,y:point.y}))||occupied.has(gridKey({x:point.x,y:point.y+dy}))));
+    });
     for(const actor of actors){
       if(currentHeroHp<=0) break;
       const livePosition=actor.primary?nextTargetPosition:nextExtras.find(enemy=>enemy.id===actor.extraId)?.position??actor.position;
@@ -387,7 +393,7 @@ export default function TrainingArena({characters}:Props) {
         const current=queue.shift()!;
         if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length>0){path=current.path;break;}
         if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length===0){path=[];break;}
-        for(const next of neighbors(current.point)){
+        for(const next of neighbors(current.point,occupied)){
           const key=gridKey(next);
           if(visited.has(key)||occupied.has(key))continue;
           visited.add(key);queue.push({point:next,path:[...current.path,next]});
