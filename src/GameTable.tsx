@@ -814,10 +814,42 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       ...token,
       [spellResource]: true,
       ...(spellLevel > 0 && castingWithPact ? { pactMagic: { ...pact!, used: pact!.used + 1 } } : spellLevel > 0 ? { spellSlots: { ...(token.spellSlots ?? {}), [spellLevel]: { ...slot, used: slot.used + 1 } } } : {}),
-      ...(spellConcentration ? { concentrating: true, concentrationSpell: spellName.trim().toLocaleLowerCase() } : {}),
+      ...(spellConcentration ? { concentrating: true, concentrationSpell: spellName.trim().toLocaleLowerCase(), huntersMarkTargetId: spellName.trim().toLocaleLowerCase() === "hunter's mark" ? token.huntersMarkTargetId : undefined } : {}),
     } : token));
     addLog(selected.name + " накладывает «" + spellName.trim() + "» (" + (spellLevel === 0 ? "заговор" : spellLevel + "-й уровень") + "). Потрачено: " + resourceLabel + (spellLevel > 0 ? castingWithPact ? " и ячейка магии договора (" + pact!.level + "-й уровень)" : " и ячейка " + spellLevel + "-го уровня" : "") + (spellConcentration ? "; начата концентрация" : "") + ".", "gold");
     setSpellName("");
+  };
+
+  const castHuntersMark = () => {
+    if (!selected || !canEdit || layerLocks.figures) return;
+    const className = (selected.className ?? "").toLocaleLowerCase();
+    if (!className.includes("следопыт") && !className.includes("ranger")) {
+      addLog("Метка охотника доступна только следопыту.", "danger");
+      return;
+    }
+    if ((selected.conditions ?? []).includes("incapacitated") || selected.bonusActionUsed) {
+      addLog(selected.name + ": нельзя применить Метку охотника — бонусное действие уже потрачено или персонаж недееспособен.", "danger");
+      return;
+    }
+    if (!attackTarget || attackTarget.id === selected.id) {
+      addLog("Выбери цель для Метки охотника.", "danger");
+      return;
+    }
+    const slot = selected.spellSlots?.[1] ?? { max: 0, used: 0 };
+    if (slot.max <= slot.used) {
+      addLog(selected.name + ": нет доступной ячейки 1-го уровня для Метки охотника.", "danger");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id === selected.id ? {
+      ...token,
+      bonusActionUsed: true,
+      concentrating: true,
+      concentrationSpell: "hunter's mark",
+      huntersMarkTargetId: attackTarget.id,
+      spellSlots: { ...(token.spellSlots ?? {}), 1: { ...slot, used: slot.used + 1 } },
+    } : token));
+    addLog(selected.name + " накладывает «Метка охотника» на " + attackTarget.name + ": потрачены бонусное действие и ячейка 1-го уровня; начата концентрация.", "gold");
   };
 
   const recoverSpellSlotsAfterLongRest = () => {
@@ -1804,6 +1836,12 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <option value="actionUsed">Действие</option><option value="bonusActionUsed">Бонусное действие</option><option value="reactionUsed">Реакция</option>
                 </select></label>
               </div>
+              {(selected.className ?? "").toLocaleLowerCase().match(/следопыт|ranger/) && <div className="spell-slot-row">
+                <strong>Метка охотника</strong>
+                <span>{selected.concentrationSpell === "hunter's mark" && selected.huntersMarkTargetId ? "Цель: " + (tokens.find(token => token.id === selected.huntersMarkTargetId)?.name ?? "цель не найдена") : "Не активна"}</span>
+                <button type="button" className="secondary-button" onClick={castHuntersMark} disabled={!canEdit || layerLocks.figures || diceBusy || selected.bonusActionUsed || !attackTarget || (selected.spellSlots?.[1]?.max ?? 0) <= (selected.spellSlots?.[1]?.used ?? 0)}>Наложить на выбранную цель (бонусное действие, ячейка 1-го уровня)</button>
+                <small>При попадании оружием по отмеченной цели добавляется 1d6 урона; при критическом попадании — 2d6. Требуется концентрация.</small>
+              </div>}
               <div className="spell-slot-overview">
                 <strong>Ячейки заклинаний</strong>
                 {Array.from({length:9},(_,index)=>index+1).map(level=>{
