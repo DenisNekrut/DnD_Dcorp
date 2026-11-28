@@ -421,8 +421,9 @@ export default function TrainingArena({characters}:Props) {
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
   return <section className="training-page">
     <div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Выбери героя, испытание и проверь его возможности. Результаты не меняют лист персонажа.</p></div></div>
-    <div className="training-layout">
-      <section className="training-panel training-controls">
+    <section className="training-panel training-command-panel">
+      <div className="training-command-grid">
+      <section className="training-command-section training-controls">
         <div className="training-panel-title"><h2>Участник тренировки</h2><span>ГЕРОЙ</span></div>
         <label className="training-field">Источник героя<select value={heroSource} onChange={event=>{setHeroSource(event.target.value as "saved"|"template");if(event.target.value==="template")setHeroId("template");else if(characters[0])setHeroId(String(characters[0].id));}}><option value="template">Каталог классов — создать героя для теста</option><option value="saved" disabled={!characters.length}>Мои созданные персонажи</option></select></label>
         {heroSource==="saved"?<label className="training-field">Персонаж<select value={heroId} onChange={event=>{setHeroId(event.target.value);const next=characters.find(item=>String(item.id)===event.target.value);if(next){setHeroHp(next.derived.maxHp);setTempHp(0);setLog(["Выбран персонаж: "+next.name+"."]);}}}>{characters.map(item=><option key={item.id} value={String(item.id)}>{item.name} · {item.className} {item.level} ур.</option>)}</select></label>:<>
@@ -435,7 +436,7 @@ export default function TrainingArena({characters}:Props) {
         <div className="training-targets">{(Object.keys(targetPresets) as TargetMode[]).map(key=><button key={key} className={target===key?"selected":""} onClick={()=>reset(key)}><b>{targetPresets[key].symbol} {targetPresets[key].name}</b><small>{key==="dummy"?"Проверка атак и урона":key==="skeleton"?"Нежить и контроль":key==="troll"?"Выносливость и высокий запас хитов":"Бой и получение урона"}</small></button>)}</div>
         <button className="training-reset" onClick={()=>reset()}><RotateCcw size={15}/> Сбросить тренировку</button>
       </section>
-      <section className="training-panel training-combat">
+      <section className="training-command-section training-combat">
         <div className="training-panel-title"><h2>Тренировочная площадка</h2><span>РАУНД {round}</span></div>
         <div className={`training-opponent ${target}`}><div className="opponent-emblem">{targetPresets[target].symbol}</div><div><strong>{targetPresets[target].name}</strong><span>{targetPresets[target].description}</span></div><div className="opponent-hp"><b>{!targetPresets[target].aggressive && target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
         {target==="troll"&&<p className="training-muted">Регенерация: до 10 хитов в начале хода противников. Кислота или огонь подавляют её до следующего хода.</p>}
@@ -454,6 +455,23 @@ export default function TrainingArena({characters}:Props) {
           <button className="training-danger" onClick={opponentAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> {targetPresets[target].name} атакует героя</button>
         </div>}
       </section>
+      <section className="training-command-section training-tools">
+        <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
+        <label className="training-field">Тип броска<select value={rollType} onChange={event=>setRollType(event.target.value as "check"|"save")}><option value="check">Проверка характеристики</option><option value="save">Спасбросок</option></select></label>
+        <label className="training-field">Характеристика<select value={ability} onChange={event=>setAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name} ({mod(Number(hero.abilityScores[item.id]??10))>=0?"+":""}{mod(Number(hero.abilityScores[item.id]??10))})</option>)}</select></label>
+        <label className="training-field">Сложность проверки (СЛ)<input type="number" min="1" max="40" value={customDc} onChange={event=>setCustomDc(event.target.value)}/></label>
+        <button className="training-primary" onClick={rollAbility}>Бросить проверку</button>
+        <div className="training-separator"/>
+        <label className="training-field">Формула тестового урона (например, 2к6+3)<input type="text" value={customDamageFormula} onChange={event=>setCustomDamageFormula(event.target.value)} placeholder="Пусто — без урона заклинанием"/></label>
+        <p className="training-muted">Для обычной атаки без формулы используется тестовый профиль 1к8 + модификатор Силы. Для заклинания урон применяется только после ввода формулы.</p>
+        <div className="training-separator"/>
+        <label className="training-field">Временные хиты для теста<input type="number" min="0" max="500" value={customBonus} onChange={event=>setCustomBonus(event.target.value)}/></label>
+        <button className="training-secondary" onClick={useTempHp}>Применить временные хиты</button>
+        {lastDamage>0&&<p className="training-muted">Последний входящий урон: {lastDamage}</p>}
+      </section>
+      </div>
+    <div className="training-log"><div className="training-panel-title"><h2>Журнал тренировки</h2><span>{log.length} записей</span></div><ol>{log.map((line,index)=><li key={index}>{line}</li>)}</ol></div>
+    </section>
       <section className="training-panel training-tactical">
         <div className="training-panel-title"><h2>Тактическое поле</h2><span>КЛЕТКА 1,5 М</span></div>
         <div className="training-tactical-body">
@@ -522,22 +540,6 @@ export default function TrainingArena({characters}:Props) {
           </div>
         </div>
       </section>
-      <section className="training-panel training-tools">
-        <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
-        <label className="training-field">Тип броска<select value={rollType} onChange={event=>setRollType(event.target.value as "check"|"save")}><option value="check">Проверка характеристики</option><option value="save">Спасбросок</option></select></label>
-        <label className="training-field">Характеристика<select value={ability} onChange={event=>setAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name} ({mod(Number(hero.abilityScores[item.id]??10))>=0?"+":""}{mod(Number(hero.abilityScores[item.id]??10))})</option>)}</select></label>
-        <label className="training-field">Сложность проверки (СЛ)<input type="number" min="1" max="40" value={customDc} onChange={event=>setCustomDc(event.target.value)}/></label>
-        <button className="training-primary" onClick={rollAbility}>Бросить проверку</button>
-        <div className="training-separator"/>
-        <label className="training-field">Формула тестового урона (например, 2к6+3)<input type="text" value={customDamageFormula} onChange={event=>setCustomDamageFormula(event.target.value)} placeholder="Пусто — без урона заклинанием"/></label>
-        <p className="training-muted">Для обычной атаки без формулы используется тестовый профиль 1к8 + модификатор Силы. Для заклинания урон применяется только после ввода формулы.</p>
-        <div className="training-separator"/>
-        <label className="training-field">Временные хиты для теста<input type="number" min="0" max="500" value={customBonus} onChange={event=>setCustomBonus(event.target.value)}/></label>
-        <button className="training-secondary" onClick={useTempHp}>Применить временные хиты</button>
-        {lastDamage>0&&<p className="training-muted">Последний входящий урон: {lastDamage}</p>}
-      </section>
-    </div>
-    <section className="training-panel training-log"><div className="training-panel-title"><h2>Журнал тренировки</h2><span>{log.length} записей</span></div><ol>{log.map((line,index)=><li key={index}>{line}</li>)}</ol></section>
     <p className="training-footnote"><Shield size={14}/> Тренировочные хиты, временные хиты и результаты бросков изолированы от настоящего листа персонажа.</p>
   </section>;
 }

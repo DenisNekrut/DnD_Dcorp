@@ -99,3 +99,26 @@
   .training-log{grid-column:1/-1;grid-row:auto}
   .training-tactical{grid-column:1/-1;grid-row:auto}
 }
+
+
+/* Unified training controls above the tactical battlefield */
+.training-command-panel{display:flex;flex-direction:column;gap:0;padding:16px}
+.training-command-grid{display:grid;grid-template-columns:minmax(250px,.9fr) minmax(340px,1.25fr) minmax(250px,.9fr);gap:16px;align-items:start}
+.training-command-section{min-width:0;padding:14px;border:1px solid #514333;border-radius:11px;background:linear-gradient(145deg,#26211c,#1d1a16)}
+.training-command-section .training-panel-title{margin-bottom:12px}
+.training-command-section .training-hero-stats{margin:12px 0 16px}
+.training-command-section .training-targets{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.training-command-section .training-targets button{padding:9px;font-size:11px}
+.training-command-section .training-targets button b{font-size:11px}
+.training-command-section .training-targets button small{font-size:10px}
+.training-command-section .training-field{margin:9px 0}
+.training-command-section .training-template-abilities{margin:10px 0;padding:10px}
+.training-command-section .training-hero-stats strong{font-size:15px}
+.training-command-section .training-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.training-command-section .training-orc-controls{align-items:stretch}
+.training-command-section .training-orc-controls .training-opponent-settings{flex:1 1 100%}
+.training-command-panel>.training-log{margin-top:14px;padding-top:13px;border-top:1px solid #514333}
+.training-command-panel>.training-log ol{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 22px;max-height:190px;overflow:auto;padding-right:6px}
+.training-command-panel>.training-log li{font-size:11px}
+@media(max-width:1180px){.training-command-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.training-command-section.training-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.training-command-section.training-tools>.training-panel-title{grid-column:1/-1}.training-command-section.training-tools .training-separator{display:none}}
+@media(max-width:700px){.training-command-panel{padding:10px}.training-command-grid{grid-template-columns:1fr;gap:10px}.training-command-section.training-tools{grid-column:auto;display:block}.training-command-section.training-tools .training-separator{display:block}.training-command-panel>.training-log ol{grid-template-columns:1fr;max-height:220px}.training-command-section .training-targets{grid-template-columns:repeat(2,minmax(0,1fr))}}
