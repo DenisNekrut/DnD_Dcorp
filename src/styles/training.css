@@ -760,3 +760,32 @@
     transition: none !important;
   }
 }
+
+
+/* Motion pass 2: make newly added combat log entries easy to follow */
+.training-log ol > li {
+  transform-origin: left center;
+}
+
+.training-log ol > li:last-child {
+  animation: training-log-entry .28s ease-out both;
+}
+
+@keyframes training-log-entry {
+  0% {
+    opacity: 0;
+    transform: translateY(7px);
+    background-color: rgb(214 174 104 / 16%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-log ol > li:last-child {
+    animation: none !important;
+  }
+}
