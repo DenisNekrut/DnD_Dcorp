@@ -878,7 +878,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
 
   const useSecondWind = async () => {
-    if (!selected || !canEdit || layerLocks.figures || diceBusy || selected.hp <= 0 || selected.hp >= selected.maxHp) return;
+    if (!selected || !canEdit || layerLocks.figures || diceBusy || selected.bonusActionUsed || selected.hp <= 0 || selected.hp >= selected.maxHp) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-second-wind");
     if (!resource || resource.used >= resource.max) return;
     setDiceBusy(true);
@@ -899,6 +899,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       setTokens(items => items.map(token => token.id !== selected.id ? token : {
         ...token,
         hp: nextHp,
+        bonusActionUsed: true,
         classResources: (token.classResources ?? []).map(item => item.id === "auto-second-wind" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
       }));
       addLog(selected.name + ": «Второе дыхание» — d10 (" + dieRoll + ") + уровень воина (" + (selected.classLevel ?? 1) + "); восстановлено " + (nextHp - selected.hp) + " хитов. Осталось использований: " + (resource.max - resource.used - 1) + ".", "gold");
@@ -1460,7 +1461,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </div>}
             {(selected.classResources ?? []).some(resource => resource.id === "auto-second-wind") && <div className="combat-economy">
               <div className="combat-economy-heading"><strong>Второе дыхание</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0))} использований доступно</small></div>
-              <button type="button" className="secondary-button" onClick={useSecondWind} disabled={!canEdit || layerLocks.figures || diceBusy || selected.hp <= 0 || selected.hp >= selected.maxHp || ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0)}>{diceBusy ? "Бросок…" : "Использовать Второе дыхание (d10 + уровень воина)"}</button>
+              <button type="button" className="secondary-button" onClick={useSecondWind} disabled={!canEdit || layerLocks.figures || diceBusy || selected.bonusActionUsed || selected.hp <= 0 || selected.hp >= selected.maxHp || ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0)}>{diceBusy ? "Бросок…" : "Использовать Второе дыхание (d10 + уровень воина)"}</button>
               <small>Бонусное действие. После короткого отдыха на 17-м уровне и выше возвращается одно потраченное использование.</small>
             </div>}
             <div className="hp-management">
