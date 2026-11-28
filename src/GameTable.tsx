@@ -96,7 +96,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
-type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; turnedUntilRound?: number; turnedByTokenId?: string; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; wildShape?: WildShapeState; wildShapeCircleOfMoon?: boolean; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; turnedUntilRound?: number; turnedByTokenId?: string; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -692,7 +692,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
 
   const useWildShape = (beastName: "Волк" | "Гигантский козёл" | "Бурый медведь") => {
-    if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 ||
+    if (!selected || !canEdit || layerLocks.figures || (selected.wildShapeCircleOfMoon ? selected.bonusActionUsed : selected.actionUsed) || selected.hp <= 0 ||
       selected.wildShape || (selected.conditions ?? []).includes("incapacitated")) return;
     const className = (selected.className ?? "").toLocaleLowerCase();
     const level = selected.classLevel ?? 1;
@@ -719,10 +719,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       maxHp: form.hp,
       armorClass: form.ac,
       wildShape: { beastName, originalHp: token.hp, originalMaxHp: token.maxHp, originalArmorClass: token.armorClass },
-      bonusActionUsed: true,
+      ...(token.wildShapeCircleOfMoon ? { bonusActionUsed: true } : { actionUsed: true }),
       classResources: (token.classResources ?? []).map(item => item.id === "auto-wild-shape" && !item.unlimited ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
-    addLog(selected.name + " принимает облик: " + beastName + " (ПО " + form.cr + ", " + form.hp + " хитов, КД " + form.ac + "). Потрачено применение «Облика зверя» и бонусное действие.", "gold");
+    addLog(selected.name + " принимает облик: " + beastName + " (ПО " + form.cr + ", " + form.hp + " хитов, КД " + form.ac + "). Потрачено применение «Облика зверя» и "+ (selected.wildShapeCircleOfMoon ? "бонусное действие" : "действие") + ".", "gold");
   };
 
   const revertWildShape = () => {
@@ -2260,6 +2260,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
               {(selected.classResources ?? []).some(resource => resource.id === "auto-wild-shape") && <div className="combat-economy">
                 <div className="combat-economy-heading"><strong>Облик зверя</strong><small>{(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited ? "∞ применений (без ограничений)" : `${Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0))} / ${(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0} применений`}</small></div>
+                <button type="button" className="secondary-button" onClick={() => {
+                  if (!canEdit || layerLocks.figures || selected.wildShape) return;
+                  recordEditorHistory();
+                  setTokens(items => items.map(token => token.id === selected.id ? { ...token, wildShapeCircleOfMoon: !token.wildShapeCircleOfMoon } : token));
+                }} disabled={!canEdit || layerLocks.figures || !!selected.wildShape}>Круг Луны: {selected.wildShapeCircleOfMoon ? "включён (бонусное действие)" : "выключен (обычное действие)"}</button>
                 {selected.wildShape ? <>
                   <small>Текущая форма: {selected.wildShape.beastName}. Хиты формы: {selected.hp}/{selected.maxHp}; КД: {selected.armorClass ?? "—"}. При потере всех хитов друид автоматически возвращается в исходный облик, а остаток урона переносится на его обычные хиты.</small>
                   <div className="combat-economy-actions">
@@ -2279,7 +2284,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                     <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 4 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
                     <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 8 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Бурый медведь · ПО 1 · уровень 8+</button>
                   </div>
-                  <small>Превращение и добровольный возврат используют бонусное действие. Доступны только формы в пределах базового ограничения ПО; скорость, особые действия и атаки зверя пока не автоматизированы.</small>
+                  <small>Обычное превращение использует действие; для Круга Луны можно включить превращение бонусным действием. Добровольный возврат использует бонусное действие. Доступны только формы в пределах базового ограничения ПО; скорость, особые действия и атаки зверя пока не автоматизированы.</small>
                 </>}
               </div>}
 
