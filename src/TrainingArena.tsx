@@ -29,6 +29,10 @@ const rollDamageFormula = (formula:string, fallbackModifier=0):number|null => {
   for(let i=0;i<count;i++) total+=d(sides);
   return Math.max(0,total);
 };
+const GRID_COLS=9, GRID_ROWS=7, CELL_METERS=1.5;
+const BLOCKED_CELLS=["3,1","3,2","3,3","5,4","6,4","7,4"];
+type GridPoint={x:number;y:number};
+const gridKey=(point:GridPoint)=>`${point.x},${point.y}`;
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
 export default function TrainingArena({characters}:Props) {
@@ -59,6 +63,9 @@ export default function TrainingArena({characters}:Props) {
   const [customDc,setCustomDc] = useState("12");
   const [round,setRound] = useState(1);
   const [lastDamage,setLastDamage] = useState(0);
+  const [heroPosition,setHeroPosition]=useState<GridPoint>({x:1,y:3});
+  const [targetPosition,setTargetPosition]=useState<GridPoint>({x:7,y:3});
+  const [placingTarget,setPlacingTarget]=useState(false);
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
@@ -73,6 +80,7 @@ export default function TrainingArena({characters}:Props) {
     setTarget(nextTarget); setTargetHp(preset.hp); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
     setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
+    setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false);
     setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
@@ -116,6 +124,34 @@ export default function TrainingArena({characters}:Props) {
     setRound(value=>value+1);
     addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${armorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
+  const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
+  const moveHeroTo=(destination:GridPoint)=>{
+    if(BLOCKED_CELLS.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition)) return;
+    const queue:[GridPoint,number][]=[[heroPosition,0]], visited=new Set([gridKey(heroPosition)]);
+    let pathLength:number|null=null;
+    while(queue.length){
+      const [point,steps]=queue.shift()!;
+      if(gridKey(point)===gridKey(destination)){pathLength=steps;break;}
+      for(const next of [{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}]){
+        const key=gridKey(next);
+        if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS||visited.has(key)||BLOCKED_CELLS.includes(key)||key===gridKey(targetPosition)) continue;
+        visited.add(key);queue.push([next,steps+1]);
+      }
+    }
+    const maxCells=Math.floor((Number(hero.derived.speed||0)*0.3)/CELL_METERS);
+    if(pathLength===null){addLog("Путь перекрыт препятствиями или занят целью.");return;}
+    if(pathLength===0)return;
+    if(pathLength>maxCells){addLog(`Недостаточно скорости: путь ${(pathLength*CELL_METERS).toFixed(1)} м, доступно ${(maxCells*CELL_METERS).toFixed(1)} м за ход.`);return;}
+    setHeroPosition(destination);setRound(value=>value+1);
+    addLog(`Герой переместился на ${(pathLength*CELL_METERS).toFixed(1)} м. Остаток скорости: ${Math.max(0,Number(hero.derived.speed||0)*0.3-pathLength*CELL_METERS).toFixed(1)} м.`);
+  };
+  const handleGridCell=(point:GridPoint)=>{
+    if(placingTarget){
+      if(BLOCKED_CELLS.includes(gridKey(point))||gridKey(point)===gridKey(heroPosition)){addLog("Нельзя разместить противника на препятствии или под героем.");return;}
+      setTargetPosition(point);setPlacingTarget(false);addLog(`Позиция цели изменена: клетка ${point.x+1}, ${point.y+1}.`);return;
+    }
+    moveHeroTo(point);
+  };
   const useTempHp = () => { const amount=Math.max(0,Number(customBonus)||0); setTempHp(amount); addLog(`Установлено ${amount} временных хитов для теста.`); };
   if(!hero) return <section className="training-page"><div className="training-heading"><div className="training-icon"><Dumbbell/></div><div><div className="eyebrow"><span/> ПОЛИГОН</div><h1>Тренировка</h1><p>Проверь способности героев в безопасной тренировочной сцене.</p></div></div><div className="training-empty"><Swords size={32}/><h2>Пока нет персонажей</h2><p>Создай героя в разделе «Персонажи», и он появится здесь для тренировок.</p></div></section>;
   return <section className="training-page">
@@ -145,6 +181,27 @@ export default function TrainingArena({characters}:Props) {
           </div>
           <button className="training-danger" onClick={opponentAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> {targetPresets[target].name} атакует героя</button>
         </div>}
+      </section>
+      <section className="training-panel training-tactical">
+        <div className="training-panel-title"><h2>Тактическое поле</h2><span>КЛЕТКА 1,5 М</span></div>
+        <div className="training-map-legend"><span><i className="legend-hero"/> Герой</span><span><i className="legend-target"/> Цель</span><span><i className="legend-block"/> Препятствие</span></div>
+        <div className="training-grid" role="grid" aria-label="Тактическое поле 9 на 7 клеток">
+          {Array.from({length:GRID_ROWS},(_,y)=>Array.from({length:GRID_COLS},(_,x)=>{
+            const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),blocked=BLOCKED_CELLS.includes(key);
+            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${blocked?", препятствие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${blocked?" blocked-cell":""}`} disabled={blocked||(isHero&&!placingTarget)} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:blocked?"▦":""}</button>;
+          }))}
+        </div>
+        <div className="training-map-controls">
+          <div><b>Герой:</b> клетка {heroPosition.x+1}, {heroPosition.y+1}</div>
+          <div><b>Цель:</b> клетка {targetPosition.x+1}, {targetPosition.y+1}</div>
+          <div><b>Расстояние:</b> {distanceInMeters(heroPosition,targetPosition).toFixed(1)} м</div>
+          <div><b>Скорость за ход:</b> {(Number(hero.derived.speed||0)*0.3).toFixed(1)} м</div>
+        </div>
+        <div className="training-map-actions">
+          <button className={placingTarget?"selected":""} onClick={()=>setPlacingTarget(value=>!value)}>{placingTarget?"Отмена размещения":"Переместить цель"}</button>
+          <button onClick={()=>{setHeroPosition({x:1,y:3});setTargetPosition({x:7,y:3});setPlacingTarget(false);addLog("Позиции на тактическом поле сброшены.");}}>Сбросить позиции</button>
+        </div>
+        <p className="training-muted">Нажми свободную клетку, чтобы переместить героя. Путь ищется с обходом препятствий; перемещение ограничено скоростью героя. Для перестановки противника включи режим «Переместить цель».</p>
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
