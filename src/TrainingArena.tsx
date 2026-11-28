@@ -233,7 +233,7 @@ export default function TrainingArena({characters}:Props) {
     setRound(value=>value+1);
     addLog(`${preset.name} атакует: d20 ${die} ${targetAttackBonus>=0?"+":""}${targetAttackBonus} = ${total} против КД ${effectiveArmorClass} — ${hit?`попадание, ${damage} урона (временные хиты поглотили ${absorbed})`:"промах"}.`);
   };
-  const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
+  const distanceInMeters=(a:GridPoint,b:GridPoint)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y))*CELL_METERS;
   const areaRadiusCells=Math.max(1,Math.min(12,Math.ceil((Number(areaSize)||0)/CELL_METERS)));
   const isInSpellArea=(point:GridPoint)=>{
     const dx=point.x-heroPosition.x,dy=point.y-heroPosition.y;
