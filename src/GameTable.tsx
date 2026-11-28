@@ -924,7 +924,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       bonusActionUsed: true,
       classResources: (token.classResources ?? []).map(item => item.id === "auto-rage" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
-    addLog(selected.name + ": начинает ярость. Сопротивление дробящему, колющему и рубящему урону; дополнительный урон рукопашными атаками Силой +" + (selected.classLevel >= 16 ? 4 : selected.classLevel >= 9 ? 3 : 2) + ".", "gold");
+    const level = selected.classLevel ?? 1;
+    addLog(selected.name + ": начинает ярость. Сопротивление дробящему, колющему и рубящему урону; дополнительный урон рукопашными атаками Силой +" + (level >= 16 ? 4 : level >= 9 ? 3 : 2) + ".", "gold");
   };
 
   const endRage = () => {
@@ -1194,8 +1195,9 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         damageRolls = Array.from({ length: damageCount }, () => Math.floor(Math.random() * parsed.sides) + 1);
         damageTotal = damageRolls.reduce((sum, value) => sum + value, 0) + parsed.modifier;
       }
+      const rageLevel = selected.classLevel ?? 1;
       const rageBonus = selected.raging && attackType === "melee" && attackAbility === "strength"
-        ? (selected.classLevel >= 16 ? 4 : selected.classLevel >= 9 ? 3 : 2)
+        ? (rageLevel >= 16 ? 4 : rageLevel >= 9 ? 3 : 2)
         : 0;
       damageTotal = Math.max(0, damageTotal + rageBonus);
       const adjustedDamage = adjustDamageForTraits(target, damageTotal, damageType);
@@ -1489,7 +1491,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             {(selected.classResources ?? []).some(resource => resource.id === "auto-rage") && <div className="combat-economy">
               <div className="combat-economy-heading"><strong>Ярость</strong><small>{selected.raging ? "Активна" : Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0)) + " использований доступно"}</small></div>
               {selected.raging ? <button type="button" className="secondary-button" onClick={endRage} disabled={!canEdit || layerLocks.figures}>Завершить ярость</button> : <button type="button" className="secondary-button" onClick={useRage} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-rage")?.max ?? 0)}>Начать ярость (бонусное действие)</button>}
-              <small>Пока ярость активна: сопротивление дробящему, колющему и рубящему урону; +2 к урону рукопашным атакам Силой (+3 с 9-го уровня, +4 с 16-го). Завершай ярость вручную по окончании её действия.</small>
+              <small>Пока ярость активна: сопротивление дробящему, колющему и рубящему урону; дополнительный урон рукопашным атакам Силой: +{(selected.classLevel ?? 1) >= 16 ? 4 : (selected.classLevel ?? 1) >= 9 ? 3 : 2}. Завершай ярость вручную по окончании её действия.</small>
             </div>}
             {(selected.classResources ?? []).some(resource => resource.id === "auto-second-wind") && <div className="combat-economy">
               <div className="combat-economy-heading"><strong>Второе дыхание</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-second-wind")?.used ?? 0))} использований доступно</small></div>
