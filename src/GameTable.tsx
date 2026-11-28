@@ -1027,6 +1027,32 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(selected.name + " вдохновляет " + inspirationTarget.name + ": передана кость d" + die + ". Она добавляется к одной проверке характеристики, атаке или спасброску по выбору получателя.", "gold");
   };
 
+  const useMonkKiTechnique = (technique: "flurry" | "patient-defense" | "step-of-wind") => {
+    if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-ki-points");
+    if (!resource || resource.used >= resource.max) {
+      addLog(selected.name + ": недостаточно очков ци.", "danger");
+      return;
+    }
+    if (technique === "flurry" && !selected.actionUsed) {
+      addLog(selected.name + ": для «Шквала ударов» сначала необходимо совершить действие «Атака».", "danger");
+      return;
+    }
+    const names = { flurry: "Шквал ударов", "patient-defense": "Терпеливая оборона", "step-of-wind": "Шаг ветра" };
+    const effects = {
+      flurry: "после действия «Атака» получает две безоружные атаки бонусным действием",
+      "patient-defense": "совершает действие «Уклонение» бонусным действием",
+      "step-of-wind": "совершает «Отход» или «Рывок» бонусным действием; дистанция прыжка удвоена до конца хода",
+    };
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id ? token : {
+      ...token,
+      bonusActionUsed: true,
+      classResources: (token.classResources ?? []).map(item => item.id === "auto-ki-points" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+    }));
+    addLog(selected.name + " использует «" + names[technique] + "»: " + effects[technique] + ". Потрачено 1 очко ци.", "gold");
+  };
+
   const useRage = () => {
     if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || selected.raging) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-rage");
@@ -1811,6 +1837,16 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 </select></label>
                 <button type="button" className="secondary-button" onClick={grantBardicInspiration} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || !inspirationTarget || inspirationTarget.bardicInspirationDie !== undefined || ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0)}>Передать Вдохновение (бонусное действие)</button>
                 <small>Кость: d{(selected.classLevel ?? 1) >= 15 ? 12 : (selected.classLevel ?? 1) >= 10 ? 10 : (selected.classLevel ?? 1) >= 5 ? 8 : 6}. Дальность — 60 футов. Вдохновение восстанавливается после короткого отдыха с 5-го уровня барда.</small>
+              </div>}
+
+              {(selected.classResources ?? []).some(resource => resource.id === "auto-ki-points") && <div className="combat-economy">
+                <div className="combat-economy-heading"><strong>Техники монаха · очки ци</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0} доступно</small></div>
+                <div className="combat-economy-actions">
+                  <button type="button" onClick={() => useMonkKiTechnique("flurry")} disabled={!canEdit || diceBusy || !selected.actionUsed || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шквал ударов</button>
+                  <button type="button" onClick={() => useMonkKiTechnique("patient-defense")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Терпеливая оборона</button>
+                  <button type="button" onClick={() => useMonkKiTechnique("step-of-wind")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра</button>
+                </div>
+                <small>Каждая техника расходует 1 очко ци и бонусное действие. Для «Шквала ударов» требуется предварительно совершить действие «Атака». Эффекты фиксируются в журнале боя; автоматическое разрешение уклонения и перемещения — следующий этап.</small>
               </div>}
 
               {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
