@@ -586,7 +586,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (className.includes("паладин") || className.includes("paladin")) {
       addAutomaticResource("auto-lay-on-hands", "Запас возложения рук", level * 5, "long");
     }
-    if (className.includes("жрец") || className.includes("cleric")) {
+    if ((className.includes("жрец") || className.includes("cleric")) && level >= 2) {
       const channelDivinityUses = level >= 18 ? 3 : level >= 6 ? 2 : 1;
       addAutomaticResource("auto-channel-divinity", "Канал божественности", channelDivinityUses, "short");
     }
@@ -749,7 +749,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       addLog(selected.name + ": нет доступных применений «Канала божественности».", "danger");
       return;
     }
-    const undeadTargets = tokens.filter(token => token.id !== selected.id && token.kind === "enemy" && token.isUndead && token.hp > 0);
+    const undeadTargets = tokens.filter(token => token.id !== selected.id && token.isUndead && token.hp > 0);
     if (!undeadTargets.length) {
       addLog("Изгнание нежити: на карте нет отмеченных противников-нежити.", "danger");
       return;
