@@ -53,8 +53,8 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
-  const [areaSizeMeters, setAreaSizeMeters] = useState(15);
-  const [lineWidthMeters, setLineWidthMeters] = useState(5);
+  const [areaSizeMeters, setAreaSizeMeters] = useState(4.5);
+  const [lineWidthMeters, setLineWidthMeters] = useState(1.5);
   const [areaPreview, setAreaPreview] = useState<AreaPreview | null>(null);
   const measurementStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -109,7 +109,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: Math.hypot(dx, dy) / rect.width * 100,
         angle: Math.atan2(dy, dx) * 180 / Math.PI,
         cells,
-        meters: Math.round(cells * 5),
+        meters: Math.round(cells * 1.5),
       });
       return;
     }
@@ -206,7 +206,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     if (measurementMode === "radius" || measurementMode === "cube") {
-      const dimensionPx = areaSizeMeters / 5 * cellSize * (measurementMode === "radius" ? 2 : 1);
+      const dimensionPx = areaSizeMeters / 1.5 * cellSize * (measurementMode === "radius" ? 2 : 1);
       setAreaPreview({
         shape: measurementMode,
         x,
@@ -220,9 +220,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     }
     if (measurementMode === "cone" || measurementMode === "line") {
       measurementStartRef.current = { x, y };
-      const lengthPx = areaSizeMeters / 5 * cellSize;
+      const lengthPx = areaSizeMeters / 1.5 * cellSize;
       const isCone = measurementMode === "cone";
-      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthMeters / 5 * cellSize;
+      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthMeters / 1.5 * cellSize;
       setAreaPreview({
         shape: measurementMode,
         x,
