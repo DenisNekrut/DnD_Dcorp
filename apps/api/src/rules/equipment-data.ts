@@ -8,7 +8,7 @@ export type WeaponRecord = {
   cost: { amount: number; currency: 'cp' | 'sp' | 'gp' };
   weightLb: number;
   properties: string[];
-  rangeFt?: { normal: number; long: number };
+  rangeM?: { normal: number; long: number };
   versatileDamage?: string;
 };
 
@@ -16,17 +16,17 @@ export const WEAPONS: WeaponRecord[] = [
   { id: 'quarterstaff', name: 'Боевой посох', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'bludgeoning', cost: { amount: 2, currency: 'sp' }, weightLb: 4, properties: ['versatile'], versatileDamage: '1d8' },
   { id: 'mace', name: 'Булава', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'bludgeoning', cost: { amount: 5, currency: 'gp' }, weightLb: 4, properties: [] },
   { id: 'club', name: 'Дубинка', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'bludgeoning', cost: { amount: 1, currency: 'sp' }, weightLb: 2, properties: ['light'] },
-  { id: 'dagger', name: 'Кинжал', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'piercing', cost: { amount: 2, currency: 'gp' }, weightLb: 1, properties: ['finesse', 'light', 'thrown'], rangeFt: { normal: 20, long: 60 } },
-  { id: 'spear', name: 'Копьё', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 1, currency: 'gp' }, weightLb: 3, properties: ['thrown', 'versatile'], rangeFt: { normal: 20, long: 60 }, versatileDamage: '1d8' },
-  { id: 'light-hammer', name: 'Лёгкий молот', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'bludgeoning', cost: { amount: 2, currency: 'gp' }, weightLb: 2, properties: ['light', 'thrown'], rangeFt: { normal: 20, long: 60 } },
-  { id: 'javelin', name: 'Метательное копьё', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 5, currency: 'sp' }, weightLb: 2, properties: ['thrown'], rangeFt: { normal: 30, long: 120 } },
+  { id: 'dagger', name: 'Кинжал', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'piercing', cost: { amount: 2, currency: 'gp' }, weightLb: 1, properties: ['finesse', 'light', 'thrown'], rangeM: { normal: 6, long: 18 } },
+  { id: 'spear', name: 'Копьё', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 1, currency: 'gp' }, weightLb: 3, properties: ['thrown', 'versatile'], rangeM: { normal: 6, long: 18 }, versatileDamage: '1d8' },
+  { id: 'light-hammer', name: 'Лёгкий молот', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'bludgeoning', cost: { amount: 2, currency: 'gp' }, weightLb: 2, properties: ['light', 'thrown'], rangeM: { normal: 6, long: 18 } },
+  { id: 'javelin', name: 'Метательное копьё', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 5, currency: 'sp' }, weightLb: 2, properties: ['thrown'], rangeM: { normal: 9, long: 36 } },
   { id: 'greatclub', name: 'Палица', category: 'simple', kind: 'melee', damage: '1d8', damageType: 'bludgeoning', cost: { amount: 2, currency: 'sp' }, weightLb: 10, properties: ['two-handed'] },
-  { id: 'handaxe', name: 'Ручной топор', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'slashing', cost: { amount: 5, currency: 'gp' }, weightLb: 2, properties: ['light', 'thrown'], rangeFt: { normal: 20, long: 60 } },
+  { id: 'handaxe', name: 'Ручной топор', category: 'simple', kind: 'melee', damage: '1d6', damageType: 'slashing', cost: { amount: 5, currency: 'gp' }, weightLb: 2, properties: ['light', 'thrown'], rangeM: { normal: 6, long: 18 } },
   { id: 'sickle', name: 'Серп', category: 'simple', kind: 'melee', damage: '1d4', damageType: 'slashing', cost: { amount: 1, currency: 'gp' }, weightLb: 2, properties: ['light'] },
-  { id: 'light-crossbow', name: 'Арбалет, лёгкий', category: 'simple', kind: 'ranged', damage: '1d8', damageType: 'piercing', cost: { amount: 25, currency: 'gp' }, weightLb: 5, properties: ['ammunition', 'two-handed', 'loading'], rangeFt: { normal: 80, long: 320 } },
-  { id: 'dart', name: 'Дротик', category: 'simple', kind: 'ranged', damage: '1d4', damageType: 'piercing', cost: { amount: 5, currency: 'cp' }, weightLb: 0.25, properties: ['finesse', 'thrown'], rangeFt: { normal: 20, long: 60 } },
-  { id: 'shortbow', name: 'Короткий лук', category: 'simple', kind: 'ranged', damage: '1d6', damageType: 'piercing', cost: { amount: 25, currency: 'gp' }, weightLb: 2, properties: ['ammunition', 'two-handed'], rangeFt: { normal: 80, long: 320 } },
-  { id: 'sling', name: 'Праща', category: 'simple', kind: 'ranged', damage: '1d4', damageType: 'bludgeoning', cost: { amount: 1, currency: 'sp' }, weightLb: 0, properties: ['ammunition'], rangeFt: { normal: 30, long: 120 } },
+  { id: 'light-crossbow', name: 'Арбалет, лёгкий', category: 'simple', kind: 'ranged', damage: '1d8', damageType: 'piercing', cost: { amount: 25, currency: 'gp' }, weightLb: 5, properties: ['ammunition', 'two-handed', 'loading'], rangeM: { normal: 24, long: 96 } },
+  { id: 'dart', name: 'Дротик', category: 'simple', kind: 'ranged', damage: '1d4', damageType: 'piercing', cost: { amount: 5, currency: 'cp' }, weightLb: 0.25, properties: ['finesse', 'thrown'], rangeM: { normal: 6, long: 18 } },
+  { id: 'shortbow', name: 'Короткий лук', category: 'simple', kind: 'ranged', damage: '1d6', damageType: 'piercing', cost: { amount: 25, currency: 'gp' }, weightLb: 2, properties: ['ammunition', 'two-handed'], rangeM: { normal: 24, long: 96 } },
+  { id: 'sling', name: 'Праща', category: 'simple', kind: 'ranged', damage: '1d4', damageType: 'bludgeoning', cost: { amount: 1, currency: 'sp' }, weightLb: 0, properties: ['ammunition'], rangeM: { normal: 9, long: 36 } },
   { id: 'halberd', name: 'Алебарда', category: 'martial', kind: 'melee', damage: '1d10', damageType: 'slashing', cost: { amount: 20, currency: 'gp' }, weightLb: 6, properties: ['heavy', 'reach', 'two-handed'] },
   { id: 'war-pick', name: 'Боевая кирка', category: 'martial', kind: 'melee', damage: '1d8', damageType: 'piercing', cost: { amount: 5, currency: 'gp' }, weightLb: 2, properties: [] },
   { id: 'warhammer', name: 'Боевой молот', category: 'martial', kind: 'melee', damage: '1d8', damageType: 'bludgeoning', cost: { amount: 15, currency: 'gp' }, weightLb: 2, properties: ['versatile'], versatileDamage: '1d10' },
@@ -43,13 +43,13 @@ export const WEAPONS: WeaponRecord[] = [
   { id: 'rapier', name: 'Рапира', category: 'martial', kind: 'melee', damage: '1d8', damageType: 'piercing', cost: { amount: 25, currency: 'gp' }, weightLb: 2, properties: ['finesse'] },
   { id: 'greataxe', name: 'Секира', category: 'martial', kind: 'melee', damage: '1d12', damageType: 'slashing', cost: { amount: 30, currency: 'gp' }, weightLb: 7, properties: ['heavy', 'two-handed'] },
   { id: 'scimitar', name: 'Скимитар', category: 'martial', kind: 'melee', damage: '1d6', damageType: 'slashing', cost: { amount: 25, currency: 'gp' }, weightLb: 3, properties: ['finesse', 'light'] },
-  { id: 'trident', name: 'Трезубец', category: 'martial', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 5, currency: 'gp' }, weightLb: 4, properties: ['thrown', 'versatile'], rangeFt: { normal: 20, long: 60 }, versatileDamage: '1d8' },
+  { id: 'trident', name: 'Трезубец', category: 'martial', kind: 'melee', damage: '1d6', damageType: 'piercing', cost: { amount: 5, currency: 'gp' }, weightLb: 4, properties: ['thrown', 'versatile'], rangeM: { normal: 6, long: 18 }, versatileDamage: '1d8' },
   { id: 'flail', name: 'Цеп', category: 'martial', kind: 'melee', damage: '1d8', damageType: 'bludgeoning', cost: { amount: 10, currency: 'gp' }, weightLb: 2, properties: [] },
-  { id: 'hand-crossbow', name: 'Арбалет, ручной', category: 'martial', kind: 'ranged', damage: '1d6', damageType: 'piercing', cost: { amount: 75, currency: 'gp' }, weightLb: 3, properties: ['ammunition', 'light', 'loading'], rangeFt: { normal: 30, long: 120 } },
-  { id: 'heavy-crossbow', name: 'Арбалет, тяжёлый', category: 'martial', kind: 'ranged', damage: '1d10', damageType: 'piercing', cost: { amount: 50, currency: 'gp' }, weightLb: 18, properties: ['ammunition', 'heavy', 'two-handed', 'loading'], rangeFt: { normal: 100, long: 400 } },
-  { id: 'longbow', name: 'Длинный лук', category: 'martial', kind: 'ranged', damage: '1d8', damageType: 'piercing', cost: { amount: 50, currency: 'gp' }, weightLb: 2, properties: ['ammunition', 'heavy', 'two-handed'], rangeFt: { normal: 150, long: 600 } },
-  { id: 'blowgun', name: 'Духовая трубка', category: 'martial', kind: 'ranged', damage: '1', damageType: 'piercing', cost: { amount: 10, currency: 'gp' }, weightLb: 1, properties: ['ammunition', 'loading'], rangeFt: { normal: 25, long: 100 } },
-  { id: 'net', name: 'Сеть', category: 'martial', kind: 'ranged', damage: null, damageType: null, cost: { amount: 1, currency: 'gp' }, weightLb: 3, properties: ['special', 'thrown'], rangeFt: { normal: 5, long: 15 } },
+  { id: 'hand-crossbow', name: 'Арбалет, ручной', category: 'martial', kind: 'ranged', damage: '1d6', damageType: 'piercing', cost: { amount: 75, currency: 'gp' }, weightLb: 3, properties: ['ammunition', 'light', 'loading'], rangeM: { normal: 9, long: 36 } },
+  { id: 'heavy-crossbow', name: 'Арбалет, тяжёлый', category: 'martial', kind: 'ranged', damage: '1d10', damageType: 'piercing', cost: { amount: 50, currency: 'gp' }, weightLb: 18, properties: ['ammunition', 'heavy', 'two-handed', 'loading'], rangeM: { normal: 30, long: 120 } },
+  { id: 'longbow', name: 'Длинный лук', category: 'martial', kind: 'ranged', damage: '1d8', damageType: 'piercing', cost: { amount: 50, currency: 'gp' }, weightLb: 2, properties: ['ammunition', 'heavy', 'two-handed'], rangeM: { normal: 45, long: 180 } },
+  { id: 'blowgun', name: 'Духовая трубка', category: 'martial', kind: 'ranged', damage: '1', damageType: 'piercing', cost: { amount: 10, currency: 'gp' }, weightLb: 1, properties: ['ammunition', 'loading'], rangeM: { normal: 7.5, long: 30 } },
+  { id: 'net', name: 'Сеть', category: 'martial', kind: 'ranged', damage: null, damageType: null, cost: { amount: 1, currency: 'gp' }, weightLb: 3, properties: ['special', 'thrown'], rangeM: { normal: 1.5, long: 4.5 } },
 ];
 
 export const ARMOR = [
@@ -71,8 +71,8 @@ export const ARMOR = [
 export const ADVENTURING_GEAR = [
   { id: 'backpack', name: 'Рюкзак', cost: { amount: 2, currency: 'gp' }, weightLb: 5, category: 'container' },
   { id: 'bedroll', name: 'Спальный мешок', cost: { amount: 1, currency: 'gp' }, weightLb: 7, category: 'camping' },
-  { id: 'rope-hempen-50', name: 'Пеньковая верёвка (50 футов)', cost: { amount: 1, currency: 'gp' }, weightLb: 10, category: 'utility' },
-  { id: 'rope-silk-50', name: 'Шёлковая верёвка (50 футов)', cost: { amount: 10, currency: 'gp' }, weightLb: 5, category: 'utility' },
+  { id: 'rope-hempen-50', name: 'Пеньковая верёвка (15 м)', cost: { amount: 1, currency: 'gp' }, weightLb: 10, category: 'utility' },
+  { id: 'rope-silk-50', name: 'Шёлковая верёвка (15 м)', cost: { amount: 10, currency: 'gp' }, weightLb: 5, category: 'utility' },
   { id: 'torch', name: 'Факел', cost: { amount: 1, currency: 'cp' }, weightLb: 1, category: 'light' },
   { id: 'waterskin', name: 'Бурдюк', cost: { amount: 2, currency: 'sp' }, weightLb: 5, category: 'container' },
   { id: 'rations-day', name: 'Рацион (1 день)', cost: { amount: 5, currency: 'sp' }, weightLb: 2, category: 'food' },

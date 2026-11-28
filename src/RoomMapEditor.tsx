@@ -10,9 +10,9 @@ export const defaultLayerLocks: LayerLocks = { background: false, terrain: false
 
 export type TerrainZoneType = "difficult" | "water" | "fire" | "fog" | "hazard";
 type DrawingMode = "zone" | "wall" | "room" | null;
-type Measurement = { x: number; y: number; width: number; angle: number; feet: number; cells: number };
+type Measurement = { x: number; y: number; width: number; angle: number; meters: number; cells: number };
 type MeasurementMode = "distance" | "radius" | "cube" | "cone" | "line" | null;
-type AreaPreview = { shape: "radius" | "cube" | "cone" | "line"; x: number; y: number; width: number; height: number; angle: number; feet: number; widthFeet?: number };
+type AreaPreview = { shape: "radius" | "cube" | "cone" | "line"; x: number; y: number; width: number; height: number; angle: number; meters: number; widthMeters?: number };
 export type MapObject = {
   id: string;
   kind: "wall" | "door" | "obstacle" | "decoration" | "zone" | "room";
@@ -53,8 +53,8 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
   const [measurementMode, setMeasurementMode] = useState<MeasurementMode>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
-  const [areaSizeFeet, setAreaSizeFeet] = useState(15);
-  const [lineWidthFeet, setLineWidthFeet] = useState(5);
+  const [areaSizeMeters, setAreaSizeMeters] = useState(4.5);
+  const [lineWidthMeters, setLineWidthMeters] = useState(1.5);
   const [areaPreview, setAreaPreview] = useState<AreaPreview | null>(null);
   const measurementStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -109,7 +109,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: Math.hypot(dx, dy) / rect.width * 100,
         angle: Math.atan2(dy, dx) * 180 / Math.PI,
         cells,
-        feet: Math.round(cells * 5),
+        meters: Math.round(cells * 1.5),
       });
       return;
     }
@@ -122,9 +122,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
       const endY = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawEndY / cellSize) * cellSize : rawEndY) / rect.height * 100));
       const dx = (endX - start.x) * rect.width / 100;
       const dy = (endY - start.y) * rect.height / 100;
-      const lengthPx = areaSizeFeet / 5 * cellSize;
+      const lengthPx = areaSizeMeters / 1.5 * cellSize;
       const isCone = measurementMode === "cone";
-      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthFeet / 5 * cellSize;
+      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthMeters / 1.5 * cellSize;
       setAreaPreview({
         shape: measurementMode,
         x: start.x,
@@ -132,8 +132,8 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: lengthPx / rect.width * 100,
         height: heightPx / rect.height * 100,
         angle: Math.atan2(dy, dx) * 180 / Math.PI,
-        feet: areaSizeFeet,
-        ...(isCone ? {} : { widthFeet: lineWidthFeet }),
+        meters: areaSizeMeters,
+        ...(isCone ? {} : { widthMeters: lineWidthMeters }),
       });
       return;
     }
@@ -206,7 +206,7 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
     const x = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawX / cellSize) * cellSize : rawX) / rect.width * 100));
     const y = Math.max(0, Math.min(100, (snapToGrid ? Math.round(rawY / cellSize) * cellSize : rawY) / rect.height * 100));
     if (measurementMode === "radius" || measurementMode === "cube") {
-      const dimensionPx = areaSizeFeet / 5 * cellSize * (measurementMode === "radius" ? 2 : 1);
+      const dimensionPx = areaSizeMeters / 1.5 * cellSize * (measurementMode === "radius" ? 2 : 1);
       setAreaPreview({
         shape: measurementMode,
         x,
@@ -214,15 +214,15 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: dimensionPx / rect.width * 100,
         height: dimensionPx / rect.height * 100,
         angle: 0,
-        feet: areaSizeFeet,
+        meters: areaSizeMeters,
       });
       return;
     }
     if (measurementMode === "cone" || measurementMode === "line") {
       measurementStartRef.current = { x, y };
-      const lengthPx = areaSizeFeet / 5 * cellSize;
+      const lengthPx = areaSizeMeters / 1.5 * cellSize;
       const isCone = measurementMode === "cone";
-      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthFeet / 5 * cellSize;
+      const heightPx = isCone ? lengthPx * 2 * Math.tan(Math.PI / 6) : lineWidthMeters / 1.5 * cellSize;
       setAreaPreview({
         shape: measurementMode,
         x,
@@ -230,15 +230,15 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: lengthPx / rect.width * 100,
         height: heightPx / rect.height * 100,
         angle: 0,
-        feet: areaSizeFeet,
-        ...(isCone ? {} : { widthFeet: lineWidthFeet }),
+        meters: areaSizeMeters,
+        ...(isCone ? {} : { widthMeters: lineWidthMeters }),
       });
       setIsMeasuring(true);
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
     measurementStartRef.current = { x, y };
-    setMeasurement({ x, y, width: 0, angle: 0, feet: 0, cells: 0 });
+    setMeasurement({ x, y, width: 0, angle: 0, meters: 0, cells: 0 });
     setIsMeasuring(true);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -283,18 +283,18 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         <button type="button" className={drawingMode === "wall" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "wall" ? null : "wall"); }}><Fence size={14}/> {drawingMode === "wall" ? "Стоп: стена" : "Рисовать стену"}</button>
         <button type="button" className={drawingMode === "room" ? "tool-active" : ""} disabled={!canEdit || layerLocks.structures || !visibleLayers.structures} onClick={() => { setMeasureTool(null); setDrawingMode(value => value === "room" ? null : "room"); }}><House size={14}/> {drawingMode === "room" ? "Стоп: комната" : "Создать комнату"}</button>
       </>}
-      <button type="button" className={measurementMode === "distance" ? "tool-active" : ""} title="Измерить расстояние по сетке: 1 клетка = 5 футов; диагональ считается за 5 футов" onClick={() => setMeasureTool(measurementMode === "distance" ? null : "distance")}><Ruler size={14}/> Линейка</button>
+      <button type="button" className={measurementMode === "distance" ? "tool-active" : ""} title="Измерить расстояние по сетке: 1 клетка = 1,5 м; диагональ считается по правилу 1,5/3 м" onClick={() => setMeasureTool(measurementMode === "distance" ? null : "distance")}><Ruler size={14}/> Линейка</button>
       <label className="radius-size-select">Размер
-        <select value={areaSizeFeet} onChange={event => { setAreaSizeFeet(Number(event.target.value)); setAreaPreview(null); }} aria-label="Размер шаблона в футах">
-          {[5, 10, 15, 20, 30, 40, 60].map(value => <option key={value} value={value}>{value} ft</option>)}
+        <select value={areaSizeMeters} onChange={event => { setAreaSizeMeters(Number(event.target.value)); setAreaPreview(null); }} aria-label="Размер шаблона в метрах">
+          {[1.5, 3, 4.5, 6, 9, 12, 18].map(value => <option key={value} value={value}>{value} м</option>)}
         </select>
       </label>
       <button type="button" className={measurementMode === "radius" ? "tool-active" : ""} title="Круглая область/сфера с выбранным радиусом" onClick={() => setMeasureTool(measurementMode === "radius" ? null : "radius")}><Circle size={14}/> Круг</button>
       <button type="button" className={measurementMode === "cube" ? "tool-active" : ""} title="Куб с выбранной длиной стороны" onClick={() => setMeasureTool(measurementMode === "cube" ? null : "cube")}><Square size={14}/> Куб</button>
       <button type="button" className={measurementMode === "cone" ? "tool-active" : ""} title="Конус 60°: нажми и протяни в направлении эффекта" onClick={() => setMeasureTool(measurementMode === "cone" ? null : "cone")}><Triangle size={14}/> Конус</button>
       <label className="radius-size-select">Ширина
-        <select value={lineWidthFeet} onChange={event => { setLineWidthFeet(Number(event.target.value)); setAreaPreview(null); }} aria-label="Ширина линейной области в футах">
-          {[5, 10, 15].map(value => <option key={value} value={value}>{value} ft</option>)}
+        <select value={lineWidthMeters} onChange={event => { setLineWidthMeters(Number(event.target.value)); setAreaPreview(null); }} aria-label="Ширина линейной области в метрах">
+          {[1.5, 3, 4.5].map(value => <option key={value} value={value}>{value} м</option>)}
         </select>
       </label>
       <button type="button" className={measurementMode === "line" ? "tool-active" : ""} title="Линейная область: нажми и протяни в направлении эффекта" onClick={() => setMeasureTool(measurementMode === "line" ? null : "line")}><Minus size={14}/> Линия</button>
@@ -331,9 +331,9 @@ export default function RoomMapEditor({ objects, onChange, canEdit, visibleLayer
         width: `${areaPreview.width}%`, height: `${areaPreview.height}%`,
         transform: areaPreview.shape === "cone" || areaPreview.shape === "line" ? `rotate(${areaPreview.angle}deg)` : "translate(-50%,-50%)",
         transformOrigin: areaPreview.shape === "cone" || areaPreview.shape === "line" ? "left center" : "center",
-      }}><span>{areaPreview.shape === "radius" ? `Радиус ${areaPreview.feet} фут.` : areaPreview.shape === "cube" ? `Куб ${areaPreview.feet} фут.` : areaPreview.shape === "cone" ? `Конус ${areaPreview.feet} фут.` : `Линия ${areaPreview.feet} × ${areaPreview.widthFeet} фут.`}</span></div>}
+      }}><span>{areaPreview.shape === "radius" ? `Радиус ${areaPreview.meters} м` : areaPreview.shape === "cube" ? `Куб ${areaPreview.meters} м` : areaPreview.shape === "cone" ? `Конус ${areaPreview.meters} м` : `Линия ${areaPreview.meters} × ${areaPreview.widthMeters} м`}</span></div>}
       {measurement && <div className="map-ruler-line" style={{ left: `${measurement.x}%`, top: `${measurement.y}%`, width: `${measurement.width}%`, transform: `rotate(${measurement.angle}deg)` }}>
-        <span>{measurement.feet} ft · {Number(measurement.cells.toFixed(1))} клетки</span>
+        <span>{measurement.meters} м · {Number(measurement.cells.toFixed(1))} клетки</span>
       </div>}
       </div>
     </div>

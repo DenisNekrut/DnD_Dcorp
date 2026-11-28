@@ -95,7 +95,7 @@ export default function TrainingArena({characters}:Props) {
       <section className="training-panel training-controls">
         <div className="training-panel-title"><h2>Участник тренировки</h2><span>ГЕРОЙ</span></div>
         <label className="training-field">Персонаж<select value={heroId} onChange={event=>{setHeroId(event.target.value);const next=characters.find(item=>String(item.id)===event.target.value);setHeroHp(next?.derived.maxHp??1);setTempHp(0);setLog(["Выбран новый герой. Тренировочные показатели сброшены."]);}}>{characters.map(item=><option key={item.id} value={String(item.id)}>{item.name} · {item.className} {item.level} ур.</option>)}</select></label>
-        <div className="training-hero-stats"><div><span>Уровень</span><strong>{hero.level}</strong></div><div><span>Класс защиты</span><strong>{armorClass}</strong></div><div><span>Скорость</span><strong>{hero.derived.speed} фт.</strong></div></div>
+        <div className="training-hero-stats"><div><span>Уровень</span><strong>{hero.level}</strong></div><div><span>Класс защиты</span><strong>{armorClass}</strong></div><div><span>Скорость</span><strong>{Number((hero.derived.speed * 0.3).toFixed(1))} м</strong></div></div>
         <div className="training-panel-title"><h2>Тип испытания</h2></div>
         <div className="training-targets"><button className={target==="dummy"?"selected":""} onClick={()=>reset("dummy")}><Target size={19}/><b>Манекен</b><small>Проверка атак и урона</small></button><button className={target==="orc"?"selected":""} onClick={()=>reset("orc")}><Swords size={19}/><b>Агрессивный орк</b><small>Бой и получение урона</small></button></div>
         <button className="training-reset" onClick={()=>reset()}><RotateCcw size={15}/> Сбросить тренировку</button>
