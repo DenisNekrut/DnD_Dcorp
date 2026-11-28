@@ -1496,7 +1496,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const first = initiative[0];
     setRound(1);
     setActiveTokenId(first.id);
-    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], sneakAttackUsedTurnKey: undefined, actionUsed: false, bonusActionUsed: false, reactionUsed: false })));
+    setTokens(items => items.map(token => ({ ...token, loadingUsedWeapons: [], sneakAttackUsedTurnKey: undefined, actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false })));
     addLog(`Инициатива сброшена. Раунд 1: ход ${first.name}.`, "gold");
   };
 
