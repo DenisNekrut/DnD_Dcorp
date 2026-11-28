@@ -539,7 +539,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const importedHitDiceTotal = Math.max(0, Math.min(20, Number(rawHitDice?.total ?? data.level ?? 1)));
     const importedHitDiceUsed = Math.max(0, Math.min(importedHitDiceTotal, Number(rawHitDice?.used ?? (rawHitDice?.remaining !== undefined ? importedHitDiceTotal - Number(rawHitDice.remaining) : 0))));
     const hitDice = { dieSides: [4,6,8,10,12,20].includes(importedDieSides) ? importedDieSides : 8, total: importedHitDiceTotal, used: importedHitDiceUsed };
-    const className = String(data.className ?? data.class ?? "").toLowerCase();
+    const className = String(data.className ?? data.characterClass ?? data.class ?? "").toLowerCase();
     const isWarlock = className.includes("колдун") || className.includes("warlock");
     const pactMagicLevel = level >= 9 ? 5 : level >= 7 ? 4 : level >= 5 ? 3 : level >= 3 ? 2 : 1;
     const pactMagicMax = level >= 17 ? 4 : level >= 11 ? 3 : level >= 2 ? 2 : 1;
