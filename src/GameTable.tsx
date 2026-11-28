@@ -96,7 +96,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
-type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; turnedUntilRound?: number; challengeRating?: number; destroyed?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -602,7 +602,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   const performWildShapeAttack = async (attackMode: "wolf-bite" | "goat-ram" | "bear-bite" | "bear-claw" | "bear-multiattack") => {
     if (!selected || !attackTarget || !selected.wildShape || !canEdit || layerLocks.figures || diceBusy ||
-      selected.actionUsed || selected.hp <= 0 || (selected.conditions ?? []).some(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition))) return;
+      selected.actionUsed || selected.hp <= 0 || selected.turned || (selected.conditions ?? []).some(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition))) return;
     const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
     if (distanceFeet !== null && distanceFeet > 5) {
       addLog("Атака звериной формы доступна только по цели в пределах 5 футов.", "danger");
@@ -793,7 +793,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
           classResources: (token.classResources ?? []).map(item => item.id === "auto-channel-divinity" ? { ...item, used: item.used + 1 } : item),
         };
         if (destroyedIds.has(token.id)) return { ...token, hp: 0, destroyed: true, turned: false };
-        return failedIds.has(token.id) ? { ...token, turned: true } : token;
+        return failedIds.has(token.id) ? { ...token, turned: true, turnedUntilRound: round + 10 } : token;
       }));
       addLog(selected.name + " использует «Изгнание нежити» (СЛ " + dc + "). " +
         results.map(result => result.target.name + ": d20 " + result.die + " + " +
@@ -1289,7 +1289,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   };
 
   const performMonkFlurry = async () => {
-    if (!selected || !attackTarget || !canEdit || layerLocks.figures || diceBusy || !selected.actionUsed || selected.bonusActionUsed || selected.hp <= 0 || (selected.conditions ?? []).includes("incapacitated")) return;
+    if (!selected || !attackTarget || !canEdit || layerLocks.figures || diceBusy || !selected.actionUsed || selected.bonusActionUsed || selected.hp <= 0 || selected.turned || (selected.conditions ?? []).includes("incapacitated")) return;
     const className = (selected.className ?? "").toLocaleLowerCase();
     if (!className.includes("монах") && !className.includes("monk")) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-ki-points");
@@ -1540,6 +1540,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
 
   const rollSelectedCheck = async () => {
     if (!selected || !canEdit || diceBusy) return;
+    if (rollKind === "attack" && selected.turned) {
+      addLog(selected.name + ": изгнанная нежить не может атаковать или совершать реакции; она должна отдаляться от источника изгнания.", "danger");
+      return;
+    }
     if (selectedRollBlocked) {
       addLog(selected.name + ": атака невозможна. " + selectedRollBlockReason, "danger");
       return;
@@ -1806,8 +1810,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const first = initiative[0];
       setActiveTokenId(first.id);
       setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false, disengaging: false, dashActive: false, jumpDistanceDoubled: false } : token));
-      setRound(value => value + 1);
-      addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
+      const nextRound = round + 1;
+      setRound(nextRound);
+      setTokens(items => items.map(token => token.turned && token.turnedUntilRound !== undefined && token.turnedUntilRound <= nextRound ? { ...token, turned: false, turnedUntilRound: undefined } : token));
+      addLog(`Раунд ${nextRound}: ход ${first.name}.`, "gold");
     } else {
       const next = initiative[nextIndex];
       setActiveTokenId(next.id);
