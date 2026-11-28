@@ -36,6 +36,7 @@ const rollDamageFormula = (formula:string, fallbackModifier=0):number|null => {
   return Math.max(0,total);
 };
 const GRID_COLS=9, GRID_ROWS=7, CELL_METERS=1.5;
+const OPPONENT_MOVEMENT_METERS=9;
 const BLOCKED_CELLS=["3,1","3,2","3,3","5,4","6,4","7,4"];
 type GridPoint={x:number;y:number};
 type ExtraOpponent={id:number;type:Exclude<TargetMode,"dummy">;hp:number;position:GridPoint;regenerationSuppressed:boolean};
@@ -401,7 +402,7 @@ export default function TrainingArena({characters}:Props) {
       }
       let position=livePosition;
       if(path&&path.length>0){
-        position=path[Math.min(5,path.length)-1];
+        position=path[Math.min(Math.floor(OPPONENT_MOVEMENT_METERS/CELL_METERS),path.length)-1];
         if(actor.primary)nextTargetPosition=position;
         else nextExtras=nextExtras.map(enemy=>enemy.id===actor.extraId?{...enemy,position}:enemy);
         events.push(actor.name+" перемещается к герою.");
