@@ -547,6 +547,23 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     const pactMagic: PactMagic | undefined = isWarlock ? { level: Math.max(1, Math.min(5, Number(rawPactMagic?.level ?? pactMagicLevel))), max: Math.max(1, Math.min(4, Number(rawPactMagic?.max ?? pactMagicMax))), used: Math.max(0, Math.min(4, Number(rawPactMagic?.used ?? 0))) } : undefined;
     const rawClassResources = Array.isArray(data.classResources) ? data.classResources as Record<string, unknown>[] : [];
     const classResources: ClassResource[] = rawClassResources.map((resource, index) => ({ id: String(resource.id ?? `resource-${index}`), name: String(resource.name ?? "Ресурс класса"), max: Math.max(0, Math.min(99, Number(resource.max ?? resource.total ?? 1))), used: Math.max(0, Math.min(99, Number(resource.used ?? 0))), recovery: resource.recovery === "long" || resource.recovery === "manual" ? resource.recovery : "short" }));
+    const autoResources: ClassResource[] = [];
+    const addAutomaticResource = (id: string, name: string, max: number, recovery: ClassResource["recovery"]) => {
+      if (max < 1 || classResources.some(resource => resource.id === id || resource.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return;
+      autoResources.push({ id, name, max, used: 0, recovery });
+    };
+    if (className.includes("воин") || className.includes("fighter")) {
+      addAutomaticResource("auto-second-wind", "Второе дыхание", level >= 17 ? 2 : 1, "short");
+    }
+    if (className.includes("варвар") || className.includes("barbarian")) {
+      const rageUses = level >= 20 ? 99 : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2;
+      addAutomaticResource("auto-rage", "Ярость", rageUses, level >= 20 ? "short" : "long");
+    }
+    if (className.includes("бард") || className.includes("bard")) {
+      const inspirationUses = Math.max(1, Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")));
+      addAutomaticResource("auto-bardic-inspiration", "Вдохновение барда", inspirationUses, level >= 5 ? "short" : "long");
+    }
+    classResources.push(...autoResources);
     const token: Token = { id: newId(), name: character.name, kind: "hero", x: 50, y: 50, hp: Number(hp), maxHp: Number(hp), color: "gold", initiative: initiativeValue, armorClass: Number(data.armorClass ?? 10), proficiencyBonus, constitutionSaveProficient, knownSpells, hitDice, spellSlots: importedSpellSlots, abilityModifiers: { strength: Number(rawAbilityModifiers.str ?? rawAbilityModifiers.strength ?? abilityModifier("str")), dexterity: Number(rawAbilityModifiers.dex ?? rawAbilityModifiers.dexterity ?? abilityModifier("dex")), constitution: Number(rawAbilityModifiers.con ?? rawAbilityModifiers.constitution ?? abilityModifier("con")), intelligence: Number(rawAbilityModifiers.int ?? rawAbilityModifiers.intelligence ?? abilityModifier("int")), wisdom: Number(rawAbilityModifiers.wis ?? rawAbilityModifiers.wisdom ?? abilityModifier("wis")), charisma: Number(rawAbilityModifiers.cha ?? rawAbilityModifiers.charisma ?? abilityModifier("cha")) }, weaponProficiencies: ((data.proficiencies as { weapons?: string[] } | undefined)?.weapons ?? []), weaponAmmo: (data.weaponAmmo as Record<string, number> | undefined) ?? {}, loadingUsedWeapons: [], temporaryHp: Number((data.hitPoints as { temporary?: number } | undefined)?.temporary ?? 0), deathSaves: data.deathSaves as { successes: number; failures: number } | undefined, damageResistances: data.damageResistances as DamageType[] | undefined, damageVulnerabilities: data.damageVulnerabilities as DamageType[] | undefined, damageImmunities: data.damageImmunities as DamageType[] | undefined, skillModifiers: data.skillModifiers as Partial<Record<SkillId, number>> | undefined, classResources, pactMagic };
     recordEditorHistory();
     setTokens(items => [...items, token]);
