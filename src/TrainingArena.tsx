@@ -52,12 +52,13 @@ const inferExplicitActionCost = (name:string):ActionCost|null => {
 };
 const actionCostLabel:Record<ActionCost,string>={action:"Действие",bonus:"Бонусное действие",reaction:"Реакция",free:"Без расхода"};
 const normalizeActionCost=(value:unknown):ActionCost|null=>value==="action"||value==="bonus"||value==="reaction"||value==="free"?value:null;
-const readActionEntries=(value:unknown,kind:string)=>Array.isArray(value)?value.flatMap(item=>{
+const readActionEntries=(value:unknown,kind:string,costMap:unknown={})=>Array.isArray(value)?value.flatMap(item=>{
   if(typeof item==="string") return item.trim()?[{name:item.trim(),kind,actionCost:null as ActionCost|null}]:[];
   if(!item||typeof item!=="object") return [];
   const entry=item as Record<string,unknown>;
   const name=typeof entry.name==="string"?entry.name.trim():typeof entry.title==="string"?entry.title.trim():"";
-  return name?[{name,kind,actionCost:normalizeActionCost(entry.actionCost)}]:[];
+  const costs=costMap&&typeof costMap==="object"?costMap as Record<string,unknown>:{};
+  return name?[{name,kind,actionCost:normalizeActionCost(entry.actionCost)??normalizeActionCost(costs[name])}]:[];
 }):[];
 
 const TRAINING_CLASSES=["Варвар","Бард","Жрец","Друид","Воин","Монах","Паладин","Следопыт","Плут","Чародей","Колдун","Волшебник"];
@@ -141,9 +142,9 @@ export default function TrainingArena({characters}:Props) {
 
   const data = hero?.rawData ?? {};
   const actions = useMemo(()=>[
-    ...readActionEntries(data.features,"Особенность"),
-    ...readActionEntries(data.spells,"Заклинание"),
-    ...readActionEntries(data.attacks,"Атака"),
+    ...readActionEntries(data.features,"Особенность",(data.actionCosts as Record<string,unknown>|undefined)?.features),
+    ...readActionEntries(data.spells,"Заклинание",(data.actionCosts as Record<string,unknown>|undefined)?.spells),
+    ...readActionEntries(data.attacks,"Атака",(data.actionCosts as Record<string,unknown>|undefined)?.attacks),
   ].filter((item,index,all)=>all.findIndex(other=>other.name===item.name)===index),[hero]);
   const hpMax = Math.max(1,hero?.derived.maxHp ?? 1);
   const armorClass = hero?.derived.armorClass ?? 10;
