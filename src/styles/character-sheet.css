@@ -82,3 +82,6 @@
  .sheet-editor-actions{display:grid;grid-template-columns:1fr 1fr}
  .sheet-editor-actions .button{width:100%}
 }
+
+/* Structured action-cost metadata controls */
+.sheet-action-field{display:flex;flex-direction:column;gap:8px;min-width:0}.sheet-action-costs{display:grid;gap:6px;padding:10px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px}.sheet-action-costs label{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,1fr);align-items:center;gap:10px;font-size:12px}.sheet-action-costs span{overflow-wrap:anywhere;color:var(--text-muted,#aaa)}.sheet-action-costs select{min-width:0;width:100%}@media(max-width:640px){.sheet-action-costs label{grid-template-columns:1fr}}
