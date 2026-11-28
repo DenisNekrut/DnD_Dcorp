@@ -87,7 +87,7 @@ export default function TrainingArena({characters}:Props) {
   const [damageType,setDamageType]=useState<DamageType>("fire");
   const [defenseTargetType,setDefenseTargetType]=useState<Exclude<TargetMode,"dummy">>("orc");
   const [damageDefenses,setDamageDefenses]=useState<Record<Exclude<TargetMode,"dummy">,Partial<Record<DamageType,DefenseMode>>>>({
-    orc:{},skeleton:{bludgeoning:"vulnerability",poison:"immunity"},troll:{},dummy:{}
+    orc:{},skeleton:{bludgeoning:"vulnerability",poison:"immunity"},troll:{}
   });
 
   const data = hero?.rawData ?? {};
@@ -188,7 +188,7 @@ export default function TrainingArena({characters}:Props) {
     const rolled=rollDamageFormula(customDamageFormula);
     if(rolled===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
     const updates=affected.map(enemy=>{
-      const enemyType=enemy.id==="primary"?target:extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc";
+      const enemyType:Exclude<TargetMode,"dummy">=enemy.id==="primary"?(target==="dummy"?"orc":target):(extraOpponents.find(item=>String(item.id)===enemy.id)?.type??"orc");
       const saveBonus=getTargetSaveBonus(enemyType,areaSaveAbility);
       const saveRoll=d(20),total=saveRoll+saveBonus,success=total>=dc;
       const afterSave=success?Math.floor(rolled/2):rolled;
