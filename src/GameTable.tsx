@@ -600,6 +600,98 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
   };
 
+  const performWildShapeAttack = async (attackMode: "wolf-bite" | "goat-ram" | "bear-bite" | "bear-claw" | "bear-multiattack") => {
+    if (!selected || !attackTarget || !selected.wildShape || !canEdit || layerLocks.figures || diceBusy ||
+      selected.actionUsed || selected.hp <= 0 || (selected.conditions ?? []).some(condition => ["incapacitated", "paralyzed", "petrified", "stunned", "unconscious"].includes(condition))) return;
+    const distanceFeet = getGridDistanceFeet(selected, attackTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceFeet !== null && distanceFeet > 5) {
+      addLog("Атака звериной формы доступна только по цели в пределах 5 футов.", "danger");
+      return;
+    }
+    const attacks = attackMode === "bear-multiattack"
+      ? [{ name: "Укус", modifier: 5, count: 1, sides: 8, bonus: 4, type: "piercing" as DamageType }, { name: "Когти", modifier: 5, count: 2, sides: 6, bonus: 4, type: "slashing" as DamageType }]
+      : attackMode === "wolf-bite"
+        ? [{ name: "Укус", modifier: 4, count: 2, sides: 4, bonus: 2, type: "piercing" as DamageType }]
+        : attackMode === "goat-ram"
+          ? [{ name: "Таран", modifier: 5, count: 2, sides: 4, bonus: 3, type: "bludgeoning" as DamageType }]
+          : attackMode === "bear-bite"
+            ? [{ name: "Укус", modifier: 5, count: 1, sides: 8, bonus: 4, type: "piercing" as DamageType }]
+            : [{ name: "Когти", modifier: 5, count: 2, sides: 6, bonus: 4, type: "slashing" as DamageType }];
+    setDiceBusy(true);
+    try {
+      let updatedTarget = attackTarget;
+      const outcomes: { name: string; roll: number; total: number; damageRolls: number[]; damage: number; critical: boolean; hit: boolean; type: DamageType }[] = [];
+      for (const attack of attacks) {
+        let roll: number;
+        if (remoteEnabled) {
+          const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+          });
+          roll = result.rolls[0];
+        } else {
+          roll = Math.floor(Math.random() * 20) + 1;
+        }
+        const total = roll + attack.modifier;
+        const critical = roll === 20;
+        const hit = roll !== 1 && (critical || total >= Math.max(0, Number(updatedTarget.armorClass ?? 10)));
+        let damageRolls: number[] = [];
+        let damage = 0;
+        if (hit) {
+          const diceCount = attack.count * (critical ? 2 : 1);
+          if (remoteEnabled) {
+            const result = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+              method: "POST",
+              body: JSON.stringify({ count: diceCount, sides: attack.sides, modifier: attack.bonus, mode: "normal" }),
+            });
+            damageRolls = result.rolls;
+            damage = result.total;
+          } else {
+            damageRolls = Array.from({ length: diceCount }, () => Math.floor(Math.random() * attack.sides) + 1);
+            damage = damageRolls.reduce((sum, value) => sum + value, 0) + attack.bonus;
+          }
+          const adjusted = adjustDamageForTraits(updatedTarget, damage, attack.type);
+          updatedTarget = applyDamageToToken(updatedTarget, adjusted.amount, critical);
+          if (updatedTarget.concentrating && adjusted.amount > 0) updatedTarget = await resolveConcentrationSave(updatedTarget, adjusted.amount);
+          if (attackMode === "wolf-bite" && updatedTarget.hp > 0 && !updatedTarget.wildShape) {
+            // The prone rider is resolved below regardless of whether the target is another transformed druid.
+          }
+        }
+        outcomes.push({ name: attack.name, roll, total, damageRolls, damage: Math.max(0, damage), critical, hit, type: attack.type });
+      }
+      let wolfProne = false;
+      if (attackMode === "wolf-bite" && outcomes[0]?.hit && updatedTarget.hp > 0) {
+        let saveRoll: number;
+        if (remoteEnabled) {
+          const result = await apiRequest<{ rolls: number[] }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+          });
+          saveRoll = result.rolls[0];
+        } else {
+          saveRoll = Math.floor(Math.random() * 20) + 1;
+        }
+        const saveTotal = saveRoll + Number(updatedTarget.abilityModifiers?.strength ?? 0);
+        wolfProne = saveTotal < 11;
+        if (wolfProne) updatedTarget = { ...updatedTarget, conditions: [...new Set([...(updatedTarget.conditions ?? []), "prone" as ConditionId])] };
+        addLog(updatedTarget.name + ": спасбросок Силы против укуса волка — " + saveRoll + " + " + Number(updatedTarget.abilityModifiers?.strength ?? 0) + " = " + saveTotal + " против СЛ 11 — " + (wolfProne ? "провал, цель сбита с ног." : "успех, цель устояла.") , wolfProne ? "gold" : "muted");
+      }
+      recordEditorHistory();
+      setTokens(items => items.map(token => token.id === selected.id ? { ...token, actionUsed: true } : token.id === attackTarget.id ? updatedTarget : token));
+      outcomes.forEach((outcome, index) => {
+        addLog(selected.name + " (" + selected.wildShape?.beastName + ") — " + outcome.name + (attacks.length > 1 ? " " + (index + 1) : "") +
+          ": d20 " + outcome.roll + " + " + (attackMode === "wolf-bite" ? 4 : 5) + " = " + outcome.total + " против КД " + Number(attackTarget.armorClass ?? 10) +
+          " — " + (outcome.hit ? (outcome.critical ? "критическое попадание" : "попадание") + "; урон " + outcome.damageRolls.join(" + ") + " + " + attacks[index].bonus + " = " + outcome.damage + " (" + outcome.type + ")" : "промах") + ".",
+          outcome.hit ? "gold" : "danger");
+      });
+      addLog(selected.name + ": атака звериной формы завершена; потрачено действие.", "muted");
+    } catch (error) {
+      addLog("Не удалось выполнить атаку звериной формы: " + (error instanceof Error ? error.message : "ошибка броска"), "danger");
+    } finally {
+      setDiceBusy(false);
+    }
+  };
+
   const useWildShape = (beastName: "Волк" | "Гигантский козёл" | "Бурый медведь") => {
     if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 ||
       selected.wildShape || (selected.conditions ?? []).includes("incapacitated")) return;
@@ -2039,6 +2131,16 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <div className="combat-economy-heading"><strong>Облик зверя</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0} применений</small></div>
                 {selected.wildShape ? <>
                   <small>Текущая форма: {selected.wildShape.beastName}. Хиты формы: {selected.hp}/{selected.maxHp}; КД: {selected.armorClass ?? "—"}. При потере всех хитов друид автоматически возвращается в исходный облик, а остаток урона переносится на его обычные хиты.</small>
+                  <div className="combat-economy-actions">
+                    {selected.wildShape.beastName === "Волк" && <button type="button" onClick={() => performWildShapeAttack("wolf-bite")} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || !attackTarget}>Укус волка · +4 · 2d4+2 колющего</button>}
+                    {selected.wildShape.beastName === "Гигантский козёл" && <button type="button" onClick={() => performWildShapeAttack("goat-ram")} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || !attackTarget}>Таран козла · +5 · 2d4+3 дробящего</button>}
+                    {selected.wildShape.beastName === "Бурый медведь" && <>
+                      <button type="button" onClick={() => performWildShapeAttack("bear-bite")} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || !attackTarget}>Укус медведя · +5 · 1d8+4 колющего</button>
+                      <button type="button" onClick={() => performWildShapeAttack("bear-claw")} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || !attackTarget}>Когти медведя · +5 · 2d6+4 рубящего</button>
+                      <button type="button" onClick={() => performWildShapeAttack("bear-multiattack")} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || !attackTarget}>Мультиатака · укус + когти</button>
+                    </>}
+                  </div>
+                  <small>Атаки используют действие, бросают d20 против КД цели и учитывают сопротивления и уязвимости. Укус волка дополнительно вызывает спасбросок Силы СЛ 11, при провале цель получает состояние «Сбит с ног».</small>
                   <button type="button" className="secondary-button" onClick={revertWildShape} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>Вернуться в исходный облик (бонусное действие)</button>
                 </> : <>
                   <div className="combat-economy-actions">
