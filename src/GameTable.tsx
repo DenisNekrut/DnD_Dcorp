@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -191,6 +191,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const [hpAdjustment, setHpAdjustment] = useState(1);
   const [temporaryHpInput, setTemporaryHpInput] = useState(1);
   const [attackTargetId, setAttackTargetId] = useState("");
+  const [inspirationTargetId, setInspirationTargetId] = useState("");
+  const [useBardicInspiration, setUseBardicInspiration] = useState(false);
   const [damageFormula, setDamageFormula] = useState("1d4");
   const [damageType, setDamageType] = useState<DamageType>("piercing");
   const [weaponOptions, setWeaponOptions] = useState<WeaponOption[]>(fallbackWeapons);
@@ -217,6 +219,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   const selected = tokens.find(token => token.id === selectedId);
   const attackTargets = selected ? tokens.filter(token => token.id !== selected.id) : [];
   const attackTarget = attackTargets.find(token => token.id === attackTargetId) ?? attackTargets[0];
+  const inspirationTargets = selected ? tokens.filter(token => token.id !== selected.id && token.kind !== "enemy") : [];
+  const inspirationTarget = inspirationTargets.find(token => token.id === inspirationTargetId) ?? inspirationTargets[0];
   const selectedWeapon = weaponOptions.find(weapon => weapon.id === selectedWeaponId) ?? weaponOptions[0];
   const latestTableState: TableState = { room, tokens, objects, layerVisibility, layerLocks, mapAsset, mapView, round, activeTokenId, log };
   latestStateRef.current = latestTableState;
@@ -224,6 +228,10 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chatMessages.length]);
+
+  useEffect(() => {
+    setUseBardicInspiration(false);
+  }, [selected?.id, selected?.bardicInspirationDie]);
 
   useEffect(() => {
     if (!selected || !selectedWeapon) {
@@ -914,6 +922,39 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
+  const grantBardicInspiration = () => {
+    if (!selected || !inspirationTarget || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0) return;
+    const className = (selected.className ?? "").toLocaleLowerCase();
+    if (!className.includes("бард") && !className.includes("bard")) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-bardic-inspiration");
+    if (!resource || resource.used >= resource.max) {
+      addLog(selected.name + ": не осталось использований Вдохновения барда.", "danger");
+      return;
+    }
+    if (inspirationTarget.bardicInspirationDie) {
+      addLog(inspirationTarget.name + " уже имеет кость Вдохновения барда.", "muted");
+      return;
+    }
+    const distanceFeet = getGridDistanceFeet(selected, inspirationTarget, battleMapRef.current?.getBoundingClientRect(), room.gridCellSizePx ?? 38);
+    if (distanceFeet !== null && distanceFeet > 60) {
+      addLog(inspirationTarget.name + " находится дальше 60 футов — Вдохновение барда не передано.", "danger");
+      return;
+    }
+    const level = selected.classLevel ?? 1;
+    const die = level >= 15 ? 12 : level >= 10 ? 10 : level >= 5 ? 8 : 6;
+    recordEditorHistory();
+    setTokens(items => items.map(token => {
+      if (token.id === selected.id) return {
+        ...token,
+        bonusActionUsed: true,
+        classResources: (token.classResources ?? []).map(item => item.id === "auto-bardic-inspiration" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+      };
+      if (token.id === inspirationTarget.id) return { ...token, bardicInspirationDie: die, bardicInspirationSource: selected.name };
+      return token;
+    }));
+    addLog(selected.name + " вдохновляет " + inspirationTarget.name + ": передана кость d" + die + ". Она добавляется к одной проверке характеристики, атаке или спасброску по выбору получателя.", "gold");
+  };
+
   const useRage = () => {
     if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || selected.raging) return;
     const resource = (selected.classResources ?? []).find(item => item.id === "auto-rage");
@@ -1151,8 +1192,26 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
         } : token));
       }
 
+      let inspirationRoll: number | null = null;
+      const inspirationDie = selected.bardicInspirationDie;
+      if (useBardicInspiration && inspirationDie) {
+        if (remoteEnabled) {
+          const inspirationResult = await apiRequest<{ rolls: number[]; total: number }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: 1, sides: inspirationDie, modifier: 0, mode: "normal" }),
+          });
+          inspirationRoll = inspirationResult.rolls[0];
+        } else {
+          inspirationRoll = Math.floor(Math.random() * inspirationDie) + 1;
+        }
+        total += inspirationRoll;
+        recordEditorHistory();
+        setTokens(items => items.map(token => token.id === selected.id ? { ...token, bardicInspirationDie: undefined, bardicInspirationSource: undefined } : token));
+        setUseBardicInspiration(false);
+      }
+
       if (rollKind !== "attack") {
-        addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + " = " + total + ".", "muted");
+        addLog(selected.name + ": " + checkLabel + " — " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + (inspirationRoll !== null ? " + Вдохновение d" + inspirationDie + " (" + inspirationRoll + ")" : "") + " = " + total + ".", "muted");
         return;
       }
 
@@ -1169,7 +1228,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const naturalOne = kept === 1;
       const hit = !naturalOne && (critical || total >= targetAc);
       addLog(
-        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
+        selected.name + " атакует " + target.name + " (" + (selectedWeapon?.name ?? "оружие") + "): " + rolls.join(" / ") + " (" + (finalRollMode === "advantage" ? "преимущество" : finalRollMode === "disadvantage" ? "помеха" : "обычный бросок") + ", выбрано " + kept + ") " + modifierText + (inspirationRoll !== null ? " + Вдохновение d" + inspirationDie + " (" + inspirationRoll + ")" : "") + " = " + total + " против КД " + targetAc + " — " + (hit ? (critical ? "критическое попадание" : "попадание") : "промах") + ".",
         hit ? "gold" : "danger",
       );
       if (!hit) return;
@@ -1563,6 +1622,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <span className={selectedRollBlocked || selectedSaveAutoFail ? "combat-roll-warning" : "combat-roll-hint"}>
                 {selectedRollBlocked ? selectedRollBlockReason : selectedSaveAutoFail ? selectedSaveFailReason : `Режим: ${selectedRollModeLabel.toLowerCase()}.`}
               </span>
+              {selected.bardicInspirationDie && <label className="combat-roll-hint"><input type="checkbox" checked={useBardicInspiration} onChange={event => setUseBardicInspiration(event.target.checked)} disabled={!canEdit || diceBusy}/> Добавить моё Вдохновение d{selected.bardicInspirationDie} к этому броску</label>}
               <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedRollBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
             </div>
             <details className="damage-traits-panel">
@@ -1586,6 +1646,15 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </details>
             <section className="spellcasting-panel class-resource-panel">
               <strong>Ресурсы класса и подкласса</strong>
+              {(selected.classResources ?? []).some(resource => resource.id === "auto-bardic-inspiration") && <div className="combat-economy">
+                <div className="combat-economy-heading"><strong>Вдохновение барда</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0))} использований доступно</small></div>
+                <label>Союзник<select value={inspirationTarget?.id ?? ""} onChange={event => setInspirationTargetId(event.target.value)} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>
+                  {inspirationTargets.map(token => <option key={token.id} value={token.id}>{token.name}{token.bardicInspirationDie ? " (уже вдохновлён)" : ""}</option>)}
+                </select></label>
+                <button type="button" className="secondary-button" onClick={grantBardicInspiration} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || !inspirationTarget || inspirationTarget.bardicInspirationDie !== undefined || ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0)}>Передать Вдохновение (бонусное действие)</button>
+                <small>Кость: d{(selected.classLevel ?? 1) >= 15 ? 12 : (selected.classLevel ?? 1) >= 10 ? 10 : (selected.classLevel ?? 1) >= 5 ? 8 : 6}. Дальность — 60 футов. Вдохновение восстанавливается после короткого отдыха с 5-го уровня барда.</small>
+              </div>}
+
               {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
                 <span><b>{resource.name}</b> · доступно {Math.max(0, resource.max - resource.used)} / {resource.max}</span>
                 <small>Восстановление: {resource.recovery === "short" ? "короткий отдых" : resource.recovery === "long" ? "длительный отдых" : "вручную"}</small>
