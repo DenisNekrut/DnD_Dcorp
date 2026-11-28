@@ -43,6 +43,7 @@ const gridKey=(point:GridPoint)=>`${point.x},${point.y}`;
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
 const TRAINING_CLASSES=["Варвар","Бард","Жрец","Друид","Воин","Монах","Паладин","Следопыт","Плут","Чародей","Колдун","Волшебник"];
+const TRAINING_SAVE_PROFICIENCIES:Record<string,string[]>={Варвар:["str","con"],Бард:["dex","cha"],Жрец:["wis","cha"],Друид:["int","wis"],Воин:["str","con"],Монах:["str","dex"],Паладин:["wis","cha"],Следопыт:["str","dex"],Плут:["dex","int"],Чародей:["con","cha"],Колдун:["wis","cha"],Волшебник:["int","wis"]};
 const TRAINING_HIT_DICE:Record<string,number>={Варвар:12,Бард:8,Жрец:8,Друид:8,Воин:10,Монах:8,Паладин:10,Следопыт:10,Плут:8,Чародей:6,Колдун:8,Волшебник:6};
 const TRAINING_FEATURES:Record<string,string[]>={
   Варвар:["Ярость","Защита без доспехов"],Бард:["Вдохновение барда","Использование заклинаний"],Жрец:["Божественный домен","Использование заклинаний"],Друид:["Друидический язык","Использование заклинаний"],Воин:["Боевой стиль","Второе дыхание"],Монах:["Боевые искусства","Ки"],Паладин:["Божественное чувство","Наложение рук"],Следопыт:["Избранный враг","Исследователь природы"],Плут:["Компетентность","Скрытая атака","Воровской жаргон"],Чародей:["Источник магии","Метамагия"],Колдун:["Потусторонний покровитель","Магия договора"],Волшебник:["Магическое восстановление","Использование заклинаний"]
@@ -89,6 +90,7 @@ export default function TrainingArena({characters}:Props) {
   const [tempHp,setTempHp] = useState(0);
   const [log,setLog] = useState<string[]>(["Тренировка готова. Все изменения существуют только в этой тренировочной сцене."]);
   const [ability,setAbility] = useState("str");
+  const [rollType,setRollType]=useState<"check"|"save">("check");
   const [customName,setCustomName] = useState("");
   const [customBonus,setCustomBonus] = useState("0");
   const [customDc,setCustomDc] = useState("12");
@@ -134,8 +136,12 @@ export default function TrainingArena({characters}:Props) {
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
   const rollAbility = () => {
     if(!hero) return;
-    const score=Number(hero.abilityScores[ability]??10), bonus=mod(score), die=d(20), total=die+bonus, dc=Math.max(1,Number(customDc)||12);
-    addLog(`${abilityList.find(item=>item.id===ability)?.name}: d20 (${die}) ${bonus>=0?"+":""}${bonus} = ${total} против СЛ ${dc} — ${total>=dc?"успех":"неудача"}.`);
+    const score=Number(hero.abilityScores[ability]??10);
+    const proficiency=Math.floor((Math.max(1,Math.min(20,hero.level))-1)/4)+2;
+    const proficient=rollType==="save"&&(TRAINING_SAVE_PROFICIENCIES[hero.className]??[]).includes(ability);
+    const bonus=mod(score)+(proficient?proficiency:0),die=d(20),total=die+bonus,dc=Math.max(1,Number(customDc)||12);
+    const label=abilityList.find(item=>item.id===ability)?.name??ability;
+    addLog(`${rollType==="save"?"Спасбросок":"Проверка"}: ${label}: d20 (${die}) ${bonus>=0?"+":""}${bonus}${proficient?" (включая бонус мастерства +"+proficiency+")":""} = ${total} против СЛ ${dc} — ${total>=dc?"успех":"неудача"}.`);
   };
   const testAction = (name:string,kind:string) => {
     if(!hero || heroHp<=0 || (targetPresets[target].aggressive && targetHp<=0)) return;
@@ -471,6 +477,7 @@ export default function TrainingArena({characters}:Props) {
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
+        <label className="training-field">Тип броска<select value={rollType} onChange={event=>setRollType(event.target.value as "check"|"save")}><option value="check">Проверка характеристики</option><option value="save">Спасбросок</option></select></label>
         <label className="training-field">Характеристика<select value={ability} onChange={event=>setAbility(event.target.value)}>{abilityList.map(item=><option key={item.id} value={item.id}>{item.name} ({mod(Number(hero.abilityScores[item.id]??10))>=0?"+":""}{mod(Number(hero.abilityScores[item.id]??10))})</option>)}</select></label>
         <label className="training-field">Сложность проверки (СЛ)<input type="number" min="1" max="40" value={customDc} onChange={event=>setCustomDc(event.target.value)}/></label>
         <button className="training-primary" onClick={rollAbility}>Бросить проверку</button>
