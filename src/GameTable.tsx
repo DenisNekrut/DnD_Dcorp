@@ -96,7 +96,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual"; unlimited?: boolean };
 type PactMagic = { level: number; max: number; used: number };
 type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
-type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; isUndead?: boolean; turned?: boolean; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -739,6 +739,66 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       bonusActionUsed: true,
     }));
     addLog(selected.name + " добровольно возвращается в исходный облик, потратив бонусное действие.", "muted");
+  };
+
+  const useTurnUndead = async () => {
+    if (!selected || !canEdit || layerLocks.figures || diceBusy || selected.actionUsed || selected.hp <= 0 ||
+      (selected.conditions ?? []).includes("incapacitated")) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-channel-divinity");
+    if (!resource || resource.used >= resource.max) {
+      addLog(selected.name + ": нет доступных применений «Канала божественности».", "danger");
+      return;
+    }
+    const undeadTargets = tokens.filter(token => token.id !== selected.id && token.kind === "enemy" && token.isUndead && token.hp > 0);
+    if (!undeadTargets.length) {
+      addLog("Изгнание нежити: на карте нет отмеченных противников-нежити.", "danger");
+      return;
+    }
+    const dc = 8 + (selected.proficiencyBonus ?? 2) + (selected.abilityModifiers?.wisdom ?? 0);
+    const mapRect = battleMapRef.current?.getBoundingClientRect();
+    const eligible = undeadTargets.filter(target => {
+      const distance = getGridDistanceFeet(selected, target, mapRect, room.gridCellSizePx ?? 38);
+      return distance === null || distance <= 30;
+    });
+    if (!eligible.length) {
+      addLog("Изгнание нежити: отмеченная нежить находится дальше 30 футов.", "danger");
+      return;
+    }
+    setDiceBusy(true);
+    try {
+      const results = await Promise.all(eligible.map(async target => {
+        let die: number;
+        if (remoteEnabled) {
+          const result = await apiRequest<{ rolls: number[] }>("/dice/roll", {
+            method: "POST",
+            body: JSON.stringify({ count: 1, sides: 20, modifier: 0, mode: "normal" }),
+          });
+          die = result.rolls[0] ?? 1;
+        } else {
+          die = Math.floor(Math.random() * 20) + 1;
+        }
+        const total = die + (target.abilityModifiers?.wisdom ?? 0);
+        return { target, die, total, success: total >= dc };
+      }));
+      recordEditorHistory();
+      const failedIds = new Set(results.filter(result => !result.success).map(result => result.target.id));
+      setTokens(items => items.map(token => {
+        if (token.id === selected.id) return {
+          ...token,
+          actionUsed: true,
+          classResources: (token.classResources ?? []).map(item => item.id === "auto-channel-divinity" ? { ...item, used: item.used + 1 } : item),
+        };
+        return failedIds.has(token.id) ? { ...token, turned: true } : token;
+      }));
+      addLog(selected.name + " использует «Изгнание нежити» (СЛ " + dc + "). " +
+        results.map(result => result.target.name + ": d20 " + result.die + " + " +
+          (result.total - result.die) + " = " + result.total + (result.success ? " — успех" : " — провал, нежить изгнана")).join("; ") +
+        ". Изгнано: " + failedIds.size + " из " + results.length + ".", failedIds.size ? "gold" : "muted");
+    } catch (error) {
+      setTableError(error instanceof Error ? error.message : "Не удалось выполнить спасброски от Изгнания нежити.");
+    } finally {
+      setDiceBusy(false);
+    }
   };
 
   const useLayOnHands = () => {
@@ -2087,6 +2147,17 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
               <button type="button" onClick={rollSelectedCheck} disabled={!canEdit || diceBusy || selectedRollBlocked}>{diceBusy ? "Бросок…" : "Бросить D20"}</button>
             </div>
             <details className="damage-traits-panel">
+              <summary>Тип существа и состояния нежити</summary>
+              <label className="weapon-proficiency-toggle"><input type="checkbox" checked={Boolean(selected.isUndead)} onChange={event => {
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, isUndead: event.target.checked } : token));
+              }} disabled={!canEdit || layerLocks.figures}/> Это нежить (для «Изгнания нежити»)</label>
+              <label className="weapon-proficiency-toggle"><input type="checkbox" checked={Boolean(selected.turned)} onChange={event => {
+                recordEditorHistory();
+                setTokens(items => items.map(token => token.id === selected.id ? { ...token, turned: event.target.checked } : token));
+              }} disabled={!canEdit || layerLocks.figures}/> Сейчас изгнана (снять вручную)</label>
+              <small>Отметь тип существа у противника. Изгнание нежити автоматически проверяет только отмеченных противников.</small>
+            </details>
               <summary>Сопротивления, уязвимости и иммунитеты</summary>
               <label>Сопротивления<select multiple size={3} value={selected.damageResistances ?? []} disabled={!canEdit || layerLocks.figures} onChange={event => {
                 const values = Array.from(event.currentTarget.selectedOptions, option => option.value as DamageType);
@@ -2107,6 +2178,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
             </details>
             <section className="spellcasting-panel class-resource-panel">
               <strong>Ресурсы класса и подкласса</strong>
+              {(selected.classResources ?? []).some(resource => resource.id === "auto-channel-divinity") && <div className="combat-economy">
+                <div className="combat-economy-heading"><strong>Канал божественности</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0} доступно</small></div>
+                <button type="button" className="secondary-button" onClick={useTurnUndead} disabled={!canEdit || layerLocks.figures || diceBusy || selected.actionUsed || selected.hp <= 0 || (selected.conditions ?? []).includes("incapacitated") || ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-channel-divinity")?.max ?? 0)}>{diceBusy ? "Спасброски…" : "Изгнать нежить (действие)"}</button>
+                <small>Нежить в пределах 30 футов совершает спасбросок Мудрости против СЛ 8 + бонус мастерства + модификатор Мудрости жреца. Провал помечает цель как изгнанную; перемещение и длительность пока контролирует Мастер.</small>
+              </div>}
               {(selected.classResources ?? []).some(resource => resource.id === "auto-bardic-inspiration") && <div className="combat-economy">
                 <div className="combat-economy-heading"><strong>Вдохновение барда</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-bardic-inspiration")?.used ?? 0))} использований доступно</small></div>
                 <label>Союзник<select value={inspirationTarget?.id ?? ""} onChange={event => setInspirationTargetId(event.target.value)} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>
