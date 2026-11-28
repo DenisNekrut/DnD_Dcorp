@@ -373,7 +373,7 @@ export default function TrainingArena({characters}:Props) {
     if(!actors.length){setMovementUsedMeters(0);setActionUsed(false);setBonusActionUsed(false);setReactionUsed(false);setRound(value=>value+1);addLog("Раунд завершён: запас движения и действия героя восстановлены. На поле нет активных противников.");return;}
     let currentHeroHp=heroHp,currentTempHp=tempHp;
     let nextTargetPosition=targetPosition;
-    const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1},{x:point.x+1,y:point.y+1},{x:point.x+1,y:point.y-1},{x:point.x-1,y:point.y+1},{x:point.x-1,y:point.y-1}].filter(next=>{
+    const neighbors=(point:GridPoint,occupied:Set<string>):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1},{x:point.x+1,y:point.y+1},{x:point.x+1,y:point.y-1},{x:point.x-1,y:point.y+1},{x:point.x-1,y:point.y-1}].filter(next=>{
       if(next.x<0||next.x>=GRID_COLS||next.y<0||next.y>=GRID_ROWS)return false;
       const dx=next.x-point.x,dy=next.y-point.y;
       return !(dx!==0&&dy!==0&&(occupied.has(gridKey({x:point.x+dx,y:point.y}))||occupied.has(gridKey({x:point.x,y:point.y+dy}))));
@@ -393,7 +393,7 @@ export default function TrainingArena({characters}:Props) {
         const current=queue.shift()!;
         if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length>0){path=current.path;break;}
         if(distanceInMeters(current.point,heroPosition)<=CELL_METERS&&current.path.length===0){path=[];break;}
-        for(const next of neighbors(current.point)){
+        for(const next of neighbors(current.point,occupied)){
           const key=gridKey(next);
           if(visited.has(key)||occupied.has(key))continue;
           visited.add(key);queue.push({point:next,path:[...current.path,next]});
