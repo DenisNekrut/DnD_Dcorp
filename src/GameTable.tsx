@@ -70,7 +70,7 @@ const parseDamageFormula = (formula: string) => {
 
 const getAutoRollFlags = (token: Token, kind: RollKind, saveAbility: AbilityId) => {
   const conditions = new Set(token.conditions ?? []);
-  const advantage = kind === "attack" && conditions.has("invisible");
+  const advantage = (kind === "attack" && conditions.has("invisible")) || (kind === "save" && saveAbility === "dexterity" && Boolean(token.dodging));
   const disadvantage = kind === "attack"
     ? ["blinded", "poisoned", "prone", "restrained", "frightened"].some(condition => conditions.has(condition as ConditionId)) || (token.exhaustionLevel ?? 0) >= 3
     : kind === "ability" || kind === "skill"
@@ -83,7 +83,7 @@ const getTargetAttackFlags = (target: Token, attackType: "melee" | "ranged") => 
   const conditions = new Set(target.conditions ?? []);
   return {
     advantage: ["blinded", "restrained", "paralyzed", "petrified", "stunned", "unconscious"].some(condition => conditions.has(condition as ConditionId)) || (conditions.has("prone") && attackType === "melee"),
-    disadvantage: conditions.has("invisible") || (conditions.has("prone") && attackType === "ranged"),
+    disadvantage: conditions.has("invisible") || (conditions.has("prone") && attackType === "ranged") || Boolean(target.dodging),
   };
 };
 
@@ -95,7 +95,7 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -1048,6 +1048,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     setTokens(items => items.map(token => token.id !== selected.id ? token : {
       ...token,
       bonusActionUsed: true,
+      ...(technique === "patient-defense" ? { dodging: true } : {}),
       classResources: (token.classResources ?? []).map(item => item.id === "auto-ki-points" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
     }));
     addLog(selected.name + " использует «" + names[technique] + "»: " + effects[technique] + ". Потрачено 1 очко ци.", "gold");
@@ -1464,13 +1465,13 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     if (nextIndex >= initiative.length) {
       const first = initiative[0];
       setActiveTokenId(first.id);
-      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false } : token));
+      setTokens(items => items.map(token => token.id === first.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false } : token));
       setRound(value => value + 1);
       addLog(`Раунд ${round + 1}: ход ${first.name}.`, "gold");
     } else {
       const next = initiative[nextIndex];
       setActiveTokenId(next.id);
-      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false } : token));
+      setTokens(items => items.map(token => token.id === next.id ? { ...token, loadingUsedWeapons: [], actionUsed: false, bonusActionUsed: false, reactionUsed: false, dodging: false } : token));
       addLog(`Ход переходит к ${next.name}.`, "gold");
     }
   };
@@ -1846,7 +1847,7 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <button type="button" onClick={() => useMonkKiTechnique("patient-defense")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Терпеливая оборона</button>
                   <button type="button" onClick={() => useMonkKiTechnique("step-of-wind")} disabled={!canEdit || diceBusy || selected.bonusActionUsed || ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-ki-points")?.max ?? 0)}>Шаг ветра</button>
                 </div>
-                <small>Каждая техника расходует 1 очко ци и бонусное действие. Для «Шквала ударов» требуется предварительно совершить действие «Атака». Эффекты фиксируются в журнале боя; автоматическое разрешение уклонения и перемещения — следующий этап.</small>
+                <small>Каждая техника расходует 1 очко ци и бонусное действие. «Терпеливая оборона» теперь даёт помеху атакам против монаха и преимущество к спасброскам Ловкости до начала его следующего хода. Автоматическое разрешение «Шквала ударов» и перемещения «Шагом ветра» будет следующим этапом.</small>
               </div>}
 
               {(selected.classResources ?? []).length ? (selected.classResources ?? []).map(resource => <div className="spell-slot-row" key={resource.id}>
