@@ -157,6 +157,29 @@ export default function TrainingArena({characters}:Props) {
   };
   const attackDistance=distanceInMeters(heroPosition,targetPosition);
   const attackRangeMeters=Math.max(0,Number(attackRange)||0);
+  const applyAreaEffect=()=>{
+    if(!customDamageFormula.trim()){addLog("Укажи формулу тестового урона перед применением эффекта по зоне.");return;}
+    const primaryAffected=targetPresets[target].aggressive&&targetHp>0&&isInSpellArea(targetPosition);
+    const extraAffected=extraOpponents.filter(enemy=>enemy.hp>0&&isInSpellArea(enemy.position));
+    if(!primaryAffected&&!extraAffected.length){addLog("В выбранной зоне нет живых противников. Манекен не получает урон.");return;}
+    const results:string[]=[];
+    if(primaryAffected){
+      const damage=rollDamageFormula(customDamageFormula);
+      if(damage===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
+      setTargetHp(value=>Math.max(0,value-damage));
+      results.push(targetPresets[target].name+": "+damage+" урона");
+    }
+    const extraDamage=new Map<number,number>();
+    for(const enemy of extraAffected){
+      const damage=rollDamageFormula(customDamageFormula);
+      if(damage===null){addLog("Некорректная формула урона. Используй, например, 2к6+3.");return;}
+      extraDamage.set(enemy.id,damage);
+      results.push(targetPresets[enemy.type].name+": "+damage+" урона");
+    }
+    if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>extraDamage.has(enemy.id)?{...enemy,hp:Math.max(0,enemy.hp-(extraDamage.get(enemy.id)??0))}:enemy));
+    addLog("Тестовый эффект по зоне ("+areaShape+", "+areaSize+" м): "+results.join("; ")+". Спасброски и сопротивления в этом режиме не рассчитываются.");
+  };
+
 
   const moveHeroTo=(destination:GridPoint)=>{
     if(obstacles.includes(gridKey(destination)) || gridKey(destination)===gridKey(targetPosition) || extraOpponents.some(enemy=>gridKey(enemy.position)===gridKey(destination))) return;
@@ -341,6 +364,7 @@ export default function TrainingArena({characters}:Props) {
           <div className="training-map-actions">
             <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
           </div>
+          <button className="training-danger" onClick={applyAreaEffect} disabled={!showArea||heroHp<=0}>Применить тестовый эффект по зоне</button>
           <p className="training-muted">Расстояние до основной цели: {attackDistance.toFixed(1)} м. {attackDistance<=attackRangeMeters?"Цель в пределах заданной дальности.":"Цель за пределами заданной дальности."} Подсветка показывает геометрический предварительный просмотр от героя в направлении цели; она не применяет урон и не заменяет проверку правил конкретного заклинания.</p>
         </div>
         <div className="training-map-controls">
