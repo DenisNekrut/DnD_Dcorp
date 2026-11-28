@@ -304,3 +304,186 @@
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Visual pass 2: clearer tactical board states and legend */
+.training-tactical > .training-panel-title {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #514333;
+}
+
+.training-map-legend {
+  align-items: center;
+  gap: 9px 15px;
+  margin: 0 0 14px;
+  color: #d3c5b2;
+}
+
+.training-map-legend span {
+  min-height: 22px;
+  white-space: nowrap;
+}
+
+.training-map-legend i {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border: 1px solid rgba(255, 239, 211, .28);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+
+.training-map-legend .legend-hero {
+  background: #477d98;
+  border-color: #9ac9df;
+}
+
+.training-map-legend .legend-target {
+  background: #914f3e;
+  border-color: #e2a18a;
+}
+
+.training-map-legend .legend-extra {
+  background: #846333;
+  border-color: #dfbd7b;
+}
+
+.training-map-legend .legend-block {
+  background: repeating-linear-gradient(135deg, #777064, #777064 3px, #4b453c 3px, #4b453c 6px);
+}
+
+.training-map-legend .legend-cover {
+  background: repeating-linear-gradient(45deg, #9c8848, #9c8848 3px, #62542f 3px, #62542f 6px);
+}
+
+.training-map-legend .legend-area {
+  background: #705b91;
+  border-color: #c1a6e5;
+}
+
+.training-map-column .training-grid {
+  gap: 4px;
+  padding: 10px;
+  border-color: #766044;
+  border-radius: 12px;
+  background:
+    linear-gradient(rgba(196, 155, 91, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(196, 155, 91, .035) 1px, transparent 1px),
+    radial-gradient(ellipse at center, #242019 0%, #151310 100%);
+  background-size: 24px 24px, 24px 24px, auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 239, 211, .025), 0 8px 22px rgba(0, 0, 0, .18);
+}
+
+.training-cell {
+  position: relative;
+  border-color: #625746;
+  border-radius: 6px;
+  background: linear-gradient(145deg, #332e26, #25211c);
+  box-shadow: inset 0 1px 0 rgba(255, 239, 211, .035);
+  font-size: clamp(11px, 1.25vw, 16px);
+}
+
+.training-cell:not(:disabled):hover {
+  z-index: 1;
+  background: #51432f;
+  border-color: #e0bd7d;
+  box-shadow: 0 0 0 2px rgba(224, 189, 125, .16), 0 3px 9px rgba(0, 0, 0, .28);
+}
+
+.training-cell.hero-cell {
+  background: linear-gradient(145deg, #477d98, #29495c);
+  border-color: #9ac9df;
+  box-shadow: inset 0 0 0 2px rgba(220, 244, 255, .12), 0 0 10px rgba(117, 167, 189, .18);
+}
+
+.training-cell.target-cell {
+  background: linear-gradient(145deg, #914f3e, #5b332b);
+  border-color: #e2a18a;
+  box-shadow: inset 0 0 0 2px rgba(255, 231, 220, .1), 0 0 10px rgba(199, 125, 98, .16);
+}
+
+.training-cell.extra-target-cell {
+  background: linear-gradient(145deg, #846333, #514027);
+  border-color: #dfbd7b;
+  box-shadow: inset 0 0 0 2px rgba(255, 239, 211, .08);
+}
+
+.training-cell.blocked-cell {
+  background: repeating-linear-gradient(135deg, #5a5348, #5a5348 6px, #3c3730 6px, #3c3730 12px);
+  border-color: #817565;
+  color: #e0d4c2;
+}
+
+.training-cell.cover-cell {
+  background: repeating-linear-gradient(45deg, #8b783f, #8b783f 5px, #5b4e30 5px, #5b4e30 10px);
+  border-color: #c8b16b;
+  color: #fff2c7;
+}
+
+.training-cell.spell-area-cell:not(.hero-cell):not(.target-cell):not(.extra-target-cell):not(.blocked-cell):not(.cover-cell) {
+  background: linear-gradient(145deg, #705b91, #44375c);
+  border-color: #c1a6e5;
+  box-shadow: inset 0 0 0 2px rgba(225, 207, 255, .1);
+}
+
+.training-cell.spell-area-cell.extra-target-cell {
+  border-style: double;
+  border-width: 3px;
+  border-color: #d7b6f2;
+}
+
+.training-cell.spell-area-cell.cover-cell {
+  box-shadow: inset 0 0 0 2px #c1a6e5;
+}
+
+.training-cell:focus-visible {
+  z-index: 2;
+  outline-color: #f0cf91;
+  outline-offset: 2px;
+}
+
+.training-map-actions.terrain-tools {
+  gap: 7px;
+  margin: 0 0 12px;
+}
+
+.training-map-actions.terrain-tools button {
+  min-height: 38px;
+  background: #29231c;
+}
+
+.training-map-actions.terrain-tools button.selected {
+  background: linear-gradient(145deg, #59452c, #3c2f20);
+  border-color: #d6b477;
+  box-shadow: inset 0 0 0 1px rgba(214, 180, 119, .16);
+}
+
+.training-map-settings > .training-extra-opponents,
+.training-map-settings > .training-area-tools {
+  border-color: #66543d;
+  box-shadow: inset 0 1px 0 rgba(255, 239, 211, .035);
+}
+
+@media (max-width: 700px) {
+  .training-map-column .training-grid {
+    gap: 3px;
+    padding: 7px;
+  }
+
+  .training-map-legend {
+    gap: 7px 11px;
+    font-size: 10px;
+  }
+
+  .training-map-legend i {
+    width: 11px;
+    height: 11px;
+    flex-basis: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-cell,
+  .training-map-actions button {
+    transition: none !important;
+  }
+}
