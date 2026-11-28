@@ -487,3 +487,207 @@
     transition: none !important;
   }
 }
+
+
+/* Visual pass 3: character, opponent and vitality cards */
+.training-command-section .training-hero-stats {
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+.training-command-section .training-hero-stats > div {
+  min-width: 0;
+  padding: 11px 9px;
+  border: 1px solid #62513c;
+  border-radius: 9px;
+  background: linear-gradient(155deg, #332b21, #211d18);
+  box-shadow: inset 0 1px 0 rgba(255, 239, 211, .045);
+}
+.training-command-section .training-hero-stats span {
+  display: block;
+  color: #bfb09a;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.training-command-section .training-hero-stats strong {
+  display: block;
+  margin-top: 5px;
+  color: #f0dfc5;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.training-combat .training-opponent {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #72513e;
+  border-radius: 11px;
+  background: radial-gradient(ellipse at 0 50%, rgba(166, 91, 66, .18), transparent 70%), #211b17;
+  box-shadow: inset 0 1px 0 rgba(255, 239, 211, .04);
+}
+.training-combat .training-opponent.dummy {
+  border-color: #6b604d;
+  background: radial-gradient(ellipse at 0 50%, rgba(154, 139, 111, .14), transparent 70%), #211f1a;
+}
+.training-combat .training-opponent.troll {
+  border-color: #786347;
+  background: radial-gradient(ellipse at 0 50%, rgba(143, 111, 58, .2), transparent 70%), #211e18;
+}
+.training-combat .opponent-emblem {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid #bd8069;
+  border-radius: 12px;
+  background: #59382e;
+  color: #ffe4d5;
+  font-size: 22px;
+  box-shadow: inset 0 0 0 2px rgba(255, 231, 220, .06);
+}
+.training-combat .training-opponent.dummy .opponent-emblem {
+  border-color: #a99a7c;
+  background: #484033;
+  color: #f0e2c7;
+}
+.training-combat .training-opponent > div:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.training-combat .training-opponent > div:nth-child(2) strong {
+  color: #f0e2cf;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.training-combat .training-opponent > div:nth-child(2) span {
+  color: #b9a993;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.training-combat .opponent-hp {
+  min-width: 52px;
+  padding: 7px 9px;
+  border: 1px solid rgba(220, 161, 138, .28);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .2);
+  text-align: center;
+}
+.training-combat .opponent-hp b {
+  display: block;
+  color: #ffd9c8;
+  font-size: 19px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.training-combat .opponent-hp small {
+  display: block;
+  margin-top: 3px;
+  color: #bba58f;
+  font-size: 9px;
+}
+.training-combat .training-vitals {
+  gap: 12px;
+  margin: 15px 0;
+}
+.training-combat .training-vitals > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #514738;
+  border-radius: 9px;
+  background: #211e19;
+}
+.training-combat .training-vitals > div > div:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #cdbda7;
+  font-size: 11px;
+}
+.training-combat .training-vitals > div > div:first-child strong {
+  margin-left: auto;
+  color: #f0dfc5;
+  font-variant-numeric: tabular-nums;
+}
+.training-combat .training-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #100f0d;
+}
+.training-combat .training-bar i {
+  border-radius: inherit;
+  transition: width .2s ease;
+}
+.training-combat .training-movement {
+  border-color: #5b6270;
+  background: linear-gradient(145deg, #24262a, #1d1b18);
+}
+.training-combat .training-movement strong {
+  color: #b9d8e6;
+}
+.training-extra-opponents {
+  border-color: #6a5638;
+  background: linear-gradient(145deg, #282219, #1d1a16);
+}
+.training-extra-row {
+  gap: 10px;
+  padding: 11px 0;
+}
+.training-extra-row > span {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.training-extra-row > span b {
+  color: #f0dfc5;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.training-extra-row > span small {
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.training-extra-row > small {
+  flex: 0 1 145px;
+  line-height: 1.4;
+}
+.training-extra-row button {
+  flex: 0 0 auto;
+}
+@media (max-width: 700px) {
+  .training-combat .training-opponent {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+  .training-combat .opponent-emblem {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 19px;
+  }
+  .training-combat .opponent-hp {
+    min-width: 44px;
+    padding: 6px;
+  }
+  .training-combat .training-vitals {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .training-extra-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .training-extra-row > small {
+    flex: 1 1 100%;
+    order: 2;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .training-combat .training-bar i {
+    transition: none !important;
+  }
+}
