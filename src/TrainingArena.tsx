@@ -67,8 +67,11 @@ export default function TrainingArena({characters}:Props) {
   const hpMax = Math.max(1,hero?.derived.maxHp ?? 1);
   const armorClass = hero?.derived.armorClass ?? 10;
   const reset = (nextTarget:TargetMode=target) => {
-    setTarget(nextTarget); setTargetHp(nextTarget==="orc"?30:9999); setTargetArmorClass(nextTarget==="orc"?13:10); setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
-    setLog([nextTarget==="orc"?"Новый бой: агрессивный орк готов атаковать.":"Новая тренировка: манекен не атакует и не имеет лимита прочности."]);
+    const preset=targetPresets[nextTarget];
+    setTarget(nextTarget); setTargetHp(preset.hp); setTargetArmorClass(preset.ac);
+    setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
+    setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
+    setLog([preset.aggressive?"Начата тренировка против противника: "+preset.name+".":"Новая тренировка: манекен не атакует."]);
   };
   const addLog = (line:string) => setLog(current=>[line,...current].slice(0,12));
   const rollAbility = () => {
@@ -91,18 +94,21 @@ export default function TrainingArena({characters}:Props) {
     const hit=die===20 || (die!==1 && die+bonus>=targetAc);
     if(kind==="Заклинание") {
       const damage=hit && customDamageFormula.trim()?rollDamageFormula(customDamageFormula):null;
-      if(damage!==null && target==="orc") setTargetHp(current=>Math.max(0,current-damage));
+      if(damage!==null && targetPresets[target].aggressive) setTargetHp(current=>Math.max(0,current-damage));
       addLog("Проверка заклинательной атаки «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание":"промах")+(damage!==null?", тестовый урон "+damage:". Урон не применён: укажи формулу конкретного заклинания в настройке тестового урона")+".");
       return;
     }
     const formula=customDamageFormula.trim()||"1d8";
     const damage=hit?(rollDamageFormula(formula,abilityModifier)??0):0;
-    if(target==="orc" && hit) setTargetHp(current=>Math.max(0,current-damage));
+    if(targetPresets[target].aggressive && hit) setTargetHp(current=>Math.max(0,current-damage));
     addLog("Атака «"+name+"»: d20 "+die+" "+(bonus>=0?"+":"")+bonus+" = "+(die+bonus)+" против КД "+targetAc+" — "+(hit?"попадание, урон "+damage+" ("+formula+")":"промах")+".");
   };
-  const orcAttack = () => {
-    if(target!=="orc" || targetHp<=0 || heroHp<=0) return;
-    const die=d(20), total=die+5, hit=die===20 || (die!==1 && total>=armorClass), damage=hit?d(8)+3:0;
+  const opponentAttack = () => {
+    const preset=targetPresets[target];
+    if(!preset.aggressive || targetHp<=0 || heroHp<=0) return;
+    const die=d(20), total=die+targetAttackBonus;
+    const hit=die===20 || (die!==1 && total>=armorClass);
+    const damage=hit?(rollDamageFormula(targetDamageFormula)??0):0;
     const absorbed=Math.min(tempHp,damage), remaining=damage-absorbed;
     setTempHp(value=>value-absorbed); setHeroHp(value=>Math.max(0,value-remaining)); setLastDamage(damage);
     setRound(value=>value+1);
@@ -127,7 +133,13 @@ export default function TrainingArena({characters}:Props) {
         <label className="training-field training-target-ac">Класс защиты цели (КД)<input type="number" min="1" max="40" value={targetArmorClass} onChange={event=>setTargetArmorClass(Math.max(1,Math.min(40,Number(event.target.value)||1)))}/></label>
         <div className="training-vitals"><div><div><Heart size={16}/> <b>Хиты героя</b><strong>{heroHp} / {hpMax}</strong></div><div className="training-bar"><i style={{width:`${Math.max(0,heroHp/hpMax*100)}%`}}/></div></div><div><div><Shield size={16}/> <b>Временные хиты</b><strong>{tempHp}</strong></div><div className="training-bar temp"><i style={{width:`${Math.min(100,tempHp/Math.max(1,hpMax)*100)}%`}}/></div></div></div>
         <div className="training-actions"><h3>Действия героя</h3><div className="training-action-grid"><button onClick={()=>testAction("Обычная атака","Атака")}><Swords size={17}/> Обычная атака</button>{actions.slice(0,5).map((item,index)=><button key={item.name+index} onClick={()=>testAction(item.name,item.kind)}><Activity size={16}/>{item.name}</button>)}</div>{actions.length===0&&<p className="training-muted">Особенности отмечаются как активированные; заклинания проходят проверку атаки без выдуманной формулы урона. Обычные атаки используют тестовый профиль 1к8.</p>}</div>
-        {targetPresets[target].aggressive&&<div className="training-orc-controls"><button className="training-danger" onClick={orcAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> Орк атакует героя</button><span>Атака орка: +5 к попаданию, урон 1к8+3</span></div>}
+        {targetPresets[target].aggressive&&<div className="training-orc-controls">
+          <div className="training-opponent-settings">
+            <label className="training-field">Бонус атаки<input type="number" min="-5" max="20" value={targetAttackBonus} onChange={event=>setTargetAttackBonus(Math.max(-5,Math.min(20,Number(event.target.value)||0)))}/></label>
+            <label className="training-field">Урон противника<input type="text" value={targetDamageFormula} onChange={event=>setTargetDamageFormula(event.target.value)} placeholder="1к8+3"/></label>
+          </div>
+          <button className="training-danger" onClick={opponentAttack} disabled={targetHp<=0||heroHp<=0}><Swords size={16}/> {targetPresets[target].name} атакует героя</button>
+        </div>}
       </section>
       <section className="training-panel training-tools">
         <div className="training-panel-title"><h2>Проверки и тесты</h2><Dice5 size={18}/></div>
