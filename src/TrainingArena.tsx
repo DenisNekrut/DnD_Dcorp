@@ -236,7 +236,6 @@ export default function TrainingArena({characters}:Props) {
   const distanceInMeters=(a:GridPoint,b:GridPoint)=>(Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*CELL_METERS;
   const areaRadiusCells=Math.max(1,Math.min(12,Math.ceil((Number(areaSize)||0)/CELL_METERS)));
   const isInSpellArea=(point:GridPoint)=>{
-    if(!showArea)return false;
     const dx=point.x-heroPosition.x,dy=point.y-heroPosition.y;
     const tx=targetPosition.x-heroPosition.x,ty=targetPosition.y-heroPosition.y;
     const length=Math.hypot(tx,ty)||1,forward=(dx*tx+dy*ty)/length,lateral=Math.abs(dx*ty-dy*tx)/length;
@@ -484,7 +483,7 @@ export default function TrainingArena({characters}:Props) {
         <div className="training-grid" role="grid" aria-label="Тактическое поле 9 на 7 клеток">
           {Array.from({length:GRID_ROWS},(_,y)=>Array.from({length:GRID_COLS},(_,x)=>{
             const point={x,y},key=gridKey(point),isHero=key===gridKey(heroPosition),isTarget=key===gridKey(targetPosition),extra=extraOpponents.find(enemy=>gridKey(enemy.position)===key),blocked=obstacles.includes(key),cover=coverCells.includes(key);
-            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}${isInSpellArea(point)?" spell-area-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":isInSpellArea(point)?"·":""}</button>;
+            return <button type="button" role="gridcell" aria-label={`Клетка ${x+1}, ${y+1}${isHero?", герой":""}${isTarget?", цель":""}${extra?", "+targetPresets[extra.type].name:""}${blocked?", препятствие":""}${cover?", укрытие":""}`} key={key} className={`training-cell${isHero?" hero-cell":""}${isTarget?" target-cell":""}${extra?" extra-target-cell":""}${blocked?" blocked-cell":""}${cover?" cover-cell":""}${showArea&&isInSpellArea(point)?" spell-area-cell":""}`} disabled={(blocked&&terrainMode==="move")||(isHero&&!placingTarget&&terrainMode==="move")} onClick={()=>handleGridCell(point)}>{isHero?"Г":isTarget?targetPresets[target].symbol:extra?targetPresets[extra.type].symbol:blocked?"▦":cover?"▧":showArea&&isInSpellArea(point)?"·":""}</button>;
           }))}
         </div>
           </div>
@@ -523,7 +522,7 @@ export default function TrainingArena({characters}:Props) {
           <div className="training-map-actions">
             <button className={showArea?"selected":""} onClick={()=>setShowArea(value=>!value)}>{showArea?"Скрыть зону":"Показать зону"}</button>
           </div>
-          <button className="training-danger" onClick={applyAreaEffect} disabled={!showArea||heroHp<=0}>Применить тестовый эффект по зоне</button>
+          <button className="training-danger" onClick={applyAreaEffect} disabled={heroHp<=0}>Применить тестовый эффект по зоне</button>
           <p className="training-muted">Расстояние до основной цели: {attackDistance.toFixed(1)} м. {attackDistance<=attackRangeMeters?"Цель в пределах заданной дальности.":"Цель за пределами заданной дальности."} Подсветка показывает геометрический предварительный просмотр от героя в направлении цели; она не применяет урон и не заменяет проверку правил конкретного заклинания.</p>
         </div>
         <div className="training-map-controls">
