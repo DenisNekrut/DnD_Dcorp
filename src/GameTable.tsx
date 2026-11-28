@@ -95,7 +95,8 @@ const resolveRollMode = (flags: { advantage: boolean; disadvantage: boolean }): 
 };
 type ClassResource = { id: string; name: string; max: number; used: number; recovery: "short" | "long" | "manual" };
 type PactMagic = { level: number; max: number; used: number };
-type Token = { id: string; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
+type WildShapeState = { beastName: string; originalHp: number; originalMaxHp: number; originalArmorClass?: number };
+type Token = { id: string; wildShape?: WildShapeState; name: string; kind: "hero" | "enemy" | "ally"; dodging?: boolean; disengaging?: boolean; dashActive?: boolean; jumpDistanceDoubled?: boolean; classLevel?: number; className?: string; huntersMarkTargetId?: string; concentrationSpell?: string; raging?: boolean; bardicInspirationDie?: number; bardicInspirationSource?: string; sneakAttackUsedTurnKey?: string; actionSurgeUsedTurnKey?: string; x: number; y: number; hp: number; maxHp: number; color: string; initiative: number; armorClass?: number; proficiencyBonus?: number; abilityModifiers?: Partial<Record<AbilityId, number>>; weaponProficiencies?: string[]; weaponAmmo?: Record<string, number>; loadingUsedWeapons?: string[]; actionUsed?: boolean; bonusActionUsed?: boolean; reactionUsed?: boolean; concentrating?: boolean; constitutionSaveProficient?: boolean; knownSpells?: string[]; hitDice?: { dieSides: number; total: number; used: number }; spellSlots?: Record<number, { max: number; used: number }>; pactMagic?: PactMagic; temporaryHp?: number; deathSaves?: { successes: number; failures: number }; damageResistances?: DamageType[]; damageVulnerabilities?: DamageType[]; damageImmunities?: DamageType[]; conditions?: ConditionId[]; exhaustionLevel?: number; skillModifiers?: Partial<Record<SkillId, number>>; classResources?: ClassResource[] };
 const conditionCatalog: { id: ConditionId; label: string; description: string }[] = [
   { id: "blinded", label: "Ослеплён", description: "Не видит; зрительные проверки и атаки ограничены." },
   { id: "charmed", label: "Очарован", description: "Не может вредить источнику очарования." },
@@ -599,6 +600,55 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     addLog(`Персонаж кампании добавлен на карту: ${character.name}.`);
   };
 
+  const useWildShape = (beastName: "Волк" | "Гигантский козёл" | "Бурый медведь") => {
+    if (!selected || !canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 ||
+      selected.wildShape || (selected.conditions ?? []).includes("incapacitated")) return;
+    const className = (selected.className ?? "").toLocaleLowerCase();
+    const level = selected.classLevel ?? 1;
+    if ((!className.includes("друид") && !className.includes("druid")) || level < 2) return;
+    const resource = (selected.classResources ?? []).find(item => item.id === "auto-wild-shape");
+    if (!resource || resource.used >= resource.max) {
+      addLog(selected.name + ": не осталось применений «Облика зверя».", "danger");
+      return;
+    }
+    const forms = {
+      "Волк": { minLevel: 2, cr: "1/4", hp: 11, ac: 13 },
+      "Гигантский козёл": { minLevel: 4, cr: "1/2", hp: 19, ac: 11 },
+      "Бурый медведь": { minLevel: 8, cr: "1", hp: 34, ac: 11 },
+    } as const;
+    const form = forms[beastName];
+    if (level < form.minLevel) {
+      addLog(selected.name + ": для этой формы нужен уровень друида " + form.minLevel + " или выше.", "danger");
+      return;
+    }
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id ? token : {
+      ...token,
+      hp: form.hp,
+      maxHp: form.hp,
+      armorClass: form.ac,
+      wildShape: { beastName, originalHp: token.hp, originalMaxHp: token.maxHp, originalArmorClass: token.armorClass },
+      bonusActionUsed: true,
+      classResources: (token.classResources ?? []).map(item => item.id === "auto-wild-shape" ? { ...item, used: Math.min(item.max, item.used + 1) } : item),
+    }));
+    addLog(selected.name + " принимает облик: " + beastName + " (ПО " + form.cr + ", " + form.hp + " хитов, КД " + form.ac + "). Потрачено применение «Облика зверя» и бонусное действие.", "gold");
+  };
+
+  const revertWildShape = () => {
+    if (!selected || !canEdit || layerLocks.figures || !selected.wildShape || selected.bonusActionUsed ||
+      (selected.conditions ?? []).includes("incapacitated")) return;
+    recordEditorHistory();
+    setTokens(items => items.map(token => token.id !== selected.id || !token.wildShape ? token : {
+      ...token,
+      hp: token.wildShape.originalHp,
+      maxHp: token.wildShape.originalMaxHp,
+      armorClass: token.wildShape.originalArmorClass,
+      wildShape: undefined,
+      bonusActionUsed: true,
+    }));
+    addLog(selected.name + " добровольно возвращается в исходный облик, потратив бонусное действие.", "muted");
+  };
+
   const useLayOnHands = () => {
     if (!selected || !canEdit || layerLocks.figures || selected.actionUsed || (selected.conditions ?? []).includes("incapacitated")) return;
     const pool = (selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands");
@@ -793,6 +843,21 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       const successes = currentSaves.successes >= 3 ? 0 : currentSaves.successes;
       const failures = Math.min(3, currentSaves.failures + (critical ? 2 : 1));
       return { ...token, temporaryHp: nextTemporaryHp, raging: false, deathSaves: token.kind === "hero" ? { successes, failures } : token.deathSaves };
+    }
+    if (token.wildShape && remaining >= token.hp) {
+      const overflowDamage = Math.max(0, remaining - token.hp);
+      const restoredHp = Math.max(0, token.wildShape.originalHp - overflowDamage);
+      const reverted = {
+        ...token,
+        hp: restoredHp,
+        maxHp: token.wildShape.originalMaxHp,
+        armorClass: token.wildShape.originalArmorClass,
+        wildShape: undefined,
+        temporaryHp: nextTemporaryHp,
+        raging: false,
+        ...(restoredHp === 0 && token.kind === "hero" ? { deathSaves: { successes: 0, failures: 0 } } : {}),
+      };
+      return reverted;
     }
     const nextHp = Math.max(0, token.hp - remaining);
     const overflow = Math.max(0, remaining - token.hp);
@@ -1968,6 +2033,21 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                 <label>Восстановить хитов<input type="number" min="1" max={Math.max(1, Math.min(((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-lay-on-hands")?.used ?? 0), (tokens.find(token => token.id === layOnHandsTargetId)?.maxHp ?? 0) - (tokens.find(token => token.id === layOnHandsTargetId)?.hp ?? 0)))} value={layOnHandsAmount} onChange={event => setLayOnHandsAmount(Math.max(1, Number(event.target.value) || 1))} disabled={!canEdit || layerLocks.figures || selected.actionUsed || !layOnHandsTargetId}/></label>
                 <button type="button" onClick={useLayOnHands} disabled={!canEdit || layerLocks.figures || selected.actionUsed || !layOnHandsTargetId}>Применить Возложение рук (действие)</button>
                 <small>Паладин восстанавливает выбранное количество хитов из запаса 5 × уровень. Запас полностью восстанавливается после длительного отдыха.</small>
+              </div>}
+
+              {(selected.classResources ?? []).some(resource => resource.id === "auto-wild-shape") && <div className="combat-economy">
+                <div className="combat-economy-heading"><strong>Облик зверя</strong><small>{Math.max(0, ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0) - ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0))} / {(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0} применений</small></div>
+                {selected.wildShape ? <>
+                  <small>Текущая форма: {selected.wildShape.beastName}. Хиты формы: {selected.hp}/{selected.maxHp}; КД: {selected.armorClass ?? "—"}. При потере всех хитов друид автоматически возвращается в исходный облик, а остаток урона переносится на его обычные хиты.</small>
+                  <button type="button" className="secondary-button" onClick={revertWildShape} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>Вернуться в исходный облик (бонусное действие)</button>
+                </> : <>
+                  <div className="combat-economy-actions">
+                    <button type="button" onClick={() => useWildShape("Волк")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Волк · ПО 1/4 · уровень 2+</button>
+                    <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 4 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
+                    <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 8 || ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)}>Бурый медведь · ПО 1 · уровень 8+</button>
+                  </div>
+                  <small>Превращение и добровольный возврат используют бонусное действие. Доступны только формы в пределах базового ограничения ПО; скорость, особые действия и атаки зверя пока не автоматизированы.</small>
+                </>}
               </div>}
 
               {(selected.classResources ?? []).some(resource => resource.id === "auto-ki-points") && <div className="combat-economy">
