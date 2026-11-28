@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import { apiRequest, isApiConfigured } from "./api";
 import GameTable from "./GameTable";
+import TrainingArena from "./TrainingArena";
 import CampaignMembersPanel from "./CampaignMembersPanel";
 import AdminPanel from "./AdminPanel";
 import "./styles/guest.css";
 import "./styles/character-sheet.css";
 import {
-  BookOpen, ChevronDown, Compass, Dice5, LayoutDashboard, Menu, Plus,
+  BookOpen, ChevronDown, Compass, Dice5, Dumbbell, LayoutDashboard, Menu, Plus,
   Search, Settings, Shield, Sparkles, Swords, Users, UserRound, Bell,
   ScrollText, X, LockKeyhole, Globe2, Copy, WandSparkles
 } from "lucide-react";
 
-type Section = "Главная" | "Кампании" | "Игровой стол" | "Персонажи" | "Библиотека" | "Настройки" | "Администрирование";
+type Section = "Главная" | "Кампании" | "Игровой стол" | "Тренировка" | "Персонажи" | "Библиотека" | "Настройки" | "Администрирование";
 type Campaign = { id: string; name: string; description: string; access: "Открытая" | "По приглашению"; players: number; canManage?: boolean; isOwner?: boolean };
 type Character = { id: string | number; name: string; gender: string; ancestry: string; subrace: string; className: string; background: string; alignment: string; level: number; abilityScores: Record<string, number>; skillProficiencies: string[]; rawData?: Record<string, unknown>; derived: { maxHp:number; armorClass:number; initiative:number; speed:number; passivePerception:number; hitDie:string } };
 
@@ -79,7 +80,7 @@ const ancestrySubraces: Record<string, string[]> = {
 };
 
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
-  { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords }, { label: "Игровой стол", icon: Dice5 },
+  { label: "Главная", icon: LayoutDashboard }, { label: "Кампании", icon: Swords }, { label: "Игровой стол", icon: Dice5 }, { label: "Тренировка", icon: Dumbbell },
   { label: "Персонажи", icon: UserRound }, { label: "Библиотека", icon: BookOpen },
   { label: "Настройки", icon: Settings }, { label: "Администрирование", icon: Shield }
 ];
@@ -483,6 +484,7 @@ function App() {
           {joinNotice && <p className="join-feedback join-feedback-success" role="status">{joinNotice}</p>}
         </section>}
         {active==="Игровой стол"&&<GameTable campaignName={selectedCampaign?.name ?? "Демонстрационная сцена"} campaignId={selectedCampaign?.id} isGuest={isGuest} onBack={()=>setActive("Кампании")}/>}
+        {active==="Тренировка"&&<TrainingArena characters={characters}/> }
         {active==="Персонажи"&&<section className="page-section">
           <div className="page-heading"><div><div className="eyebrow"><span/> ТВОИ ГЕРОИ</div><h1>Персонажи</h1><p className="subtitle">Личная коллекция героев для будущих приключений.</p></div><button className="button button-primary" onClick={()=>setCharacterModal(true)}><Plus size={17}/> Создать персонажа</button></div>
           <div className="notice-strip"><Shield size={17}/><span>{isGuest ? "Гостевые карточки сохраняются локально в этом браузере и пока не связаны с аккаунтом." : "Личные карточки сохраняются в аккаунте и не зависят от копий персонажей в кампаниях."}</span></div>{authError && <p className="validation-note" role="alert">{authError}</p>}
