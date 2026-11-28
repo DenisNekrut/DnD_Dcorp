@@ -38,7 +38,7 @@ const rollDamageFormula = (formula:string, fallbackModifier=0):number|null => {
 const GRID_COLS=9, GRID_ROWS=7, CELL_METERS=1.5;
 const BLOCKED_CELLS=["3,1","3,2","3,3","5,4","6,4","7,4"];
 type GridPoint={x:number;y:number};
-type ExtraOpponent={id:number;type:Exclude<TargetMode,"dummy">;hp:number;position:GridPoint};
+type ExtraOpponent={id:number;type:Exclude<TargetMode,"dummy">;hp:number;position:GridPoint;regenerationSuppressed:boolean};
 const gridKey=(point:GridPoint)=>`${point.x},${point.y}`;
 const readNames = (value:unknown):string[] => Array.isArray(value) ? value.map(item => typeof item === "string" ? item : item && typeof item === "object" ? String((item as Record<string,unknown>).name ?? (item as Record<string,unknown>).title ?? "") : "").filter(Boolean) : [];
 
@@ -57,6 +57,7 @@ export default function TrainingArena({characters}:Props) {
   },[hero?.id]);
   const [target,setTarget] = useState<TargetMode>("dummy");
   const [targetHp,setTargetHp] = useState(30);
+  const [targetRegenerationSuppressed,setTargetRegenerationSuppressed] = useState(false);
   const [targetArmorClass,setTargetArmorClass] = useState(10);
   const [targetAttackBonus,setTargetAttackBonus] = useState(5);
   const [targetDamageFormula,setTargetDamageFormula] = useState("1к8+3");
@@ -100,7 +101,7 @@ export default function TrainingArena({characters}:Props) {
   const armorClass = hero?.derived.armorClass ?? 10;
   const reset = (nextTarget:TargetMode=target) => {
     const preset=targetPresets[nextTarget];
-    setTarget(nextTarget); setTargetHp(preset.hp); setTargetArmorClass(preset.ac);
+    setTarget(nextTarget); setTargetHp(preset.hp); setTargetRegenerationSuppressed(false); setTargetArmorClass(preset.ac);
     setTargetAttackBonus(preset.attackBonus); setTargetDamageFormula(preset.damage);
     setHeroHp(hpMax); setTempHp(0); setRound(1); setLastDamage(0);
     setHeroPosition({x:1,y:3}); setTargetPosition({x:7,y:3}); setPlacingTarget(false); setExtraOpponents([]);
@@ -196,9 +197,16 @@ export default function TrainingArena({characters}:Props) {
       return {...enemy,saveBonus,saveRoll,total,success,defense,damage:applyDefenses(afterSave,defense)};
     });
     const primary=updates.find(item=>item.id==="primary");
-    if(primary)setTargetHp(value=>Math.max(0,value-primary.damage));
-    const extraDamage=new Map(updates.filter(item=>item.id!=="primary").map(item=>[Number(item.id),item.damage]));
-    if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>extraDamage.has(enemy.id)?{...enemy,hp:Math.max(0,enemy.hp-(extraDamage.get(enemy.id)??0))}:enemy));
+    if(primary){
+      setTargetHp(value=>Math.max(0,value-primary.damage));
+      if(target==="troll"&&(damageType==="acid"||damageType==="fire")&&primary.damage>0)setTargetRegenerationSuppressed(true);
+    }
+    const extraDamage=new Map(updates.filter(item=>item.id!=="primary").map(item=>[Number(item.id),item]));
+    if(extraDamage.size)setExtraOpponents(current=>current.map(enemy=>{
+      const result=extraDamage.get(enemy.id);
+      if(!result)return enemy;
+      return {...enemy,hp:Math.max(0,enemy.hp-result.damage),regenerationSuppressed:enemy.type==="troll"&&(damageType==="acid"||damageType==="fire")&&result.damage>0?true:enemy.regenerationSuppressed};
+    }));
     addLog("Зона ("+areaShape+", "+areaSize+" м), тип урона: "+(damageTypes.find(item=>item.id===damageType)?.name??damageType)+", спасбросок "+(abilityList.find(item=>item.id===areaSaveAbility)?.name??areaSaveAbility)+", Сл "+dc+": "+updates.map(item=>item.name+" — d20 "+item.saveRoll+" + "+item.saveBonus+" = "+item.total+(item.success?" (успех)":" (провал)")+", "+defenseNames[item.defense]+"; "+item.damage+" урона").join("; ")+". Сначала применена половина урона за успешный спасбросок, затем защита от выбранного типа урона.");
   };
   const moveHeroTo=(destination:GridPoint)=>{
@@ -249,7 +257,7 @@ export default function TrainingArena({characters}:Props) {
     for(let y=0;y<GRID_ROWS&&!position;y++)for(let x=0;x<GRID_COLS&&!position;x++)if(!occupied.has(`${x},${y}`))position={x,y};
     if(!position){addLog("На поле нет свободной клетки для нового противника.");return;}
     const preset=targetPresets[newOpponentType];
-    setExtraOpponents(current=>[...current,{id:Date.now(),type:newOpponentType,hp:preset.hp,position:position!}]);
+    setExtraOpponents(current=>[...current,{id:Date.now(),type:newOpponentType,hp:preset.hp,position:position!,regenerationSuppressed:false}]);
     addLog(`На поле добавлен противник: ${preset.name}.`);
   };
   const attackWithExtraOpponent=(enemy:ExtraOpponent)=>{
@@ -264,16 +272,28 @@ export default function TrainingArena({characters}:Props) {
   const opponentTurn = () => {
     if(heroHp<=0) return;
     type ActingEnemy={id:string;name:string;position:GridPoint;hp:number;attackBonus:number;damage:string;primary:boolean;extraId?:number};
+    let nextTargetHp=targetHp;
+    let nextExtras=extraOpponents.map(enemy=>({...enemy}));
+    const events:string[]=[];
+    if(target==="troll"&&nextTargetHp>0){
+      if(targetRegenerationSuppressed){events.push("Регенерация тролля подавлена кислотой или огнём — восстановление пропущено.");}
+      else {const healed=Math.min(10,targetPresets.troll.hp-nextTargetHp);nextTargetHp+=healed;if(healed>0)events.push("Тролль восстанавливает "+healed+" хитов благодаря регенерации.");}
+    }
+    if(targetRegenerationSuppressed)setTargetRegenerationSuppressed(false);
+    nextExtras=nextExtras.map(enemy=>{
+      if(enemy.type!=="troll"||enemy.hp<=0)return enemy;
+      if(enemy.regenerationSuppressed){events.push("Регенерация дополнительного тролля подавлена кислотой или огнём — восстановление пропущено.");return {...enemy,regenerationSuppressed:false};}
+      const healed=Math.min(10,targetPresets.troll.hp-enemy.hp);
+      if(healed>0)events.push("Дополнительный тролль восстанавливает "+healed+" хитов благодаря регенерации.");
+      return {...enemy,hp:enemy.hp+healed};
+    });
     const actors:ActingEnemy[]=[
-      ...(targetPresets[target].aggressive&&targetHp>0?[{id:"primary",name:targetPresets[target].name,position:targetPosition,hp:targetHp,attackBonus:targetAttackBonus,damage:targetDamageFormula,primary:true}]:[]),
-      ...extraOpponents.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name,position:enemy.position,hp:enemy.hp,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage,primary:false,extraId:enemy.id}))
+      ...(targetPresets[target].aggressive&&nextTargetHp>0?[{id:"primary",name:targetPresets[target].name,position:targetPosition,hp:nextTargetHp,attackBonus:targetAttackBonus,damage:targetDamageFormula,primary:true}]:[]),
+      ...nextExtras.filter(enemy=>enemy.hp>0).map(enemy=>({id:String(enemy.id),name:targetPresets[enemy.type].name,position:enemy.position,hp:enemy.hp,attackBonus:targetPresets[enemy.type].attackBonus,damage:targetPresets[enemy.type].damage,primary:false,extraId:enemy.id}))
     ];
     if(!actors.length){addLog("На поле нет активных противников.");return;}
     let currentHeroHp=heroHp,currentTempHp=tempHp;
     let nextTargetPosition=targetPosition;
-    let nextTargetHp=targetHp;
-    let nextExtras=extraOpponents.map(enemy=>({...enemy}));
-    const events:string[]=[];
     const neighbors=(point:GridPoint):GridPoint[]=>[{x:point.x+1,y:point.y},{x:point.x-1,y:point.y},{x:point.x,y:point.y+1},{x:point.x,y:point.y-1}].filter(p=>p.x>=0&&p.x<GRID_COLS&&p.y>=0&&p.y<GRID_ROWS);
     for(const actor of actors){
       if(currentHeroHp<=0) break;
@@ -334,6 +354,7 @@ export default function TrainingArena({characters}:Props) {
       <section className="training-panel training-combat">
         <div className="training-panel-title"><h2>Тренировочная площадка</h2><span>РАУНД {round}</span></div>
         <div className={`training-opponent ${target}`}><div className="opponent-emblem">{targetPresets[target].symbol}</div><div><strong>{targetPresets[target].name}</strong><span>{targetPresets[target].description}</span></div><div className="opponent-hp"><b>{!targetPresets[target].aggressive && target==="dummy"?"∞":targetHp}</b><small>{target==="dummy"?"прочность":"хитов"}</small></div></div>
+        {target==="troll"&&<p className="training-muted">Регенерация: до 10 хитов в начале хода противников. Кислота или огонь подавляют её до следующего хода.</p>}
         <div className="training-opponent-settings">
           <label className="training-field">Хиты противника<input type="number" min="1" max="9999" value={targetHp} onChange={event=>setTargetHp(Math.max(1,Math.min(9999,Number(event.target.value)||1)))}/></label>
           <label className="training-field training-target-ac">Класс защиты цели (КД)<input type="number" min="1" max="40" value={targetArmorClass} onChange={event=>setTargetArmorClass(Math.max(1,Math.min(40,Number(event.target.value)||1)))}/></label>
