@@ -187,16 +187,16 @@ export default function TrainingArena({characters}:Props) {
       addLog("Особенность активирована для проверки: «"+name+"». Тренировочная сцена не расходует ресурсы листа персонажа.");
       return;
     }
-    if(!targetPresets[target].aggressive||targetHp<=0){
-      if(!extraOpponents.some(enemy=>enemy.hp>0)){addLog("Нет доступных живых целей для атаки.");return;}
-    }
+    const primaryIsValid=targetPresets[target].aggressive&&targetHp>0;
+    const livingExtras=extraOpponents.filter(enemy=>enemy.hp>0);
+    if(!primaryIsValid&&!livingExtras.length){addLog("Нет доступных живых целей для атаки.");return;}
     const spellAbilityByClass:Record<string,string>={"Бард":"cha","Жрец":"wis","Друид":"wis","Паладин":"cha","Следопыт":"wis","Чародей":"cha","Колдун":"cha","Волшебник":"int"};
     const attackAbility=kind==="Заклинание"?(spellAbilityByClass[hero.className]??"int"):"str";
     const abilityModifier=mod(Number(hero.abilityScores[attackAbility]??10));
     const die=d(20), bonus=abilityModifier+proficiency;
     const primaryDistance=distanceInMeters(heroPosition,targetPosition);
-    const nearestExtra=[...extraOpponents].filter(enemy=>enemy.hp>0).sort((a,b)=>distanceInMeters(heroPosition,a.position)-distanceInMeters(heroPosition,b.position))[0];
-    const useExtra=!!nearestExtra&&nearestExtra.hp>0&&distanceInMeters(heroPosition,nearestExtra.position)<primaryDistance;
+    const nearestExtra=[...livingExtras].sort((a,b)=>distanceInMeters(heroPosition,a.position)-distanceInMeters(heroPosition,b.position))[0];
+    const useExtra=!primaryIsValid||!!nearestExtra&&distanceInMeters(heroPosition,nearestExtra.position)<primaryDistance;
     const selectedTargetDistance=useExtra?distanceInMeters(heroPosition,nearestExtra!.position):primaryDistance;
     if(selectedTargetDistance>attackRangeMeters){
       addLog(`Цель находится на расстоянии ${selectedTargetDistance.toFixed(1)} м — это дальше заданной дальности атаки ${attackRangeMeters.toFixed(1)} м. Действие не выполнено.`);
