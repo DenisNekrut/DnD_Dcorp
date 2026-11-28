@@ -32,3 +32,15 @@
 .training-extra-row button,.training-extra-opponents .training-map-actions button,.training-extra-opponents select{border:1px solid #66543d;border-radius:7px;padding:7px 9px;background:#30271d;color:#e7d6bd;font-size:11px}
 .training-extra-opponents button:disabled{opacity:.45}
 .training-extra-opponents .training-panel-title{margin-bottom:8px}
+
+.training-cell.spell-area-cell{background:#574a70;border-color:#a88bd0;color:#eadcff}
+.training-cell.spell-area-cell.hero-cell{background:#315064;border-color:#83b9d1}
+.training-cell.spell-area-cell.target-cell{background:#653b30;border-color:#c77d62}
+.training-cell.spell-area-cell.blocked-cell{background:repeating-linear-gradient(135deg,#514a40,#514a40 5px,#38332c 5px,#38332c 10px)}
+.training-area-tools{margin:14px 0;padding:13px;border:1px solid #554735;border-radius:9px;background:#1d1a16}
+.training-area-tools .training-panel-title{margin-bottom:10px}
+.training-area-tools h3{margin:0;font-size:14px}
+.training-area-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:10px}
+.training-area-fields label{display:flex;flex-direction:column;gap:6px;color:#c9bdab;font-size:11px}
+.training-area-fields input,.training-area-fields select{min-width:0;width:100%;border:1px solid #5b4b38;background:#191714;color:#f1e7d8;border-radius:7px;padding:8px;font:inherit}
+@media(max-width:520px){.training-area-fields{grid-template-columns:1fr}}
