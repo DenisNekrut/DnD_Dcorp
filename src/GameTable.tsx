@@ -691,9 +691,23 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
     }
   };
 
+  const canUseWildShapeForm = (token: Token, cr: string, standardMinLevel: number, movement: "land" | "swim" | "fly" = "land") => {
+    const level = token.classLevel ?? 1;
+    const isMoon = !!token.wildShapeCircleOfMoon;
+    const crValue = cr.includes("/") ? Number(cr.split("/")[0]) / Number(cr.split("/")[1]) : Number(cr);
+    const maxCr = isMoon ? (level >= 6 ? Math.floor(level / 3) : 1) : level >= 8 ? 1 : level >= 4 ? 0.5 : 0.25;
+    const minimumLevel = isMoon ? 2 : standardMinLevel;
+    const movementAllowed = movement === "land" || (movement === "swim" && level >= 4) || (movement === "fly" && level >= 8);
+    const actionAlreadyUsed = isMoon ? token.bonusActionUsed : token.actionUsed;
+    const resource = (token.classResources ?? []).find(item => item.id === "auto-wild-shape");
+    const isDruid = (token.className ?? "").toLocaleLowerCase().includes("друид") || (token.className ?? "").toLocaleLowerCase().includes("druid");
+    return isDruid && level >= minimumLevel && crValue <= maxCr && movementAllowed && !actionAlreadyUsed &&
+      token.hp > 0 && !token.wildShape && !(token.conditions ?? []).includes("incapacitated") &&
+      !!resource && (resource.unlimited || resource.used < resource.max);
+  };
+
   const useWildShape = (beastName: "Волк" | "Гигантский козёл" | "Бурый медведь") => {
-    if (!selected || !canEdit || layerLocks.figures || (selected.wildShapeCircleOfMoon ? selected.bonusActionUsed : selected.actionUsed) || selected.hp <= 0 ||
-      selected.wildShape || (selected.conditions ?? []).includes("incapacitated")) return;
+    if (!selected || !canEdit || layerLocks.figures) return;
     const className = (selected.className ?? "").toLocaleLowerCase();
     const level = selected.classLevel ?? 1;
     if ((!className.includes("друид") && !className.includes("druid")) || level < 2) return;
@@ -708,8 +722,8 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
       "Бурый медведь": { minLevel: 8, cr: "1", hp: 34, ac: 11 },
     } as const;
     const form = forms[beastName];
-    if (level < form.minLevel) {
-      addLog(selected.name + ": для этой формы нужен уровень друида " + form.minLevel + " или выше.", "danger");
+    if (!canUseWildShapeForm(selected, form.cr, form.minLevel)) {
+      addLog(selected.name + ": форма не соответствует ограничениям уровня, ПО, скорости или доступному действию для выбранного круга друида.", "danger");
       return;
     }
     recordEditorHistory();
@@ -2280,11 +2294,11 @@ export default function GameTable({ campaignName, campaignId, isGuest, onBack }:
                   <button type="button" className="secondary-button" onClick={revertWildShape} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed}>Вернуться в исходный облик (бонусное действие)</button>
                 </> : <>
                   <div className="combat-economy-actions">
-                    <button type="button" onClick={() => useWildShape("Волк")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Волк · ПО 1/4 · уровень 2+</button>
-                    <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 4 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
-                    <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || selected.bonusActionUsed || selected.hp <= 0 || (selected.classLevel ?? 1) < 8 || (!(selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.unlimited && (((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.used ?? 0) >= ((selected.classResources ?? []).find(resource => resource.id === "auto-wild-shape")?.max ?? 0)))}>Бурый медведь · ПО 1 · уровень 8+</button>
+                    <button type="button" onClick={() => useWildShape("Волк")} disabled={!canEdit || layerLocks.figures || !canUseWildShapeForm(selected, "1/4", 2)}>Волк · ПО 1/4 · уровень 2+</button>
+                    <button type="button" onClick={() => useWildShape("Гигантский козёл")} disabled={!canEdit || layerLocks.figures || !canUseWildShapeForm(selected, "1/2", 4)}>Гигантский козёл · ПО 1/2 · уровень 4+</button>
+                    <button type="button" onClick={() => useWildShape("Бурый медведь")} disabled={!canEdit || layerLocks.figures || !canUseWildShapeForm(selected, "1", 8)}>Бурый медведь · ПО 1 · уровень 8+</button>
                   </div>
-                  <small>Обычное превращение использует действие; для Круга Луны можно включить превращение бонусным действием. Добровольный возврат использует бонусное действие. Доступны только формы в пределах базового ограничения ПО; скорость, особые действия и атаки зверя пока не автоматизированы.</small>
+                  <small>Обычное превращение использует действие; для Круга Луны можно включить превращение бонусным действием. Добровольный возврат использует бонусное действие. Ограничения ПО учитывают уровень и Круг Луны: обычный друид — 1/4 с 2-го, 1/2 с 4-го и 1 с 8-го уровня; Круг Луны — ПО 1 со 2-го, затем уровень друида / 3 с 6-го. Плавание доступно с 4-го, полёт — с 8-го уровня.</small>
                 </>}
               </div>}
 
